@@ -41,6 +41,11 @@ CONFIG(debug, debug|release): {
         LIBS += E:\OpenCV-4.10.0\build\x64\mingw\lib\libopencv_*.dll.a
 }
 
+# INCLUDEPATH +=D:\Program Files\mosquitto
+# LIBS += D:\Program Files\mosquitto
+
+
+
 CONFIG += lrelease
 CONFIG += embed_translations
 
@@ -51,6 +56,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 DISTFILES += \
     htmldoc/forget.html \
+    htmldoc/lanmu.html \
     htmldoc/login.html \
     htmldoc/logsuccess.html \
     htmldoc/register.html

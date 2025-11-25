@@ -14,6 +14,8 @@ public:
     void startServer(quint16 port);
 
     QString getRequestParameter(const QByteArray &request, const QString &param);
+    void send404(QTcpSocket *clientSocket);
+    QByteArray getContentType(const QString &filePath);
 private slots:
     void onNewConnection();
     void onReadyRead();

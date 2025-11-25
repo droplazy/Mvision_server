@@ -18,11 +18,10 @@ int main(int argc, char *argv[])
             break;
         }
     }
-    // MainWindow w;
-    // w.show();
 
     HttpServer server;
-    server.startServer(8080);  // 启动服务器，监听8080端口
+    server.startServer(8080);
+
 
     return a.exec();
 }
