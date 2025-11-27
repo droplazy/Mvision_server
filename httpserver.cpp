@@ -59,14 +59,14 @@ void HttpServer::generateTextData()
     process1.remark = "这个流程是给狗用的";
 
     // 添加子流程，调整action、sub_action等内容
-    process1.Processes.append(Machine_Process_Single{"吃饭", "吃炒饭", "2025-11-11T12:00:00Z", "2025-11-11T12:30:00Z", "中午吃炒饭"});
-    process1.Processes.append(Machine_Process_Single{"休息", "玩球", "2025-11-11T12:40:00Z", "2025-11-11T13:00:00Z", "休息时间玩球"});
-    process1.Processes.append(Machine_Process_Single{"洗澡", "洗澡前准备", "2025-11-11T13:10:00Z", "2025-11-11T13:20:00Z", "准备洗澡，调节水温"});
-    process1.Processes.append(Machine_Process_Single{"洗澡", "洗皮皮", "2025-11-11T13:30:00Z", "2025-11-11T14:00:00Z", "洗澡后擦干，准备穿衣服"});
-    process1.Processes.append(Machine_Process_Single{"吃饭", "吃牛肉干", "2025-11-11T14:30:00Z", "2025-11-11T14:50:00Z", "吃些零食"});
-    process1.Processes.append(Machine_Process_Single{"散步", "遛弯", "2025-11-11T15:00:00Z", "2025-11-11T15:30:00Z", "带狗去附近散步"});
-    process1.Processes.append(Machine_Process_Single{"游戏", "接飞盘", "2025-11-11T16:00:00Z", "2025-11-11T16:30:00Z", "下午一起玩接飞盘游戏"});
-    process1.Processes.append(Machine_Process_Single{"休息", "小憩", "2025-11-11T16:40:00Z", "2025-11-11T17:00:00Z", "吃完饭后小憩片刻"});
+    process1.Processes.append(Machine_Process_Single{"吃饭", "江边", "2025-11-11T12:00:00Z", "2025-11-11T12:30:00Z", "中午吃炒饭"});
+    process1.Processes.append(Machine_Process_Single{"休息", "江边", "2025-11-11T12:40:00Z", "2025-11-11T13:00:00Z", "休息时间玩球"});
+    process1.Processes.append(Machine_Process_Single{"洗澡", "江边", "2025-11-11T13:10:00Z", "2025-11-11T13:20:00Z", "准备洗澡，调节水温"});
+    process1.Processes.append(Machine_Process_Single{"洗澡", "江边", "2025-11-11T13:30:00Z", "2025-11-11T14:00:00Z", "洗澡后擦干，准备穿衣服"});
+    process1.Processes.append(Machine_Process_Single{"吃饭", "江边", "2025-11-11T14:30:00Z", "2025-11-11T14:50:00Z", "吃些零食"});
+    process1.Processes.append(Machine_Process_Single{"散步", "江边", "2025-11-11T15:00:00Z", "2025-11-11T15:30:00Z", "带狗去附近散步"});
+    process1.Processes.append(Machine_Process_Single{"游戏", "江边", "2025-11-11T16:00:00Z", "2025-11-11T16:30:00Z", "下午一起玩接飞盘游戏"});
+    process1.Processes.append(Machine_Process_Single{"休息", "江边", "2025-11-11T16:40:00Z", "2025-11-11T17:00:00Z", "吃完饭后小憩片刻"});
 
 
 
@@ -78,8 +78,8 @@ void HttpServer::generateTextData()
     process2.remark = "这个流程是给猫用的";
 
     // 添加子流程
-    process2.Processes.append(Machine_Process_Single{"散步", "用脚", "2025-11-12T14:00:00Z", "2025-11-12T14:30:00Z", "午饭吃饭"});
-    process2.Processes.append(Machine_Process_Single{"吃屎", "吃狗屎", "2025-11-12T15:00:00Z", "2025-11-12T15:30:00Z", "洗澡后吃鸡蛋"});
+    process2.Processes.append(Machine_Process_Single{"散步", "躺平", "2025-11-12T14:00:00Z", "2025-11-12T14:30:00Z", "午饭吃饭"});
+    process2.Processes.append(Machine_Process_Single{"吃屎", "躺平", "2025-11-12T15:00:00Z", "2025-11-12T15:30:00Z", "洗澡后吃鸡蛋"});
 
     // 第三条流程
     Machine_Process_Total process3;
@@ -89,8 +89,8 @@ void HttpServer::generateTextData()
     process3.remark = "这个流程是给狗和猫用的";
 
     // 添加子流程
-    process3.Processes.append(Machine_Process_Single{"骂人", "草泥马", "2025-11-13T16:00:00Z", "2025-11-13T16:30:00Z", "下午吃饭"});
-    process3.Processes.append(Machine_Process_Single{"杀人", "用刀", "2025-11-13T17:00:00Z", "2025-11-13T17:30:00Z", "洗澡后吃鸡蛋"});
+    process3.Processes.append(Machine_Process_Single{"骂人", "躺平", "2025-11-13T16:00:00Z", "2025-11-13T16:30:00Z", "下午吃饭"});
+    process3.Processes.append(Machine_Process_Single{"杀人", "躺平", "2025-11-13T17:00:00Z", "2025-11-13T17:30:00Z", "洗澡后吃鸡蛋"});
 
 
 
