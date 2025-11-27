@@ -12,12 +12,13 @@ SOURCES += \
     httpserver.cpp \
     main.cpp \
     mainwindow.cpp \
-    mqttserver.cpp
+    mqttclient.cpp
 
 HEADERS += \
     httpserver.h \
     mainwindow.h \
-    mqttserver.h
+    mqttclient.h \
+    publicheader.h
 
 FORMS += \
     mainwindow.ui

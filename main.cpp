@@ -4,6 +4,8 @@
 #include <QLocale>
 #include <QTranslator>
 #include "httpserver.h"
+#include "mqttclient.h"
+
 
 int main(int argc, char *argv[])
 {
@@ -20,8 +22,14 @@ int main(int argc, char *argv[])
     }
 
     HttpServer server;
-    server.startServer(8080);
-
+    //    server.startServer(8080);
+    if (!server.listen(QHostAddress::Any, 8080)) {
+        qDebug() << "Server could not start!";
+    } else {
+        qDebug() << "Server started on port 8080...";
+    }
+    // mqttclient mqtt_cli;
+    // mqtt_cli.run();
 
     return a.exec();
 }
