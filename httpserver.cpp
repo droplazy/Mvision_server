@@ -128,7 +128,7 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
     QStringList requestLines = QString(request).split("\r\n");
     QString path = requestLines.first().split(" ")[1];
 
-    if ((path == "/home" || path == "/devices" ||path == "/process/new" \
+    if ((path == "/home" || path == "/devices" ||path == "/process/new" ||path == ("/login")\
         ||path == "/process/center"||path == "/support" ) && request.startsWith("GET"))
     {
         path = "/index.html";
@@ -226,7 +226,7 @@ void HttpServer::onReadyRead() {
                 handleGetDevice(clientSocket, query);
             } else if (path == "/process/get") {
                 handleGetProcess(clientSocket, query);
-            } else if (path == "/home" || path.contains(".css") || path.contains(".jpg")  \
+            } else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
                        || path.contains(".js")|| path.contains(".png") || path.contains(".html") \
                       || path.contains("/devices")|| path.contains("/process/new") || path.contains("/process/center") \
                       || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")) {//静态文件会一直进入这里

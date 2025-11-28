@@ -62,6 +62,8 @@ const QString& nas ,const QString& nae)
         jsonObj["current_action"] = obj_c;
         jsonObj["next_action"] = obj_n;
         jsonObj["traffic_statistics"] = trafficStatistics;
+        jsonObj["serial_number"] = serialNumber;
+        jsonObj["status"] = status;
 
 
         return jsonObj;
