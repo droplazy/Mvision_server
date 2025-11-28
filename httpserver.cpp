@@ -128,7 +128,8 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
     QStringList requestLines = QString(request).split("\r\n");
     QString path = requestLines.first().split(" ")[1];
 
-    if (path == "/home" && request.startsWith("GET"))
+    if ((path == "/home" || path == "/devices" ||path == "/process/new" \
+        ||path == "/process/center"||path == "/support" ) && request.startsWith("GET"))
     {
         path = "/index.html";
     }
@@ -226,10 +227,16 @@ void HttpServer::onReadyRead() {
             } else if (path == "/process/get") {
                 handleGetProcess(clientSocket, query);
             } else if (path == "/home" || path.contains(".css") || path.contains(".jpg")  \
-                       || path.contains(".js")|| path.contains(".png") || path.contains(".html")) {//静态文件会一直进入这里
+                       || path.contains(".js")|| path.contains(".png") || path.contains(".html") \
+                      || path.contains("/devices")|| path.contains("/process/new") || path.contains("/process/center") \
+                      || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")) {//静态文件会一直进入这里
                // serveStatic(clientSocket,path, "E:/qtpro/MuiltiControlSer/www/index.html");  // 处理 /home 请求，返回 index.html
                 ShowHomepage(clientSocket, request);
-            } else {
+            }
+            /*else if (path == "/vite.svg"||"/favicon.ico ") {//静态文件会一直进入这里
+                // serveStatic(clientSocket,path, "E:/qtpro/MuiltiControlSer/www/index.html");  // 处理 /home 请求，返回 index.html
+                //ShowHomepage(clientSocket, request);
+            } */else {
                 sendNotFound(clientSocket);
             }
         } else if (request.startsWith("POST")) {
@@ -461,7 +468,7 @@ void HttpServer::handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &que
         }
         else
         {
-
+            qDebug() << "havent found!" ;
             QJsonObject response = generateFailureResponse();
             QJsonDocument doc(response);
             jsonData = doc.toJson(QJsonDocument::Indented);

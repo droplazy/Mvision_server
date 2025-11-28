@@ -61,7 +61,7 @@ const QString& nas ,const QString& nae)
         jsonObj["ip"] = ip;
         jsonObj["current_action"] = obj_c;
         jsonObj["next_action"] = obj_n;
-        jsonObj["traffic_statistics"] = next_action_start;
+        jsonObj["traffic_statistics"] = trafficStatistics;
 
 
         return jsonObj;
