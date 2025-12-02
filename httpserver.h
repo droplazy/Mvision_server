@@ -10,6 +10,9 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include "publicheader.h"
+#include "databasemanager.h"
+
+
 
 class HttpServer : public QTcpServer
 {
@@ -60,6 +63,9 @@ private:
     QString parseJsonGenerateNode(const QJsonObject &rootObj, QVector<Machine_Process_Total> &processVector);
     bool parseMachineProcess(const QJsonObject &rootObj, QVector<Machine_Process_Total> &processVector);
     bool processDeleteRequest(const QJsonObject &rootObj);
+
+    DatabaseManager dbManager;
+
 };
 
 #endif // HTTPSERVER_H

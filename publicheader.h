@@ -9,6 +9,7 @@
 #include <QVector>
 struct DeviceStatus {
     QString serialNumber;          // 设备序列号
+    QString checksum;
     QString status;                // 设备状态
     QString location;              // 设备所在位置
     QString currentAction;         // 当前动作
@@ -143,4 +144,20 @@ struct Machine_Process_Total {
     }
 };
 
+struct SQL_Device {
+    QString serial_number;
+    QString checksum;
+    QString total_flow;
+    QString ip_address;
+    QString device_status;
+    QString bound_user;
+    QString bound_time;
+
+};
+struct SQL_User {
+    QString username;
+    QString password;
+    QString phone_number;
+    QString email;
+};
 #endif // PUBLICHEADER_H

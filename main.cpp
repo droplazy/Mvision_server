@@ -5,7 +5,7 @@
 #include <QTranslator>
 #include "httpserver.h"
 #include "mqttclient.h"
-
+#include "databasemanager.h"
 
 int main(int argc, char *argv[])
 {
@@ -28,6 +28,9 @@ int main(int argc, char *argv[])
     } else {
         qDebug() << "Server started on port 8080...";
     }
+
+    // 创建DatabaseManager实例
+
     // mqttclient mqtt_cli;
     // mqtt_cli.run();
 

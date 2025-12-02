@@ -1,4 +1,4 @@
-QT       += core gui  mqtt network
+QT       += core gui  mqtt network sql
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -9,12 +9,14 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    databasemanager.cpp \
     httpserver.cpp \
     main.cpp \
     mainwindow.cpp \
     mqttclient.cpp
 
 HEADERS += \
+    databasemanager.h \
     httpserver.h \
     mainwindow.h \
     mqttclient.h \

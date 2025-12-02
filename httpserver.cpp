@@ -6,7 +6,7 @@
 #include <QFile>
 #include <QTextStream>
 #include <QDir>
-
+#include <QApplication>
 
 #define MANAGER_USERNAME "123"
 #define MANAGER_PASSWD   "123"
@@ -15,8 +15,21 @@
 
 HttpServer::HttpServer(QObject *parent) : QTcpServer(parent)
 {
-    generateTextData();
 
+
+    // 获取当前目录
+    QString currentDir = QCoreApplication::applicationDirPath();
+
+    // 设置数据库文件名，确保数据库文件创建在当前目录
+    QString dbName = QDir(currentDir).filePath("system.db");
+
+    // 调用createDatabase方法并传入数据库文件路径
+    if (dbManager.createDatabase(dbName)) {
+        qDebug() << "Database and tables created successfully!";
+    } else {
+        qDebug() << "Failed to create database or tables.";
+    }
+    generateTextData();
 }
 
 void HttpServer::generateTextData()
@@ -97,6 +110,56 @@ void HttpServer::generateTextData()
     processVector.append(process1);
     processVector.append(process2);
     processVector.append(process3);
+
+
+#if 1
+
+    for (const DeviceStatus& device : deviceVector)
+    {
+        //device.append(device.toJsonAll());
+        SQL_Device device_preinsert;
+        device_preinsert.device_status = device.status;
+        device_preinsert.total_flow = device.trafficStatistics;
+        device_preinsert.bound_user ="123";
+        device_preinsert.checksum ="SSVGG";
+        device_preinsert.serial_number =device.serialNumber;
+        device_preinsert.ip_address =device.ip;
+        device_preinsert.bound_time ="14点50分";
+        dbManager.insertDevice(device_preinsert);
+    }
+
+    for (const Machine_Process_Total& processes : processVector)
+    {
+        dbManager.insertProcessSteps(processes);
+    }
+
+       QList<SQL_Device> devices = dbManager.getAllDevices();
+       QList<Machine_Process_Total> process = dbManager.getAllProcessSteps();
+       // 假设 Machine_Process_Total 包含 process_id, process_name 和 remark
+       for (const Machine_Process_Total &processItem : process) {
+           qDebug() << "Process ID:" << processItem.process_id;
+           qDebug() << "Process Name:" << processItem.process_name;
+           qDebug() << "Remark:" << processItem.remark;
+
+           // 遍历并打印所有步骤
+           for (int i = 0; i < processItem.Processes.size(); ++i) {
+               const Machine_Process_Single &step = processItem.Processes[i];
+               qDebug() << "Step" << i + 1 << ":";
+               qDebug() << "  Action:" << step.action;
+               qDebug() << "  Sub Action:" << step.sub_action;
+               qDebug() << "  Start Time:" << step.start_time;
+               qDebug() << "  End Time:" << step.end_time;
+               qDebug() << "  Remark:" << step.remark;
+           }
+       }
+
+       // 假设 SQL_Device 结构体包含 id 和 name
+       for (const SQL_Device &device : devices) {
+           qDebug() << "Device ID:" << device.serial_number;
+           qDebug() << "Device Name:" << device.checksum;
+       }
+#endif
+
     // // 打印信息
     // process1.printInfo();
     // process2.printInfo();
@@ -107,7 +170,7 @@ void HttpServer::generateTextData()
     // qDebug() << "Process 2 JSON: " << process2.toJsonAll();
     // qDebug() << "Process 3 JSON: " << process3.toJsonAll();
 
-    qDebug() <<         deviceVector.count() << "asddsa\n";
+    // qDebug() <<         deviceVector.count() << "asddsa\n";
 }
 
 
@@ -763,6 +826,7 @@ QJsonObject HttpServer::generateFailureResponse() {
 DeviceStatus* HttpServer::findDeviceBySerialNumber(QVector<DeviceStatus>& devices, const QString& serialNumber) {
     for (auto& device : devices) {
         if (device.serialNumber == serialNumber) {
+            device.printInfo();
             return &device;  // 找到并返回指针
         }
     }
