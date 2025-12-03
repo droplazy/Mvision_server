@@ -3,10 +3,6 @@
 #include <QApplication>
 #include <QLocale>
 #include <QTranslator>
-#include "httpserver.h"
-#include "mqttclient.h"
-#include "databasemanager.h"
-
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
@@ -20,19 +16,14 @@ int main(int argc, char *argv[])
             break;
         }
     }
+    MainWindow w;
+   // w.show();
 
-    HttpServer server;
-    //    server.startServer(8080);
-    if (!server.listen(QHostAddress::Any, 8080)) {
-        qDebug() << "Server could not start!";
-    } else {
-        qDebug() << "Server started on port 8080...";
-    }
 
     // 创建DatabaseManager实例
 
     // mqttclient mqtt_cli;
-    // mqtt_cli.run();
+    // // mqtt_cli.start();
 
     return a.exec();
 }

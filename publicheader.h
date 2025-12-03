@@ -16,22 +16,24 @@ struct DeviceStatus {
     QString trafficStatistics;     // 已用流量
     QString lastHeartbeat;         // 最后心跳时间
 
+
     QString ip;
     QString current_start;
     QString current_end;
     QString next_action;
     QString next_action_start;
     QString next_action_end;
-
+    QString usedProcess;         // 正在使用的流程TODO
+    QString usedProcessID;         // 正在使用的流程TODO
 
     // 构造函数，用于初始化
     DeviceStatus(const QString& sn, const QString& st, const QString& loc,
                  const QString& action, const QString& traffic, const QString& heartbeat,
                 const QString& ip, const QString& cs, const QString& ce, const QString& na,
-const QString& nas ,const QString& nae)
+const QString& nas ,const QString& nae , const QString& process ,const QString& processId)
         : serialNumber(sn), status(st), location(loc), currentAction(action),
         trafficStatistics(traffic), lastHeartbeat(heartbeat) ,ip(ip) ,current_start(cs), current_end(ce),
-        next_action(na),next_action_start(nas),next_action_end(nae){}
+        next_action(na),next_action_start(nas),next_action_end(nae) ,usedProcess(process) ,usedProcessID(processId) {}
 
     // 将结构体转化为 JSON 对象
     QJsonObject toJsonAll() const {
@@ -42,6 +44,9 @@ const QString& nas ,const QString& nae)
         jsonObj["current_action"] = currentAction;
         jsonObj["traffic_statistics"] = trafficStatistics;
         jsonObj["last_heartbeat"] = lastHeartbeat;
+        jsonObj["process_name"] = usedProcess;
+        jsonObj["process_id"] = usedProcessID;
+
         return jsonObj;
     }
 

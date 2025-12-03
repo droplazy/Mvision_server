@@ -13,28 +13,15 @@
 
 
 
-HttpServer::HttpServer(QObject *parent) : QTcpServer(parent)
+HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
 
-
-    // 获取当前目录
-    QString currentDir = QCoreApplication::applicationDirPath();
-
-    // 设置数据库文件名，确保数据库文件创建在当前目录
-    QString dbName = QDir(currentDir).filePath("system.db");
-
-    // 调用createDatabase方法并传入数据库文件路径
-    if (dbManager.createDatabase(dbName)) {
-        qDebug() << "Database and tables created successfully!";
-    } else {
-        qDebug() << "Failed to create database or tables.";
-    }
     generateTextData();
 }
 
 void HttpServer::generateTextData()
 {
-
+#if 0
     deviceVector.append(DeviceStatus("SN999321", "在线", "杭州", "休息", "56841.12MB",
                                      "2025-11-25T12:31:00Z", "192.168.10.111",
                                      "2025-10-25T13:00:12Z", "2025-10-25T14:00:12Z", "吃饭",
@@ -112,7 +99,6 @@ void HttpServer::generateTextData()
     processVector.append(process3);
 
 
-#if 1
 
     for (const DeviceStatus& device : deviceVector)
     {
@@ -133,44 +119,16 @@ void HttpServer::generateTextData()
         dbManager.insertProcessSteps(processes);
     }
 
-       QList<SQL_Device> devices = dbManager.getAllDevices();
-       QList<Machine_Process_Total> process = dbManager.getAllProcessSteps();
-       // 假设 Machine_Process_Total 包含 process_id, process_name 和 remark
-       for (const Machine_Process_Total &processItem : process) {
-           qDebug() << "Process ID:" << processItem.process_id;
-           qDebug() << "Process Name:" << processItem.process_name;
-           qDebug() << "Remark:" << processItem.remark;
 
-           // 遍历并打印所有步骤
-           for (int i = 0; i < processItem.Processes.size(); ++i) {
-               const Machine_Process_Single &step = processItem.Processes[i];
-               qDebug() << "Step" << i + 1 << ":";
-               qDebug() << "  Action:" << step.action;
-               qDebug() << "  Sub Action:" << step.sub_action;
-               qDebug() << "  Start Time:" << step.start_time;
-               qDebug() << "  End Time:" << step.end_time;
-               qDebug() << "  Remark:" << step.remark;
-           }
-       }
-
-       // 假设 SQL_Device 结构体包含 id 和 name
-       for (const SQL_Device &device : devices) {
-           qDebug() << "Device ID:" << device.serial_number;
-           qDebug() << "Device Name:" << device.checksum;
-       }
 #endif
-
-    // // 打印信息
-    // process1.printInfo();
-    // process2.printInfo();
-    // process3.printInfo();
-
-    // 如果需要输出为 JSON 格式
-    // qDebug() << "Process 1 JSON: " << process1.toJsonAll();
-    // qDebug() << "Process 2 JSON: " << process2.toJsonAll();
-    // qDebug() << "Process 3 JSON: " << process3.toJsonAll();
-
-    // qDebug() <<         deviceVector.count() << "asddsa\n";
+    QList<SQL_Device> devices = dbManager->getAllDevices();
+        processVector = dbManager->getAllProcessSteps();
+    for (const SQL_Device &device : devices) {
+        deviceVector.append(DeviceStatus(device.serial_number, device.device_status, "未知", "未知", device.total_flow,
+                                         "未知", device.ip_address,
+                                         "未知", "未知", "未知",
+                                         "未知", "未知","未知", "未知"));
+    }
 }
 
 
@@ -316,6 +274,8 @@ void HttpServer::onReadyRead() {
             } else if (path == "/auth/login") {
                 handlePostAuthLogin(clientSocket, body);
             } else {
+                qDebug() << "[POST /process/create] body =" << body;
+
                 sendNotFound(clientSocket);
             }
         } else {
@@ -328,6 +288,27 @@ void HttpServer::onReadyRead() {
         clientSocket->disconnectFromHost();
     }
 }
+
+void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
+{
+    // Traverse through the QVector to find the device with the same serial number
+    for (int i = 0; i < deviceVector.size(); ++i) {
+        if (deviceVector[i].serialNumber == updatedDevice.serialNumber) {
+            // If the device with the matching serial number is found, update its details
+
+            updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            updatedDevice.status ="在线";
+            updatedDevice.location ="杭州";
+            deviceVector[i] = updatedDevice;
+          //  qDebug() << "Device information updated for serial number: " << updatedDevice.serialNumber;
+            return; // Exit after updating the device
+        }
+    }
+
+    // If no device is found with the given serial number, you can optionally log it
+ //   qDebug() << "Device with serial number " << updatedDevice.serialNumber << " not found!";
+}
+
 // 发送404响应
 void HttpServer::send404(QTcpSocket *clientSocket) {
     QByteArray errorResponse = "HTTP/1.1 404 Not Found\r\n";
@@ -441,6 +422,7 @@ void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &quer
     QString serial = query.queryItemValue("serial_number");
     qDebug() << "[GET /device] serial_number =" << serial;
     QByteArray jsonData;
+
     if(serial =="ALL")
     {
         QJsonArray devices;
@@ -553,7 +535,8 @@ void HttpServer::handlePostDeviceCommand(QTcpSocket *clientSocket, const QByteAr
     QJsonDocument doc = QJsonDocument::fromJson(body);
     if (!doc.isNull()) {
         QJsonObject jsonObj = doc.object();
-        qDebug() << "Parsed JSON body:" << jsonObj;
+      //  qDebug() << "Parsed JSON body:" << jsonObj;
+        emit  devCommadSend(jsonObj);
     }
     sendResponse(clientSocket, "{\"code\":200,\"msg\":\"POST /process/command success\"}");
 }
@@ -615,10 +598,18 @@ void HttpServer::handlePostDeviceAdd(QTcpSocket *clientSocket, const QUrlQuery &
                 deviceVector.append(DeviceStatus(serialNumber, "离线", "未知", "未知 ","0",
                                              "未知", "未知",
                                              "未知", "未知", "未知",
-                                             "未知", "未知"));
-
+                                             "未知", "未知","未知", "未知"));
+                SQL_Device insert_dev;
+                insert_dev.device_status = "离线";
+                insert_dev.serial_number = serialNumber;
+                insert_dev.bound_time =  QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+                insert_dev.checksum = verificationCode;
+                insert_dev.ip_address="unknow";
+                insert_dev.total_flow="0";
+                insert_dev.bound_user = "123";//todo
+                dbManager->insertDevice(insert_dev);
                 sendResponse(clientSocket, "{\"code\":200,\"msg\":\"设备添加成功\"}");
-
+                emit  NewDeviceCall(serialNumber);
             }
         }
 
@@ -631,6 +622,7 @@ bool HttpServer::deleteProcessByProcessId(const QString& process_id) {
         if (processVector[i].process_id == process_id) {
             // 找到并删除该节点
             processVector.removeAt(i);
+            dbManager->deleteProcessSteps(process_id);
             return true;
         }
     }
@@ -826,7 +818,7 @@ QJsonObject HttpServer::generateFailureResponse() {
 DeviceStatus* HttpServer::findDeviceBySerialNumber(QVector<DeviceStatus>& devices, const QString& serialNumber) {
     for (auto& device : devices) {
         if (device.serialNumber == serialNumber) {
-            device.printInfo();
+         //   device.printInfo();
             return &device;  // 找到并返回指针
         }
     }
@@ -909,6 +901,7 @@ QString HttpServer::parseJsonGenerateNode(const QJsonObject &rootObj, QVector<Ma
 
         // Add processTotal to the vector
         processVector.append(processTotal);
+        dbManager->insertProcessSteps(processTotal);
     }
 
     return retId;
@@ -972,6 +965,9 @@ bool HttpServer::parseMachineProcess(const QJsonObject &rootObj, QVector<Machine
 
                 // 将步骤添加到 Process 中
                 processTotal->Processes.append(processSingle);
+                dbManager->deleteProcessSteps(processId);
+                dbManager->insertProcessSteps(*processTotal);
+
             }
         }
     }

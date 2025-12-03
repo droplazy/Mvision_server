@@ -330,7 +330,7 @@ SQL_User DatabaseManager::getUserByUsername(const QString &username)
     return user;
 }
 
-bool DatabaseManager::insertProcessSteps(const Machine_Process_Total &process)
+bool DatabaseManager:: insertProcessSteps(const Machine_Process_Total &process)
 {
     QSqlQuery query;
     query.prepare(R"(

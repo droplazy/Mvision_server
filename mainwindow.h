@@ -2,6 +2,12 @@
 #define MAINWINDOW_H
 #include  <QtSql>
 #include <QMainWindow>
+#include "mqttclient.h"
+#include "httpserver.h"
+
+
+
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -19,5 +25,9 @@ public:
 
 private:
     Ui::MainWindow *ui;
+
+    class HttpServer *p_http;
+    class mqttclient *p_mqtt;
+    class DatabaseManager *p_db;
 };
 #endif // MAINWINDOW_H

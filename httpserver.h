@@ -18,7 +18,9 @@ class HttpServer : public QTcpServer
 {
     Q_OBJECT
 public:
-    explicit HttpServer(QObject *parent = nullptr);
+    explicit HttpServer(DatabaseManager *db, QObject *parent = nullptr);
+
+
     void sendResponse(QTcpSocket *clientSocket, const QByteArray &json);
     void sendNotFound(QTcpSocket *clientSocket);
 
@@ -27,6 +29,8 @@ protected:
 
 private slots:
     void onReadyRead();
+public slots:
+    void onDeviceUpdata(DeviceStatus updatedDevice);
 
 private:
     void handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &query);
@@ -64,8 +68,10 @@ private:
     bool parseMachineProcess(const QJsonObject &rootObj, QVector<Machine_Process_Total> &processVector);
     bool processDeleteRequest(const QJsonObject &rootObj);
 
-    DatabaseManager dbManager;
-
+    DatabaseManager *dbManager;
+signals:
+    void NewDeviceCall(QString);
+    void devCommadSend(QJsonObject);
 };
 
 #endif // HTTPSERVER_H
