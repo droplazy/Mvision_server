@@ -29,6 +29,8 @@ MainWindow::MainWindow(QWidget *parent)
 
    // p_mqtt_ser
     connect(p_http, &HttpServer::devCommadSend, p_mqtt_cli, &mqttclient::CommandMuiltSend);  // 连接状态变化信号onDeviceUpdata
+    connect(p_http, &HttpServer::devProcessSend, p_mqtt_cli, &mqttclient::ProcessDevtSend);  // 连接状态变化信号onDeviceUpdata
+
     connect(p_http, &HttpServer::NewDeviceCall, p_mqtt_cli, &mqttclient::ADDsubscribeTopic);  // 连接状态变化信号onDeviceUpdata
     connect(p_mqtt_cli, &mqttclient::updateDeviceInfo, p_http, &HttpServer::onDeviceUpdata);  // 连接状态变化信号 void devCommadSend(QJsonObject);
 

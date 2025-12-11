@@ -105,6 +105,10 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     QJsonObject dataObj = json["data"].toObject();
     QString action = dataObj["action"].toString();
     QString sub_action = dataObj["sub_action"].toString();
+    QString start_time = dataObj["start_time"].toString();
+    QString end_time = dataObj["end_time"].toString();
+    QString remark = dataObj["remark"].toString();
+
     QJsonArray serial_numbers = dataObj["serial_numbers"].toArray();
 
     // 构建新的 message 内容
@@ -117,12 +121,16 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     QJsonObject data;
     data["action"] = action;
     data["sub_action"] = sub_action;
+    data["start_time"] = start_time;
+    data["end_time"] = end_time;
+    data["remark"] = remark;
+
     newJson["data"] = data;
 
     QByteArray message = QJsonDocument(newJson).toJson();
 
     // 发布消息，主题是 /device/serial_number，序列号逐个变化
-    for (const QJsonValue &serialNumber : serial_numbers) {
+    for (const QJsonValue &serialNumber : std::as_const(serial_numbers)) {
         QString topic = "Device/Dispatch/" + serialNumber.toString();
         QMqttTopicName topicName(topic);
         publishMessage(topicName, message);
@@ -130,11 +138,24 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     }
 }
 
+void mqttclient::ProcessDevtSend(QJsonObject json)
+{
+
+    //  qDebug() << "recive :" << json;
+    // 解析传入的 JSON 对象serial_number
+
+      QString serial_number = json["serial_number"].toString();
+    QByteArray message = QJsonDocument(json).toJson();
+        QString topic = "Device/Dispatch/" + serial_number;
+        QMqttTopicName topicName(topic);
+        publishMessage(topicName, message);
+}
+
 void mqttclient::onMessageReceived(const QByteArray &message, const QMqttTopicName &topic)
 {
     // 处理收到的消息
     QString string = QString::fromUtf8(message);
-    //qDebug() << "Received message on topic" << topic.name() << ":" << string;
+ //   qDebug() << "Received message on topic" << topic.name() << ":" << string;
 
     QJsonDocument doc = QJsonDocument::fromJson(message);
     QJsonObject jsonObj = doc.object();

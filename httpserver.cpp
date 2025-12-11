@@ -241,7 +241,7 @@ void HttpServer::onReadyRead() {
         // 如果请求的是根目录，就返回 index.html
         //ShowHomepage(clientSocket, request);
 #if 1
-        qDebug() <<"GET REQ PATH: "<<  path <<"GET METHOD: "<< method;
+      //  qDebug() <<"GET REQ PATH: "<<  path <<"GET METHOD: "<< method;
         if (request.startsWith("GET")) {
             if (path == "/device") {
                 handleGetDevice(clientSocket, query);
@@ -273,8 +273,10 @@ void HttpServer::onReadyRead() {
                 handlePostProcessDelete(clientSocket, body);
             } else if (path == "/auth/login") {
                 handlePostAuthLogin(clientSocket, body);
+            } else if (path == "/process/todev") {
+                handlePostDeviceProcess(clientSocket, body);
             } else {
-                qDebug() << "[POST /process/create] body =" << body;
+                qDebug()<<path << "[POST /process/create] body =" << body;
 
                 sendNotFound(clientSocket);
             }
@@ -340,7 +342,7 @@ void HttpServer::handlePostAuthLogin(QTcpSocket *clientSocket, const QByteArray 
         {
             code=200;
         }
-        jsonObject= generateJson(username,code,"我是张佳豪");
+        jsonObject= generateJson(username,code,"951");
     }
     QJsonDocument doc(jsonObject);
     QByteArray jsonData = doc.toJson(QJsonDocument::Indented);
@@ -420,7 +422,7 @@ void HttpServer::sendNotFound(QTcpSocket *clientSocket) {
 // ====== 处理接口 ======
 void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &query) {
     QString serial = query.queryItemValue("serial_number");
-    qDebug() << "[GET /device] serial_number =" << serial;
+ //   qDebug() << "[GET /device] serial_number =" << serial;
     QByteArray jsonData;
 
     if(serial =="ALL")
@@ -472,7 +474,7 @@ void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &quer
 
 void HttpServer::handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &query) {
     QString processId = query.queryItemValue("process_id");
-    qDebug() << "[GET /process/get] process_id =" << processId;
+//    qDebug() << "[GET /process/get] process_id =" << processId;
     QByteArray jsonData;
     if(processId == "ALL" || processId == "all")
     {
@@ -539,6 +541,63 @@ void HttpServer::handlePostDeviceCommand(QTcpSocket *clientSocket, const QByteAr
         emit  devCommadSend(jsonObj);
     }
     sendResponse(clientSocket, "{\"code\":200,\"msg\":\"POST /process/command success\"}");
+}
+void HttpServer::handlePostDeviceProcess(QTcpSocket *clientSocket, const QByteArray &body) {
+    // 1. 解析 JSON 请求体
+    QJsonDocument doc = QJsonDocument::fromJson(body);
+    if (doc.isNull()) {
+        sendResponse(clientSocket, "{\"code\":400,\"msg\":\"Invalid JSON\"}");
+        return;
+    }
+    QJsonObject jsonObj = doc.object();
+
+    // 获取传入的 data 和 process_id
+    QJsonObject data = jsonObj.value("data").toObject();
+    QString processId = data.value("process_id").toString();
+    QString timestamp = jsonObj.value("timestamp").toString();
+    QString serial_number = data.value("serial_number").toString();
+
+    // 2. 查找对应的 process_id
+    bool found = false;
+ //   QJsonArray responseData;
+
+    for (const Machine_Process_Total &process : std::as_const(processVector)) {
+        if (process.process_id == processId) {
+            found = true;
+
+            // 3. 构建响应 JSON
+            QJsonObject responseObj;
+            responseObj["messageType"] = "process";
+            responseObj["password"] = "securePassword123";  // 假设为固定值，可以根据需要动态生成
+            responseObj["timestamp"] = timestamp;
+            responseObj["username"] = "user123";  // 假设为固定值，可以根据需要动态生成
+            responseObj["processId"] = processId;
+            responseObj["serial_number"] = serial_number;
+
+            // 4. 构建数据部分
+            QJsonArray dataArray;
+            int stepCounter = 1; // 用于生成步骤编号
+
+            for (const Machine_Process_Single &singleProcess : process.Processes) {
+                QJsonObject stepObj = singleProcess.toJsonAll();  // 将单个步骤转化为 JSON
+                stepObj["step"] = stepCounter++;  // 添加步骤号
+                dataArray.append(stepObj);
+            }
+
+            responseObj["data"] = dataArray;
+
+            // 5. 将构建好的 JSON 对象转化为字符串并发送给客户端
+            QJsonDocument responseDoc(responseObj);
+            emit devProcessSend(responseObj);
+            sendResponse(clientSocket, "{\"code\":200,\"msg\":\"流程绑定成功\"}");
+            qDebug() << responseDoc.object();
+            break;
+        }
+    }
+
+    if (!found) {
+        sendResponse(clientSocket, "{\"code\":404,\"msg\":\"process_id not found\"}");
+    }
 }
 
 void HttpServer::handlePostDeviceAdd(QTcpSocket *clientSocket, const QUrlQuery &query, const QByteArray &body) {
@@ -878,7 +937,7 @@ QString HttpServer::parseJsonGenerateNode(const QJsonObject &rootObj, QVector<Ma
 
         // Print the process_id to debug output
         qDebug() << "Generated process_id:" << processTotal.process_id;
-
+        qDebug() <<dataObj;
         processTotal.process_name = dataObj["process_name"].toString();
         processTotal.creation_time = QDateTime::currentDateTime().toString(Qt::ISODate);  // Optionally set creation time if needed
         processTotal.remark = dataObj["remark"].toString();; // Set this field if available in the data

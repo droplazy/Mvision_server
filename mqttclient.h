@@ -26,14 +26,16 @@ public:
 public slots:
     void ADDsubscribeTopic(QString device);//添加主题并且订阅
     void CommandMuiltSend(QJsonObject json);
+    void ProcessDevtSend(QJsonObject json);
+
 private slots:
     void onMessageReceived(const QByteArray &message, const QMqttTopicName &topic);  // 消息接收槽
-
     void onStateChanged(QMqttClient::ClientState state);
 private:
     QMqttClient *mqttClient; // MQTT客户端对象
     QStringList topicList;
     void subscribeToTopic(QString topic); // 订阅主题
+    void extracted();
     void subscribeALLTopic(); // 订阅所有主题
 
     DeviceStatus parseJsonHeartBeat(const QJsonObject &jsonObj);

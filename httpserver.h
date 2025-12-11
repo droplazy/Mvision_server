@@ -33,6 +33,7 @@ public slots:
     void onDeviceUpdata(DeviceStatus updatedDevice);
 
 private:
+    void handlePostDeviceProcess(QTcpSocket *clientSocket, const QByteArray &body);
     void handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handlePostDeviceCommand(QTcpSocket *clientSocket, const QByteArray &body);
@@ -72,6 +73,8 @@ private:
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
+    void devProcessSend(QJsonObject);
+
 };
 
 #endif // HTTPSERVER_H
