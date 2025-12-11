@@ -13,12 +13,14 @@ SOURCES += \
     httpserver.cpp \
     main.cpp \
     mainwindow.cpp \
+    mqtt_server.cpp \
     mqttclient.cpp
 
 HEADERS += \
     databasemanager.h \
     httpserver.h \
     mainwindow.h \
+    mqtt_server.h \
     mqttclient.h \
     publicheader.h
 

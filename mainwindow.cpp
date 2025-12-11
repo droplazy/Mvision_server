@@ -7,8 +7,11 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-
     p_db = new DatabaseManager();
+    p_mqttt_ser = new MQTT_server(p_db);
+    p_mqttt_ser->startServer();
+   // return ;
+
     // 获取当前目录
     QString currentDir = QCoreApplication::applicationDirPath();
 
@@ -22,11 +25,12 @@ MainWindow::MainWindow(QWidget *parent)
         qDebug() << "Failed to create database or tables.";
     }
     p_http = new HttpServer(p_db);
-    p_mqtt = new mqttclient(p_db);
+    p_mqtt_cli = new mqttclient(p_db);
 
-    connect(p_http, &HttpServer::devCommadSend, p_mqtt, &mqttclient::CommandMuiltSend);  // 连接状态变化信号onDeviceUpdata
-    connect(p_http, &HttpServer::NewDeviceCall, p_mqtt, &mqttclient::ADDsubscribeTopic);  // 连接状态变化信号onDeviceUpdata
-    connect(p_mqtt, &mqttclient::updateDeviceInfo, p_http, &HttpServer::onDeviceUpdata);  // 连接状态变化信号 void devCommadSend(QJsonObject);
+   // p_mqtt_ser
+    connect(p_http, &HttpServer::devCommadSend, p_mqtt_cli, &mqttclient::CommandMuiltSend);  // 连接状态变化信号onDeviceUpdata
+    connect(p_http, &HttpServer::NewDeviceCall, p_mqtt_cli, &mqttclient::ADDsubscribeTopic);  // 连接状态变化信号onDeviceUpdata
+    connect(p_mqtt_cli, &mqttclient::updateDeviceInfo, p_http, &HttpServer::onDeviceUpdata);  // 连接状态变化信号 void devCommadSend(QJsonObject);
 
 
 
@@ -35,7 +39,7 @@ MainWindow::MainWindow(QWidget *parent)
     } else {
         qDebug() << "Server started on port 8080...";
     }
-    p_mqtt->start();
+    p_mqtt_cli->start();
 
 }
 

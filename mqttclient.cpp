@@ -46,7 +46,7 @@ void mqttclient::connectToBroker()
 {
 
     qDebug() << __FUNCTION__;
-    mqttClient->setHostname("test.mosquitto.org");  // 设置MQTT代理地址
+    mqttClient->setHostname("192.168.10.102");  // 设置MQTT代理地址
     mqttClient->setPort(1883);  // 设置MQTT代理端口
 
     // 设置客户端ID为 "123"

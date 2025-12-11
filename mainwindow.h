@@ -4,7 +4,7 @@
 #include <QMainWindow>
 #include "mqttclient.h"
 #include "httpserver.h"
-
+#include "mqtt_server.h"
 
 
 
@@ -27,7 +27,8 @@ private:
     Ui::MainWindow *ui;
 
     class HttpServer *p_http;
-    class mqttclient *p_mqtt;
+    class mqttclient *p_mqtt_cli;
+    class MQTT_server *p_mqttt_ser;
     class DatabaseManager *p_db;
 };
 #endif // MAINWINDOW_H
