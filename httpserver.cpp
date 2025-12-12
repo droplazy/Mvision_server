@@ -241,7 +241,7 @@ void HttpServer::onReadyRead() {
         // 如果请求的是根目录，就返回 index.html
         //ShowHomepage(clientSocket, request);
 #if 1
-      //  qDebug() <<"GET REQ PATH: "<<  path <<"GET METHOD: "<< method;
+        qDebug() <<"GET REQ PATH: "<<  path <<"GET METHOD: "<< method;
         if (request.startsWith("GET")) {
             if (path == "/device") {
                 handleGetDevice(clientSocket, query);

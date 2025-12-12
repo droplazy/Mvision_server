@@ -46,7 +46,7 @@ void mqttclient::connectToBroker()
 {
 
     qDebug() << __FUNCTION__;
-    mqttClient->setHostname("192.168.10.102");  // 设置MQTT代理地址
+    mqttClient->setHostname("192.168.10.103");  // 设置MQTT代理地址
     mqttClient->setPort(1883);  // 设置MQTT代理端口
 
     // 设置客户端ID为 "123"
@@ -155,7 +155,7 @@ void mqttclient::onMessageReceived(const QByteArray &message, const QMqttTopicNa
 {
     // 处理收到的消息
     QString string = QString::fromUtf8(message);
- //   qDebug() << "Received message on topic" << topic.name() << ":" << string;
+//    qDebug() << "Received message on topic" << topic.name() << ":" << string;
 
     QJsonDocument doc = QJsonDocument::fromJson(message);
     QJsonObject jsonObj = doc.object();

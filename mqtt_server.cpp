@@ -34,6 +34,18 @@ MQTT_server::MQTT_server(DatabaseManager *db):  dbManager(db)
 
 void MQTT_server::startServer()
 {
+    // 执行 taskkill 命令，强制终止 mosquitto.exe 进程
+    QString killCommand = "taskkill /F /IM mosquitto.exe";
+    QProcess killProcess;
+    killProcess.start(killCommand);
+
+    // 等待 taskkill 命令执行完毕
+    if (!killProcess.waitForFinished()) {
+        qWarning() << "无法终止现有的 mosquitto.exe 进程！";
+    } else {
+        qDebug() << "mosquitto.exe 进程已终止（如果有的话）。";
+    }
+
     // 配置文件路径
     QString configPath = "D:/Program Files/mosquitto/mosquitto.conf";
 
@@ -68,6 +80,7 @@ void MQTT_server::startServer()
         qWarning() << "无法启动 MQTT Server!";
     }
 }
+
 
 // 新增的紧急停止服务接口
 void MQTT_server::stopServer()
