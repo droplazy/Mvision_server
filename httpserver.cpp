@@ -32,6 +32,16 @@ void HttpServer::createDownloadDirectoryIfNeeded()
         QDir().mkdir(downloadPath);
     }
 }
+void HttpServer::createUploadDirectoryIfNeeded()
+{
+    QDir currentDir(QDir::currentPath());
+    QString downloadPath = currentDir.filePath("Upload");
+    qDebug() << downloadPath << " is created ! ... ";
+    if (!QDir(downloadPath).exists()) {
+        QDir().mkdir(downloadPath);
+    }
+}
+
 void HttpServer::generateTextData()
 {
 #if 0
@@ -355,11 +365,11 @@ void HttpServer::onReadyRead() {
     if (clientSocket) {
         // 读取请求
         QByteArray request = clientSocket->readAll();
-      //  qDebug() << "Received request:" << request;
+
+        // 解析请求行
         QList<QByteArray> lines = request.split('\n');
         if (lines.isEmpty()) return;
 
-        // 解析请求行
         QByteArray requestLine = lines[0];
         QList<QByteArray> parts = requestLine.split(' ');
         if (parts.size() < 3) return;
@@ -378,79 +388,110 @@ void HttpServer::onReadyRead() {
             body = request.mid(emptyLineIndex + 4);
         }
 
+        // 解析头部到map
+        QMap<QString, QString> headers;
+        for (int i = 1; i < lines.size(); i++) {
+            QByteArray line = lines[i].trimmed();
+            if (line.isEmpty()) break; // 头部结束
 
-        // 如果请求的是根目录，就返回 index.html
-        //ShowHomepage(clientSocket, request);
-#if 1
-        qDebug() <<"GET REQ PATH: "<<  path <<"GET METHOD: "<< method;
-        if (request.startsWith("GET"))
-        {
-            if (path == "/device")
-            {
+            int colonPos = line.indexOf(':');
+            if (colonPos > 0) {
+                QString key = QString::fromUtf8(line.left(colonPos).trimmed());
+                QString value = QString::fromUtf8(line.mid(colonPos + 1).trimmed());
+                headers[key.toLower()] = value;
+            }
+        }
+
+        qDebug() << "GET REQ PATH: " << path << "GET METHOD: " << method;
+
+        if (method == "GET") {
+            if (path == "/device") {
                 handleGetDevice(clientSocket, query);
-            } else if (path == "/process/get")
-            {
+            } else if (path == "/process/get") {
                 handleGetProcess(clientSocket, query);
-            }
-            else if (path == "/download")
-            {
+            } else if (path == "/download") {
                 handleGetDownload(clientSocket, query);
-            }
-            else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
-                       || path.contains(".js")|| path.contains(".png") || path.contains(".html") \
-                      || path.contains("/devices")|| path.contains("/process/new") || path.contains("/process/center") \
-                      || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico"))
-            {//静态文件会一直进入这里
-               // serveStatic(clientSocket,path, "E:/qtpro/MuiltiControlSer/www/index.html");  // 处理 /home 请求，返回 index.html
+            } else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
+                       || path.contains(".js") || path.contains(".png") || path.contains(".html") \
+                       || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
+                       || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")) {
                 ShowHomepage(clientSocket, request);
-            }
-            /*else if (path == "/vite.svg"||"/favicon.ico ") {//静态文件会一直进入这里
-                // serveStatic(clientSocket,path, "E:/qtpro/MuiltiControlSer/www/index.html");  // 处理 /home 请求，返回 index.html
-                //ShowHomepage(clientSocket, request);
-            } */else {
+            } else {
                 sendNotFound(clientSocket);
             }
-        } else if (request.startsWith("POST"))
-        {
-            if (path == "/device/command")
-            {
-                handlePostDeviceCommand(clientSocket, body);
-            } else if (path == "/device/add")
-            {
-                handlePostDeviceAdd(clientSocket, query, body);
-            } else if (path == "/process/create")
-            {
-                handlePostProcessCreate(clientSocket, body);
-            } else if (path == "/process/update")
-            {
-                handlePostProcessUpdate(clientSocket, query, body);
-            } else if (path == "/process/delete")
-            {
-                handlePostProcessDelete(clientSocket, body);
-            } else if (path == "/auth/login")
-            {
-                handlePostAuthLogin(clientSocket, body);
-            } else if (path == "/process/todev")
-            {
-                handlePostDeviceProcess(clientSocket, body);
-            } else
-            {
-                qDebug()<<path << "[POST /process/create] body =" << body;
+        } else if (method == "POST") {
+            // 获取Content-Length
+            qint64 contentLength = -1;
+            if (headers.contains("content-length")) {
+                bool ok;
+                contentLength = headers["content-length"].toLongLong(&ok);
+                if (!ok) contentLength = -1;
+            }
 
-                sendNotFound(clientSocket);
+            qDebug() << "Content-Length from headers:" << contentLength;
+
+            // 如果是/dev/upload请求，确保读取完整body
+            if (path == "/dev/upload") {
+                // 如果已经接收的body不完整，继续读取
+                if (contentLength > 0 && body.size() < contentLength) {
+                    qDebug() << "Need to read more data. Current:" << body.size()
+                    << "Expected:" << contentLength;
+
+                    // 设置读取超时
+                    int timeout = 5000; // 5秒
+                    qint64 remaining = contentLength - body.size();
+
+                    while (remaining > 0 && clientSocket->waitForReadyRead(timeout)) {
+                        QByteArray moreData = clientSocket->readAll();
+                        if (!moreData.isEmpty()) {
+                            body.append(moreData);
+                            remaining = contentLength - body.size();
+                            qDebug() << "Read additional" << moreData.size() << "bytes. Total:"
+                                     << body.size() << "Remaining:" << remaining;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if (body.size() != contentLength) {
+                        qDebug() << "Warning: Body incomplete! Expected:" << contentLength
+                                 << "Actual:" << body.size();
+                    }
+                }
+
+                qDebug() << "Before calling handlePostFileUpload, body size:" << body.size();
+                handlePostFileUpload(clientSocket, query, body, "123654");
+                qDebug() << "After handlePostFileUpload";
+
+            } else {
+                // 其他POST请求的处理
+                if (path == "/device/command") {
+                    handlePostDeviceCommand(clientSocket, body);
+                } else if (path == "/device/add") {
+                    handlePostDeviceAdd(clientSocket, query, body);
+                } else if (path == "/process/create") {
+                    handlePostProcessCreate(clientSocket, body);
+                } else if (path == "/process/update") {
+                    handlePostProcessUpdate(clientSocket, query, body);
+                } else if (path == "/process/delete") {
+                    handlePostProcessDelete(clientSocket, body);
+                } else if (path == "/auth/login") {
+                    handlePostAuthLogin(clientSocket, body);
+                } else if (path == "/process/todev") {
+                    handlePostDeviceProcess(clientSocket, body);
+                } else {
+                    qDebug() << path << "[POST /process/create] body =" << body;
+                    sendNotFound(clientSocket);
+                }
             }
-        } else
-        {
+        } else {
             sendNotFound(clientSocket);
         }
 
-#endif
-
-        // 断开与客户端的连接
+        // 断开与客户端的连接（对于keep-alive连接可能需要调整）
         clientSocket->disconnectFromHost();
     }
 }
-
 void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
 {
     // Traverse through the QVector to find the device with the same serial number
@@ -510,9 +551,165 @@ void HttpServer::handlePostAuthLogin(QTcpSocket *clientSocket, const QByteArray 
 
     sendResponse(clientSocket, jsonData);
 }
-// 发送404响应
 
+void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query, const QByteArray &body, QString verify)
+{
+    qDebug() << "=== handlePostFileUpload called ===";
+    qDebug() << "Body size received:" << body.size() << "bytes";
 
+    QString serial = query.queryItemValue("serial_number");
+    QString verifycode = query.queryItemValue("verifycode");
+    QString originalFilename = query.queryItemValue("filename");
+
+    qDebug() << "Parameters - serial:" << serial
+             << "verifycode:" << verifycode
+             << "originalFilename:" << originalFilename;
+
+    // 校验验证码
+    if (verifycode != verify) {
+        qDebug() << "Verifycode mismatch! Expected:" << verify << "Got:" << verifycode;
+        sendHttpResponse(clientSocket, 403, "Forbidden", "Invalid verifycode");
+        return;
+    }
+
+    if (serial.isEmpty()) {
+        qDebug() << "Missing serial_number parameter";
+        sendHttpResponse(clientSocket, 400, "Bad Request", "Missing serial_number");
+        return;
+    }
+
+    // 创建目录
+    QDir currentDir = QDir::current();
+    QString uploadDirPath = currentDir.filePath("Upload");
+    QString serialDirPath = QDir(uploadDirPath).filePath(serial);
+
+    qDebug() << "Creating directories - Upload:" << uploadDirPath
+             << "Serial:" << serialDirPath;
+
+    if (!QDir(uploadDirPath).exists()) {
+        if (QDir().mkpath(uploadDirPath)) {
+            qDebug() << "Created Upload directory";
+        } else {
+            qDebug() << "Failed to create Upload directory";
+            sendHttpResponse(clientSocket, 500, "Internal Error", "Cannot create Upload directory");
+            return;
+        }
+    }
+
+    if (!QDir(serialDirPath).exists()) {
+        if (QDir().mkpath(serialDirPath)) {
+            qDebug() << "Created serial directory";
+        } else {
+            qDebug() << "Failed to create serial directory";
+            sendHttpResponse(clientSocket, 500, "Internal Error", "Cannot create serial directory");
+            return;
+        }
+    }
+
+    // 生成最终文件名
+    QString finalFilename;
+    if (!originalFilename.isEmpty()) {
+        finalFilename = originalFilename;
+        qDebug() << "Using original filename:" << finalFilename;
+    } else {
+        finalFilename = QString("%1_%2.dat")
+        .arg(serial)
+            .arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
+        qDebug() << "Generated filename:" << finalFilename;
+    }
+
+    // 保存文件
+    QString filePath = QDir(serialDirPath).filePath(finalFilename);
+    qDebug() << "Saving to path:" << filePath;
+
+    QFile file(filePath);
+
+    if (!file.open(QIODevice::WriteOnly)) {
+        qDebug() << "Cannot open file for writing:" << file.errorString();
+        sendHttpResponse(clientSocket, 500, "Internal Error",
+                         QString("Cannot save file: %1").arg(file.errorString()).toUtf8());
+        clientSocket->disconnectFromHost();
+        return;
+    }
+
+    qDebug() << "File opened successfully, writing" << body.size() << "bytes...";
+    qint64 bytesWritten = file.write(body);
+    file.close();
+
+    qDebug() << "Bytes written:" << bytesWritten << "/" << body.size();
+
+    if (bytesWritten != body.size()) {
+        qDebug() << "Warning: Incomplete write! Expected:" << body.size()
+        << "Actual:" << bytesWritten;
+    }
+
+    // 验证文件大小
+    QFileInfo fileInfo(filePath);
+    qint64 actualFileSize = fileInfo.size();
+    qDebug() << "Actual file size on disk:" << actualFileSize << "bytes";
+
+    // 返回JSON响应
+    QJsonObject json;
+    json["success"] = true;
+    json["message"] = "File uploaded successfully";
+    json["serial"] = serial;
+    json["filename"] = finalFilename;
+    json["requested_size"] = static_cast<qint64>(body.size());
+    json["written_size"] = bytesWritten;
+    json["actual_size"] = actualFileSize;
+    json["path"] = filePath;
+    json["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+
+    QJsonDocument doc(json);
+    QByteArray jsonData = doc.toJson();
+
+    qDebug() << "Sending JSON response:" << QString::fromUtf8(jsonData);
+
+    QString response = QString("HTTP/1.1 200 OK\r\n"
+                               "Content-Type: application/json\r\n"
+                               "Content-Length: %1\r\n"
+                               "Connection: close\r\n\r\n")
+                           .arg(jsonData.size());
+
+    qDebug() << "Writing HTTP response header...";
+
+    if (clientSocket->write(response.toUtf8()) == -1) {
+        qDebug() << "Failed to write response header:" << clientSocket->errorString();
+    } else {
+        clientSocket->flush();
+        qDebug() << "Response header written, writing JSON data...";
+
+        if (clientSocket->write(jsonData) == -1) {
+            qDebug() << "Failed to write JSON data:" << clientSocket->errorString();
+        } else {
+            clientSocket->flush();
+            qDebug() << "JSON data written successfully";
+        }
+    }
+
+    qDebug() << "Disconnecting client socket...";
+    clientSocket->disconnectFromHost();
+
+    if (clientSocket->state() != QAbstractSocket::UnconnectedState) {
+        qDebug() << "Waiting for socket to disconnect...";
+        if (clientSocket->waitForDisconnected(3000)) {
+            qDebug() << "Socket disconnected successfully";
+        } else {
+            qDebug() << "Socket disconnect timeout";
+        }
+    }
+
+    qDebug() << "=== handlePostFileUpload finished ===";
+    qDebug() << "";
+}
+// 辅助函数：获取HTTP头部值
+QString HttpServer::getHeaderValue(QTcpSocket *clientSocket, const QString &headerName)
+{
+    // 这里需要从clientSocket的请求数据中解析头部
+    // 假设你已经有一个存储请求头的数据结构
+    // 或者可以从原始的请求数据中解析
+    return "";
+}
 QByteArray HttpServer::getContentType(QString &filePath)
 {
         QFileInfo fileInfo(filePath);

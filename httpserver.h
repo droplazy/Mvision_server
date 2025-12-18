@@ -42,6 +42,9 @@ private:
     void handlePostProcessUpdate(QTcpSocket *clientSocket, const QUrlQuery &query, const QByteArray &body);
     void handlePostProcessDelete(QTcpSocket *clientSocket, const QByteArray &body);
     void handlePostAuthLogin(QTcpSocket *clientSocket, const QByteArray &body);
+    //void handlePostFileUpload(QTcpSocket *clientSocket,QUrlQuery query, const QByteArray &body);
+    void handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query, const QByteArray &body, QString verify);
+
     QByteArray getContentType( QString& filePath);// 新增的静态文件处理方法
     void printStaticFiles(const QByteArray &htmlContent);
     void send404(QTcpSocket *clientSocket);
@@ -73,6 +76,8 @@ private:
     DatabaseManager *dbManager;
     void sendHttpResponse(QTcpSocket *clientSocket, int statusCode, const QString &statusText, const QByteArray &body);
     void createDownloadDirectoryIfNeeded();
+    void createUploadDirectoryIfNeeded();
+    QString getHeaderValue(QTcpSocket *clientSocket, const QString &headerName);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

@@ -64,7 +64,7 @@ void mqttclient::subscribeToTopic(QString topic)
     if (mqttClient->state() == QMqttClient::Connected) {
         QMqttTopicFilter topicFilter(topic);  // 使用QMqttTopicFilter类型的主题过滤器
         mqttClient->subscribe(topicFilter);  // 订阅主题
-        qDebug() << "topic:" << topic << "scbscribed!   >>>> ...... ";
+       // qDebug() << "topic:" << topic << "scbscribed!   >>>> ...... ";
     }
     else {
         qDebug() << "Failed to subscribe, MQTT client is not connected.";
