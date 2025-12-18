@@ -13,7 +13,7 @@ mqttclient::mqttclient(DatabaseManager *db):mqttClient(new QMqttClient(this)),  
 
             QList<SQL_Device> devices = dbManager->getAllDevices();
             // 假设 SQL_Device 结构体包含 id 和 name
-            for (const SQL_Device &device : devices)
+            for (const SQL_Device &device : std::as_const(devices))
             {
                 ADDsubscribeTopic(device.serial_number);
             }
@@ -74,7 +74,7 @@ void mqttclient::subscribeToTopic(QString topic)
 void mqttclient::subscribeALLTopic()
 {
     // 遍历所有的主题并调用 subscribeToTopic 订阅
-    for (const QString &topic : topicList) {
+    for (const QString &topic : std::as_const(topicList)) {
         subscribeToTopic(topic);
     }
 }
@@ -153,9 +153,10 @@ void mqttclient::ProcessDevtSend(QJsonObject json)
 
 void mqttclient::onMessageReceived(const QByteArray &message, const QMqttTopicName &topic)
 {
+
     // 处理收到的消息
-    QString string = QString::fromUtf8(message);
-//    qDebug() << "Received message on topic" << topic.name() << ":" << string;
+//     QString string = QString::fromUtf8(message);
+// //    qDebug() << "Received message on topic" << topic.name() << ":" << string;
 
     QJsonDocument doc = QJsonDocument::fromJson(message);
     QJsonObject jsonObj = doc.object();

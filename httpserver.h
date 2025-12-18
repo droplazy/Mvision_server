@@ -46,6 +46,7 @@ private:
     void printStaticFiles(const QByteArray &htmlContent);
     void send404(QTcpSocket *clientSocket);
     void ShowHomepage(QTcpSocket *clientSocket, QByteArray request);
+    void handleGetDownload(QTcpSocket *clientSocket, const QUrlQuery &query);
     QJsonObject parseJsonData(const QString &jsonString);
     QJsonObject generateJson(const QString &username, int code, const QString &token = "");
 
@@ -70,6 +71,8 @@ private:
     bool processDeleteRequest(const QJsonObject &rootObj);
 
     DatabaseManager *dbManager;
+    void sendHttpResponse(QTcpSocket *clientSocket, int statusCode, const QString &statusText, const QByteArray &body);
+    void createDownloadDirectoryIfNeeded();
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

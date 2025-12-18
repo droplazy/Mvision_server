@@ -7,7 +7,10 @@
 #include <QTextStream>
 #include <QDir>
 #include <QApplication>
-
+#include <QFileInfo>
+#include <QMimeDatabase>
+#include <QMimeType>
+#include <QDateTime>
 #define MANAGER_USERNAME "123"
 #define MANAGER_PASSWD   "123"
 
@@ -17,8 +20,18 @@ HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent)
 {
 
     generateTextData();
+    createDownloadDirectoryIfNeeded();
 }
 
+void HttpServer::createDownloadDirectoryIfNeeded()
+{
+    QDir currentDir(QDir::currentPath());
+    QString downloadPath = currentDir.filePath("Download");
+    qDebug() << downloadPath << " is created ! ... ";
+    if (!QDir(downloadPath).exists()) {
+        QDir().mkdir(downloadPath);
+    }
+}
 void HttpServer::generateTextData()
 {
 #if 0
@@ -185,6 +198,134 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
         send404(clientSocket);  // 如果文件不存在，返回404
     }
 }
+void HttpServer::sendHttpResponse(QTcpSocket *clientSocket,
+                                  int statusCode,
+                                  const QString &statusText,
+                                  const QByteArray &body)
+{
+    QString response;
+    response += QString("HTTP/1.1 %1 %2\r\n").arg(statusCode).arg(statusText);
+    response += "Content-Type: text/plain; charset=utf-8\r\n";
+    response += QString("Content-Length: %1\r\n").arg(body.size());
+    response += "Connection: close\r\n";
+    response += "\r\n";
+
+    clientSocket->write(response.toUtf8());
+    clientSocket->write(body);
+    clientSocket->disconnectFromHost();
+}
+
+
+void HttpServer::handleGetDownload(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    QString filename = query.queryItemValue("filename");
+
+    // 1. 检查文件名是否为空
+    if (filename.isEmpty()) {
+        sendHttpResponse(clientSocket, 400, "Bad Request", "Missing filename parameter");
+        return;
+    }
+
+    // 2. 安全检查：防止目录遍历攻击
+    QFileInfo fileInfo(filename);
+    QString baseName = fileInfo.fileName(); // 只获取文件名，去除路径
+    if (baseName != filename) {
+        // 如果用户尝试使用路径，拒绝请求
+        sendHttpResponse(clientSocket, 403, "Forbidden", "Filename cannot contain path");
+        return;
+    }
+
+    // 3. 防止特殊文件访问
+    if (baseName == ".." || baseName == "." || baseName.contains("/") || baseName.contains("\\")) {
+        sendHttpResponse(clientSocket, 403, "Forbidden", "Invalid filename");
+        return;
+    }
+
+    // 4. 构建完整的文件路径
+    QDir downloadDir(QDir::current().filePath("Download"));
+
+    // 确保Download目录存在
+    if (!downloadDir.exists()) {
+        sendHttpResponse(clientSocket, 404, "Not Found", "Download directory not found");
+        qDebug() <<"Download path  = " << downloadDir;
+        return;
+    }
+
+    QString filePath = downloadDir.filePath(baseName);
+    QFile file(filePath);
+
+    // 5. 检查文件是否存在且可读
+    if (!file.exists()) {
+        sendHttpResponse(clientSocket, 404, "Not Found",
+                         QString("File '%1' not found").arg(baseName).toUtf8());
+        return;
+    }
+
+    if (!file.open(QIODevice::ReadOnly)) {
+        sendHttpResponse(clientSocket, 403, "Forbidden",
+                         QString("Cannot open file '%1'").arg(baseName).toUtf8());
+        return;
+    }
+
+    // 6. 获取文件信息
+    QFileInfo info(file);
+    qint64 fileSize = info.size();
+    QDateTime lastModified = info.lastModified();
+
+    // 7. 获取MIME类型
+    QMimeDatabase mimeDb;
+    QMimeType mimeType = mimeDb.mimeTypeForFile(filePath);
+    QString contentType = mimeType.name();
+
+    // 8. 构建HTTP响应头
+    QString headers;
+    headers += "HTTP/1.1 200 OK\r\n";
+    headers += QString("Content-Type: %1\r\n").arg(contentType);
+    headers += QString("Content-Length: %1\r\n").arg(fileSize);
+    headers += QString("Content-Disposition: attachment; filename=\"%1\"\r\n").arg(baseName);
+    headers += QString("Last-Modified: %1\r\n")
+                   .arg(lastModified.toString("ddd, dd MMM yyyy HH:mm:ss 'GMT'"));
+    headers += "Accept-Ranges: bytes\r\n";
+    headers += "Cache-Control: no-cache\r\n";
+    headers += "Connection: close\r\n";
+    headers += "\r\n"; // 空行分隔头部和正文
+
+    // 9. 发送响应头
+    clientSocket->write(headers.toUtf8());
+
+    // 10. 分块发送文件内容（避免内存占用过大）
+    const qint64 CHUNK_SIZE = 64 * 1024; // 64KB
+    qint64 bytesRemaining = fileSize;
+    char buffer[CHUNK_SIZE];
+
+    while (bytesRemaining > 0 && clientSocket->state() == QAbstractSocket::ConnectedState) {
+        qint64 bytesToRead = qMin(CHUNK_SIZE, bytesRemaining);
+        qint64 bytesRead = file.read(buffer, bytesToRead);
+
+        if (bytesRead <= 0) {
+            break; // 读取错误或文件结束
+        }
+
+        qint64 bytesWritten = clientSocket->write(buffer, bytesRead);
+
+        // 确保数据完全发送
+        if (bytesWritten > 0) {
+            clientSocket->flush();
+        }
+
+        if (bytesWritten != bytesRead) {
+            // 写入失败，可能客户端断开连接
+            break;
+        }
+
+        bytesRemaining -= bytesRead;
+    }
+
+    file.close();
+
+    // 11. 关闭连接
+    clientSocket->disconnectFromHost();
+}
 
 QJsonObject HttpServer::parseJsonData(const QString &jsonString) {
     // 解析 JSON 字符串
@@ -242,15 +383,24 @@ void HttpServer::onReadyRead() {
         //ShowHomepage(clientSocket, request);
 #if 1
         qDebug() <<"GET REQ PATH: "<<  path <<"GET METHOD: "<< method;
-        if (request.startsWith("GET")) {
-            if (path == "/device") {
+        if (request.startsWith("GET"))
+        {
+            if (path == "/device")
+            {
                 handleGetDevice(clientSocket, query);
-            } else if (path == "/process/get") {
+            } else if (path == "/process/get")
+            {
                 handleGetProcess(clientSocket, query);
-            } else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
+            }
+            else if (path == "/download")
+            {
+                handleGetDownload(clientSocket, query);
+            }
+            else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
                        || path.contains(".js")|| path.contains(".png") || path.contains(".html") \
                       || path.contains("/devices")|| path.contains("/process/new") || path.contains("/process/center") \
-                      || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")) {//静态文件会一直进入这里
+                      || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico"))
+            {//静态文件会一直进入这里
                // serveStatic(clientSocket,path, "E:/qtpro/MuiltiControlSer/www/index.html");  // 处理 /home 请求，返回 index.html
                 ShowHomepage(clientSocket, request);
             }
@@ -260,27 +410,37 @@ void HttpServer::onReadyRead() {
             } */else {
                 sendNotFound(clientSocket);
             }
-        } else if (request.startsWith("POST")) {
-            if (path == "/device/command") {
+        } else if (request.startsWith("POST"))
+        {
+            if (path == "/device/command")
+            {
                 handlePostDeviceCommand(clientSocket, body);
-            } else if (path == "/device/add") {
+            } else if (path == "/device/add")
+            {
                 handlePostDeviceAdd(clientSocket, query, body);
-            } else if (path == "/process/create") {
+            } else if (path == "/process/create")
+            {
                 handlePostProcessCreate(clientSocket, body);
-            } else if (path == "/process/update") {
+            } else if (path == "/process/update")
+            {
                 handlePostProcessUpdate(clientSocket, query, body);
-            } else if (path == "/process/delete") {
+            } else if (path == "/process/delete")
+            {
                 handlePostProcessDelete(clientSocket, body);
-            } else if (path == "/auth/login") {
+            } else if (path == "/auth/login")
+            {
                 handlePostAuthLogin(clientSocket, body);
-            } else if (path == "/process/todev") {
+            } else if (path == "/process/todev")
+            {
                 handlePostDeviceProcess(clientSocket, body);
-            } else {
+            } else
+            {
                 qDebug()<<path << "[POST /process/create] body =" << body;
 
                 sendNotFound(clientSocket);
             }
-        } else {
+        } else
+        {
             sendNotFound(clientSocket);
         }
 
