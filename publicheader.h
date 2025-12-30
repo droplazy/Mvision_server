@@ -193,4 +193,27 @@ struct SQL_User {
     QString phone_number;
     QString email;
 };
+
+// 指令历史记录结构体
+struct SQL_CommandHistory {
+    QString commandId;          // 指令ID（主键）
+    QString status;             // 状态（如：pending, executing, completed, failed）
+    QString action;             // 动作
+    QString sub_action;         // 子动作
+    QString start_time;         // 开始时间
+    QString end_time;           // 结束时间
+    QString remark;             // 备注
+    QString Completeness;       // 完成度（如：0%, 50%, 100%）
+    QString completed_url;      // 完成后的URL或资源路径
+
+    // 构造函数
+    SQL_CommandHistory() {}
+
+    SQL_CommandHistory(const QString& id, const QString& stat, const QString& act,
+                       const QString& subAct, const QString& start, const QString& end,
+                       const QString& rem, const QString& comp, const QString& url)
+        : commandId(id), status(stat), action(act), sub_action(subAct),
+        start_time(start), end_time(end), remark(rem),
+        Completeness(comp), completed_url(url) {}
+};
 #endif // PUBLICHEADER_H

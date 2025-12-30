@@ -39,12 +39,33 @@ public:
     bool updateProcessSteps(const Machine_Process_Total &process);
     bool insertProcessSteps(const Machine_Process_Total &process);
     QList<Machine_Process_Total> getAllProcessSteps();
+
+    // 指令历史记录操作
+    bool insertCommandHistory(const SQL_CommandHistory &command);
+    bool updateCommandHistory(const SQL_CommandHistory &command);
+    bool deleteCommandHistory(const QString &commandId);
+    bool deleteCommandHistoryByStatus(const QString &status);
+    bool deleteCommandHistoryByTimeRange(const QString &startTime, const QString &endTime);
+    QList<SQL_CommandHistory> getAllCommands();
+    QList<SQL_CommandHistory> getCommandsByStatus(const QString &status);
+    QList<SQL_CommandHistory> getCommandsByAction(const QString &action);
+    QList<SQL_CommandHistory> getCommandsByTimeRange(const QString &startTime, const QString &endTime);
+    SQL_CommandHistory getCommandById(const QString &commandId);
+
+    int getCommandCountByStatus(const QString &status);
+    QList<QString> getDistinctActions();
+
+    // 批量操作
+    bool batchInsertCommands(const QList<SQL_CommandHistory> &commands);
+    bool batchUpdateCommands(const QList<SQL_CommandHistory> &commands);
+        SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query);
 private:
     QSqlDatabase db;
 
     bool createTable1();
     bool createTable2();
     bool createTable3();
+    bool createTable4();
 };
 
 #endif // DATABASEMANAGER_H

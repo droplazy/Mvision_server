@@ -79,6 +79,7 @@ private:
     void createUploadDirectoryIfNeeded();
     QString getHeaderValue(QTcpSocket *clientSocket, const QString &headerName);
     void handlePostWarningIgnore(QTcpSocket *clientSocket, const QByteArray &body);
+    void handleGetCommandList(QTcpSocket *clientSocket, const QUrlQuery &query);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

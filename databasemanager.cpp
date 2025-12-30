@@ -33,7 +33,7 @@ bool DatabaseManager::createDatabase(const QString &dbName)
 
 bool DatabaseManager::createTables()
 {
-    return createTable1() && createTable2() && createTable3();
+    return createTable1() && createTable2() && createTable3()&& createTable4();
 }
 
 bool DatabaseManager::createTable1()
@@ -499,8 +499,369 @@ QList<Machine_Process_Total> DatabaseManager::getAllProcessSteps()
 
     return processes;
 }
+bool DatabaseManager::createTable4()
+{
+    QSqlQuery query;
+
+    // 1. 先创建表
+    QString createTableQuery = R"(
+        CREATE TABLE IF NOT EXISTS CommandHistory (
+            command_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            action TEXT,
+            sub_action TEXT,
+            start_time TEXT,
+            end_time TEXT,
+            remark TEXT,
+            completeness TEXT,
+            completed_url TEXT,
+            created_at TEXT DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    )";
+
+    if (!query.exec(createTableQuery)) {
+        qDebug() << "Error creating table CommandHistory: " << query.lastError().text();
+        return false;
+    }
+    qDebug() << "Table CommandHistory created successfully.";
+
+    // 2. 创建索引（分开执行）
+    QStringList indexQueries = {
+        "CREATE INDEX IF NOT EXISTS idx_command_status ON CommandHistory(status)",
+        "CREATE INDEX IF NOT EXISTS idx_command_action ON CommandHistory(action)",
+        "CREATE INDEX IF NOT EXISTS idx_command_time ON CommandHistory(start_time)"
+    };
+
+    for (const QString &indexQuery : indexQueries) {
+        if (!query.exec(indexQuery)) {
+            qDebug() << "Error creating index: " << query.lastError().text();
+            // 注意：索引创建失败不应该阻止表创建成功
+        }
+    }
+
+    return true;
+}
+bool DatabaseManager::insertCommandHistory(const SQL_CommandHistory &command)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO CommandHistory
+        (command_id, status, action, sub_action, start_time, end_time,
+         remark, completeness, completed_url)
+        VALUES (:command_id, :status, :action, :sub_action, :start_time,
+                :end_time, :remark, :completeness, :completed_url)
+    )");
+
+    query.bindValue(":command_id", command.commandId);
+    query.bindValue(":status", command.status);
+    query.bindValue(":action", command.action);
+    query.bindValue(":sub_action", command.sub_action);
+    query.bindValue(":start_time", command.start_time);
+    query.bindValue(":end_time", command.end_time);
+    query.bindValue(":remark", command.remark);
+    query.bindValue(":completeness", command.Completeness);  // 注意：小写c
+    query.bindValue(":completed_url", command.completed_url);
+
+    if (!query.exec()) {
+        qDebug() << "Error inserting command history: " << query.lastError().text();
+        qDebug() << "Last query:" << query.lastQuery();
+        qDebug() << "Bound values:" << query.boundValues();
+        return false;
+    }
+
+    qDebug() << "Command history inserted successfully. ID:" << command.commandId;
+    return true;
+}
+bool DatabaseManager::updateCommandHistory(const SQL_CommandHistory &command)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE CommandHistory
+        SET status = :status,
+            action = :action,
+            sub_action = :sub_action,
+            start_time = :start_time,
+            end_time = :end_time,
+            remark = :remark,
+            completeness = :completeness,
+            completed_url = :completed_url,
+            updated_at = datetime('now', 'localtime')
+        WHERE command_id = :command_id
+    )");
+
+    query.bindValue(":command_id", command.commandId);
+    query.bindValue(":status", command.status);
+    query.bindValue(":action", command.action);
+    query.bindValue(":sub_action", command.sub_action);
+    query.bindValue(":start_time", command.start_time);
+    query.bindValue(":end_time", command.end_time);
+    query.bindValue(":remark", command.remark);
+    query.bindValue(":completeness", command.Completeness);
+    query.bindValue(":completed_url", command.completed_url);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating command history: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No command found with ID:" << command.commandId;
+        return false;
+    }
+
+    qDebug() << "Command history updated successfully. ID:" << command.commandId;
+    return true;
+}
+bool DatabaseManager::deleteCommandHistory(const QString &commandId)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM CommandHistory WHERE command_id = :command_id");
+    query.bindValue(":command_id", commandId);
+
+    if (!query.exec()) {
+        qDebug() << "Error deleting command history: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Command history deleted successfully. ID:" << commandId;
+    return true;
+}
+
+bool DatabaseManager::deleteCommandHistoryByStatus(const QString &status)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM CommandHistory WHERE status = :status");
+    query.bindValue(":status", status);
+
+    if (!query.exec()) {
+        qDebug() << "Error deleting command history by status: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Deleted command history with status:" << status
+             << ", count:" << query.numRowsAffected();
+    return true;
+}
+
+bool DatabaseManager::deleteCommandHistoryByTimeRange(const QString &startTime, const QString &endTime)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        DELETE FROM CommandHistory
+        WHERE start_time >= :start_time AND start_time <= :end_time
+    )");
+    query.bindValue(":start_time", startTime);
+    query.bindValue(":end_time", endTime);
+
+    if (!query.exec()) {
+        qDebug() << "Error deleting command history by time range: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Deleted command history between" << startTime << "and" << endTime
+             << ", count:" << query.numRowsAffected();
+    return true;
+}
+// 获取所有指令
+QList<SQL_CommandHistory> DatabaseManager::getAllCommands()
+{
+    QList<SQL_CommandHistory> commands;
+    QSqlQuery query("SELECT * FROM CommandHistory ORDER BY start_time DESC");
+
+    while (query.next()) {
+        SQL_CommandHistory command = extractCommandFromQuery(query);
+        commands.append(command);
+    }
+
+    qDebug() << "Retrieved" << commands.size() << "command records";
+    return commands;
+}
+
+// 根据ID获取指令
+SQL_CommandHistory DatabaseManager::getCommandById(const QString &commandId)
+{
+    SQL_CommandHistory command;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM CommandHistory WHERE command_id = :command_id");
+    query.bindValue(":command_id", commandId);
+
+    if (query.exec() && query.next()) {
+        command = extractCommandFromQuery(query);
+    } else {
+        qDebug() << "Error fetching command by ID:" << commandId
+                 << "Error:" << query.lastError().text();
+    }
+
+    return command;
+}
+
+// 根据状态获取指令
+QList<SQL_CommandHistory> DatabaseManager::getCommandsByStatus(const QString &status)
+{
+    QList<SQL_CommandHistory> commands;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM CommandHistory WHERE status = :status ORDER BY start_time DESC");
+    query.bindValue(":status", status);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_CommandHistory command = extractCommandFromQuery(query);
+            commands.append(command);
+        }
+    } else {
+        qDebug() << "Error fetching commands by status:" << query.lastError().text();
+    }
+
+    return commands;
+}
+
+// 根据动作获取指令
+QList<SQL_CommandHistory> DatabaseManager::getCommandsByAction(const QString &action)
+{
+    QList<SQL_CommandHistory> commands;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM CommandHistory WHERE action = :action ORDER BY start_time DESC");
+    query.bindValue(":action", action);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_CommandHistory command = extractCommandFromQuery(query);
+            commands.append(command);
+        }
+    } else {
+        qDebug() << "Error fetching commands by action:" << query.lastError().text();
+    }
+
+    return commands;
+}
+
+// 根据时间范围获取指令
+QList<SQL_CommandHistory> DatabaseManager::getCommandsByTimeRange(const QString &startTime, const QString &endTime)
+{
+    QList<SQL_CommandHistory> commands;
+    QSqlQuery query;
+    query.prepare(R"(
+        SELECT * FROM CommandHistory
+        WHERE start_time >= :start_time AND start_time <= :end_time
+        ORDER BY start_time DESC
+    )");
+    query.bindValue(":start_time", startTime);
+    query.bindValue(":end_time", endTime);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_CommandHistory command = extractCommandFromQuery(query);
+            commands.append(command);
+        }
+    } else {
+        qDebug() << "Error fetching commands by time range:" << query.lastError().text();
+    }
+
+    return commands;
+}
+// 从查询结果中提取指令数据（辅助函数）
+SQL_CommandHistory DatabaseManager::extractCommandFromQuery(const QSqlQuery &query)
+{
+    SQL_CommandHistory command;
+    command.commandId = query.value("command_id").toString();
+    command.status = query.value("status").toString();
+    command.action = query.value("action").toString();
+    command.sub_action = query.value("sub_action").toString();
+    command.start_time = query.value("start_time").toString();
+    command.end_time = query.value("end_time").toString();
+    command.remark = query.value("remark").toString();
+    command.Completeness = query.value("completeness").toString();
+    command.completed_url = query.value("completed_url").toString();
+    return command;
+}
+
+// 统计不同状态的指令数量
+int DatabaseManager::getCommandCountByStatus(const QString &status)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM CommandHistory WHERE status = :status");
+    query.bindValue(":status", status);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
+}
+
+// 获取所有不同的动作类型
+QList<QString> DatabaseManager::getDistinctActions()
+{
+    QList<QString> actions;
+    QSqlQuery query("SELECT DISTINCT action FROM CommandHistory WHERE action IS NOT NULL");
+
+    while (query.next()) {
+        QString action = query.value(0).toString();
+        if (!action.isEmpty()) {
+            actions.append(action);
+        }
+    }
+
+    return actions;
+}
+// 批量插入指令
+bool DatabaseManager::batchInsertCommands(const QList<SQL_CommandHistory> &commands)
+{
+    if (commands.isEmpty()) {
+        return true;
+    }
+
+    db.transaction();  // 开始事务
+
+    for (const SQL_CommandHistory &command : commands) {
+        if (!insertCommandHistory(command)) {
+            db.rollback();  // 回滚事务
+            return false;
+        }
+    }
+
+    db.commit();  // 提交事务
+    qDebug() << "Batch inserted" << commands.size() << "commands successfully";
+    return true;
+}
+
+// 批量更新指令
+bool DatabaseManager::batchUpdateCommands(const QList<SQL_CommandHistory> &commands)
+{
+    if (commands.isEmpty()) {
+        return true;
+    }
+
+    db.transaction();  // 开始事务
+
+    for (const SQL_CommandHistory &command : commands) {
+        if (!updateCommandHistory(command)) {
+            db.rollback();  // 回滚事务
+            return false;
+        }
+    }
+
+    db.commit();  // 提交事务
+    qDebug() << "Batch updated" << commands.size() << "commands successfully";
+    return true;
+}
 
 #if 0
+static SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query)
+{
+    SQL_CommandHistory command;
+    command.commandId = query.value("command_id").toString();
+    command.status = query.value("status").toString();
+    command.action = query.value("action").toString();
+    command.sub_action = query.value("sub_action").toString();
+    command.start_time = query.value("start_time").toString();
+    command.end_time = query.value("end_time").toString();
+    command.remark = query.value("remark").toString();
+    command.Completeness = query.value("completeness").toString();
+    command.completed_url = query.value("completed_url").toString();
+    return command;
+}
 // 创建 User 结构体实例
 User newUser = { "john_doe", "password123", "1234567890", "john@example.com" };
 

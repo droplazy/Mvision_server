@@ -126,8 +126,20 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     data["remark"] = remark;
 
     newJson["data"] = data;
-
-    QByteArray message = QJsonDocument(newJson).toJson();
+/**********************************指令数据库操作*/
+ //插入新指令
+SQL_CommandHistory cmd1;
+cmd1.commandId = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz");
+cmd1.status = "todo";
+cmd1.action = action;
+cmd1.sub_action = sub_action;
+cmd1.start_time =start_time;
+cmd1.end_time =  end_time;
+cmd1.remark = remark;
+cmd1.Completeness = "0%";
+cmd1.completed_url = "";
+dbManager->insertCommandHistory(cmd1);
+QByteArray message = QJsonDocument(newJson).toJson();
 
     // 发布消息，主题是 /device/serial_number，序列号逐个变化
     for (const QJsonValue &serialNumber : std::as_const(serial_numbers)) {

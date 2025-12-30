@@ -415,7 +415,9 @@ void HttpServer::onReadyRead() {
                 handleGetProcess(clientSocket, query);
             } else if (path == "/download") {
                 handleGetDownload(clientSocket, query);
-            } else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
+            } else if (path == "/command/history") {
+                handleGetCommandList(clientSocket, query);
+            }else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
                        || path.contains(".js") || path.contains(".png") || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
                        || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")) {
@@ -913,6 +915,106 @@ void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &quer
     }
     // QByteArray jsonData = doc.toJson(QJsonDocument::Indented);
     // qDebug() << jsonData;
+    sendResponse(clientSocket, jsonData);
+}
+void HttpServer::handleGetCommandList(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    // 1. 从数据库获取指令列表
+    QList<SQL_CommandHistory> commands;
+
+    // 检查是否有分页参数
+    int limit = 1000; // 默认最大1000条
+    int offset = 0;
+
+    QString limitStr = query.queryItemValue("limit");
+    QString offsetStr = query.queryItemValue("offset");
+
+    if (!limitStr.isEmpty()) {
+        bool ok;
+        int requestedLimit = limitStr.toInt(&ok);
+        if (ok && requestedLimit > 0 && requestedLimit <= 1000) {
+            limit = requestedLimit;
+        } else if (requestedLimit > 1000) {
+            limit = 1000; // 强制限制最大1000条
+        }
+    }
+
+    if (!offsetStr.isEmpty()) {
+        bool ok;
+        offset = offsetStr.toInt(&ok);
+        if (!ok || offset < 0) {
+            offset = 0;
+        }
+    }
+
+    // 检查是否有过滤参数
+    QString statusFilter = query.queryItemValue("status");
+    QString actionFilter = query.queryItemValue("action");
+
+    // 2. 获取数据（这里需要实现数据库查询逻辑）
+    // 根据过滤条件获取数据
+    if (!statusFilter.isEmpty()) {
+        commands = dbManager->getCommandsByStatus(statusFilter);
+    } else if (!actionFilter.isEmpty()) {
+        commands = dbManager->getCommandsByAction(actionFilter);
+    } else {
+        // 获取所有指令，然后进行分页
+        QList<SQL_CommandHistory> allCommands = dbManager->getAllCommands();
+
+        // 实现分页
+        int start = qMin(offset, allCommands.size());
+        int end = qMin(offset + limit, allCommands.size());
+
+        for (int i = start; i < end; i++) {
+            commands.append(allCommands[i]);
+        }
+    }
+
+    // 如果命令太多，限制为limit
+    if (commands.size() > limit) {
+        commands = commands.mid(0, limit);
+    }
+
+    // 3. 构建JSON响应
+    QJsonObject jsonResponse;
+
+    // 添加时间戳（ISO 8601格式，UTC）
+    QString timestamp = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+    jsonResponse["timestamp"] = timestamp;
+
+    // 构建data数组
+    QJsonArray dataArray;
+
+    for (const SQL_CommandHistory &cmd : commands) {
+        QJsonObject cmdObj;
+        cmdObj["commandId"] = cmd.commandId;
+        cmdObj["status"] = cmd.status;
+        cmdObj["action"] = cmd.action;
+        cmdObj["sub_action"] = cmd.sub_action;
+        cmdObj["start_time"] = cmd.start_time;
+        cmdObj["end_time"] = cmd.end_time;
+        cmdObj["remark"] = cmd.remark;
+        cmdObj["Completeness"] = cmd.Completeness;
+        cmdObj["completed-url"] = cmd.completed_url;
+
+        dataArray.append(cmdObj);
+    }
+
+    jsonResponse["data"] = dataArray;
+
+    // 添加分页信息
+    QJsonObject pagination;
+    pagination["total"] = dbManager->getAllCommands().size(); // 总记录数
+    pagination["limit"] = limit;
+    pagination["offset"] = offset;
+    pagination["returned"] = commands.size();
+    jsonResponse["pagination"] = pagination;
+
+    // 4. 将JSON转换为字节数组
+    QJsonDocument jsonDoc(jsonResponse);
+    QByteArray jsonData = jsonDoc.toJson(QJsonDocument::Indented);
+
+    // 5. 发送响应
     sendResponse(clientSocket, jsonData);
 }
 
