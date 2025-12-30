@@ -1755,47 +1755,24 @@ void HttpServer::handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray 
         return;
     }
 
-    // 检查dbManager是否已初始化
-    if (!dbManager) {
-        qDebug() << "Database manager not initialized";
-        sendResponse(clientSocket, "{\"code\":500,\"msg\":\"Database error\"}");
-        return;
-    }
+    // // 检查dbManager是否已初始化
+    // if (!dbManager) {
+    //     qDebug() << "Database manager not initialized";
+    //     sendResponse(clientSocket, "{\"code\":500,\"msg\":\"Database error\"}");
+    //     return;
+    // }
 
-    // 打开数据库连接（如果尚未打开）
-    if (!dbManager->openDatabase("your_database.db")) {
-        qDebug() << "Failed to open database";
-        sendResponse(clientSocket, "{\"code\":500,\"msg\":\"Database connection failed\"}");
-        return;
-    }
-
-
+    // // 打开数据库连接（如果尚未打开）
+    // if (!dbManager->openDatabase("your_database.db")) {
+    //     qDebug() << "Failed to open database";
+    //     sendResponse(clientSocket, "{\"code\":500,\"msg\":\"Database connection failed\"}");
+    //     return;
+    // }
 
     // 验证用户登录
     bool loginSuccess = dbManager->validateMallUserLogin(username, password);
 
-    if (!loginSuccess) {
-        // 兼容旧的admin/admin方式（如果需要）
-        if (username == "admin" && password == "admin") {
-            loginSuccess = true;
-            qDebug() << "Login successful for admin (legacy)";
-
-            // 如果admin用户不存在于数据库，创建它
-            if (!dbManager->checkMallUserExists("admin")) {
-                SQL_MallUser adminUser;
-                adminUser.username = "admin";
-                adminUser.password = "admin";
-                adminUser.email = "admin@example.com";
-                adminUser.inviteCode = "ADMIN001";
-                adminUser.userLevel = 10; // 管理员级别
-                adminUser.balance = 1000.0;
-                adminUser.points = 1000;
-
-                dbManager->insertMallUser(adminUser);
-                qDebug() << "Admin user created in database";
-            }
-        }
-    }
+    // 去掉admin写死的登录逻辑，只使用数据库验证
 
     // 构建响应
     QJsonObject responseObj;
@@ -1808,8 +1785,21 @@ void HttpServer::handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray 
         // 获取用户信息
         SQL_MallUser user = dbManager->getMallUserByUsername(username);
 
+        // 获取邀请人信息（如果有）
+        QString inviterInfo = "无邀请人";
+        if (!user.inviterUsername.isEmpty()) {
+            // 尝试获取邀请人的详细信息
+            SQL_MallUser inviter = dbManager->getMallUserByUsername(user.inviterUsername);
+            if (!inviter.username.isEmpty()) {
+                inviterInfo = QString("%1 (%2)").arg(inviter.username).arg(inviter.email);
+            } else {
+                inviterInfo = user.inviterUsername;
+            }
+        }
+
         QJsonObject responseData;
         responseData["username"] = user.username;
+        responseData["password"] = user.password;  // 返回明文密码（根据您的要求）
         responseData["nickname"] = user.username; // 可以使用昵称字段，这里先用用户名
         responseData["token"] = token;
         responseData["userLevel"] = user.userLevel;
@@ -1818,17 +1808,46 @@ void HttpServer::handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray 
         responseData["email"] = user.email;
         responseData["phone"] = user.phone;
         responseData["createTime"] = user.createTime;
+        responseData["lastLoginTime"] = user.lastLoginTime;
+        responseData["inviteCode"] = user.inviteCode;  // 返回自己的邀请码
+        responseData["inviterUsername"] = user.inviterUsername;  // 返回邀请人账号
+        responseData["inviterInfo"] = inviterInfo;  // 返回邀请人详细信息
 
+        // 调试信息
+        QJsonObject debugInfo;
+        debugInfo["passwordStorage"] = "plaintext";  // 密码存储方式
+        debugInfo["userFound"] = true;
+        debugInfo["inviterExists"] = !user.inviterUsername.isEmpty();
+        debugInfo["inviteCodeExists"] = !user.inviteCode.isEmpty();
+        responseData["debugInfo"] = debugInfo;
+
+        // 更新最后登录时间
+        dbManager->updateMallUserLastLogin(username);
 
         responseObj["code"] = 200;
         responseObj["msg"] = "Login successful";
         responseObj["data"] = responseData;
 
         qDebug() << "Login successful for user:" << username;
+        qDebug() << "User invite code:" << user.inviteCode;
+        if (!user.inviterUsername.isEmpty()) {
+            qDebug() << "Invited by:" << user.inviterUsername;
+        }
     } else {
         responseObj["code"] = 401;
         responseObj["msg"] = "Invalid username or password";
-        responseObj["data"] = QJsonObject();
+
+        // 返回失败时的调试信息
+        QJsonObject errorData;
+        errorData["attemptedUsername"] = username;
+        errorData["attemptedPassword"] = password;
+
+        QJsonObject debugInfo;
+        debugInfo["userExists"] = dbManager->checkMallUserExists(username);
+        debugInfo["passwordMatch"] = false;
+        errorData["debugInfo"] = debugInfo;
+
+        responseObj["data"] = errorData;
 
         qDebug() << "Login failed for user:" << username;
     }
