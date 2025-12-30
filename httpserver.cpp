@@ -14,7 +14,7 @@
 #define MANAGER_USERNAME "123"
 #define MANAGER_PASSWD   "123"
 #include <QRandomGenerator>
-
+#include <QCryptographicHash>
 
 HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
@@ -497,7 +497,11 @@ void HttpServer::onReadyRead() {
                     handlePostAuthLogin(clientSocket, body);
                 }else if (path == "/process/todev") {
                     handlePostDeviceProcess(clientSocket, body);
-                } else {
+                }else if (path == "/mall/login/info") {
+                    handlePostMallLogin(clientSocket, body);
+                }else if (path == "/mall/auth/register") {
+                    handlePostMallRegist(clientSocket, body);
+                }else {
                     qDebug() << path << "[POST /process/create] body =" << body;
                     sendNotFound(clientSocket);
                 }
@@ -1346,7 +1350,349 @@ void HttpServer::handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &que
     // qDebug() << jsonData;
     sendResponse(clientSocket, jsonData);
 }
+void HttpServer::handlePostMallRegist(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    // 解析JSON请求体
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(body);
+    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+        // 返回错误响应 - JSON格式错误
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
 
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Invalid JSON format";
+        errorResp["data"] = dataObj;
+
+        sendHttpResponse(clientSocket, 400, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject jsonObj = jsonDoc.object();
+
+    // 检查是否有data字段
+    if (!jsonObj.contains("data") || !jsonObj["data"].isObject()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing 'data' field in request";
+        errorResp["data"] = dataObj;
+
+        sendHttpResponse(clientSocket, 400, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject dataObj = jsonObj["data"].toObject();
+
+    // 提取必填字段
+    QString username = dataObj.value("username").toString();
+    QString password = dataObj.value("password").toString();
+    QString email = dataObj.value("email").toString();
+    QString inviteCode = dataObj.value("inviteCode").toString();
+
+    // 提取可选字段
+    QString phone = dataObj.contains("phone") ? dataObj.value("phone").toString() : "";
+    QString realName = dataObj.contains("realName") ? dataObj.value("realName").toString() : "";
+    QString address = dataObj.contains("address") ? dataObj.value("address").toString() : "";
+
+    // 验证必填字段
+    if (username.isEmpty() || password.isEmpty() || email.isEmpty()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject respData;
+        respData["success"] = false;
+        respData["message"] = "Missing required fields (username, password, email)";
+        errorResp["data"] = respData;
+
+        sendHttpResponse(clientSocket, 400, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 用户名验证：3-20位，只允许字母、数字、下划线
+    QRegularExpression usernameRegex("^[a-zA-Z0-9_]{3,20}$");
+    if (!usernameRegex.match(username).hasMatch()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject respData;
+        respData["success"] = false;
+        respData["message"] = "Username must be 3-20 characters and contain only letters, numbers, and underscores";
+        errorResp["data"] = respData;
+
+        sendHttpResponse(clientSocket, 400, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 密码强度验证：至少6位，包含字母和数字
+    if (password.length() < 6) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject respData;
+        respData["success"] = false;
+        respData["message"] = "Password must be at least 6 characters";
+        errorResp["data"] = respData;
+
+        sendHttpResponse(clientSocket, 400, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 邮箱格式验证
+    QRegularExpression emailRegex(R"(^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$)");
+    if (!emailRegex.match(email).hasMatch()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject respData;
+        respData["success"] = false;
+        respData["message"] = "Invalid email format";
+        errorResp["data"] = respData;
+
+        sendHttpResponse(clientSocket, 400, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 如果提供了手机号，验证格式
+    if (!phone.isEmpty()) {
+        QRegularExpression phoneRegex(R"(^1[3-9]\d{9}$)");
+        if (!phoneRegex.match(phone).hasMatch()) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject respData;
+            respData["success"] = false;
+            respData["message"] = "Invalid phone number format (must be 11 digits starting with 1)";
+            errorResp["data"] = respData;
+
+            sendHttpResponse(clientSocket, 400, "application/json",
+                             QJsonDocument(errorResp).toJson());
+            return;
+        }
+    }
+
+    // 检查用户名是否已存在
+    if (dbManager->checkMallUserExists(username)) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 409;
+
+        QJsonObject respData;
+        respData["success"] = false;
+        respData["message"] = "Username already exists";
+        errorResp["data"] = respData;
+
+        sendHttpResponse(clientSocket, 409, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 检查邮箱是否已存在
+    if (dbManager->checkEmailExists(email)) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 409;
+
+        QJsonObject respData;
+        respData["success"] = false;
+        respData["message"] = "Email already registered";
+        errorResp["data"] = respData;
+
+        sendHttpResponse(clientSocket, 409, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 如果提供了手机号，检查手机号是否已存在
+    if (!phone.isEmpty() && dbManager->checkPhoneExists(phone)) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 409;
+
+        QJsonObject respData;
+        respData["success"] = false;
+        respData["message"] = "Phone number already registered";
+        errorResp["data"] = respData;
+
+        sendHttpResponse(clientSocket, 409, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 邀请码相关逻辑
+    QString inviterUsername = "";
+
+    // 如果提供了邀请码，验证邀请码是否存在并找到邀请人
+    if (!inviteCode.isEmpty()) {
+        if (!dbManager->checkInviteCodeExists(inviteCode)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject respData;
+            respData["success"] = false;
+            respData["message"] = "Invalid invite code";
+            errorResp["data"] = respData;
+
+            sendHttpResponse(clientSocket, 400, "application/json",
+                             QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 查找拥有该邀请码的用户
+        SQL_MallUser inviterUser = dbManager->getMallUserByInviteCode(inviteCode);
+        if (inviterUser.username.isEmpty()) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject respData;
+            respData["success"] = false;
+            respData["message"] = "Could not find user with the provided invite code";
+            errorResp["data"] = respData;
+
+            sendHttpResponse(clientSocket, 400, "application/json",
+                             QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        inviterUsername = inviterUser.username;
+        qDebug() << "Found inviter user:" << inviterUsername << "for invite code:" << inviteCode;
+    }
+
+    // 为新用户生成邀请码
+    QString userInviteCode = generateInviteCode();
+
+    // 确保邀请码唯一
+    int retryCount = 0;
+    while (dbManager->checkInviteCodeExists(userInviteCode) && retryCount < 10) {
+        userInviteCode = generateInviteCode();
+        retryCount++;
+        qDebug() << "Invite code collision, generating new one:" << userInviteCode;
+    }
+
+    if (retryCount >= 10) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject respData;
+        respData["success"] = false;
+        respData["message"] = "Failed to generate unique invite code after multiple attempts";
+        errorResp["data"] = respData;
+
+        sendHttpResponse(clientSocket, 500, "application/json",
+                         QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    try {
+        // 创建商城用户对象
+        SQL_MallUser newUser;
+        newUser.username = username;
+        newUser.password = password;  // 明文保存（已按您的要求）
+        newUser.email = email;
+        newUser.phone = phone;
+        newUser.inviteCode = userInviteCode;  // 使用生成的邀请码
+        newUser.inviterUsername = inviterUsername;  // 设置邀请人账号（如果有）
+        newUser.userLevel = 1;  // 默认用户等级
+        newUser.balance = 0.0;  // 初始余额为0
+        newUser.points = 0;     // 初始积分为0
+
+        // 设置创建时间
+        newUser.createTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+
+        qDebug() << "Registering user with details:";
+        qDebug() << "  Username:" << username;
+        qDebug() << "  Email:" << email;
+        qDebug() << "  Generated invite code:" << userInviteCode;
+        qDebug() << "  Received invite code:" << inviteCode;
+        qDebug() << "  Inviter username:" << inviterUsername;
+
+        // 插入用户到数据库
+        if (!dbManager->insertMallUser(newUser)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 500;
+
+            QJsonObject respData;
+            respData["success"] = false;
+            respData["message"] = "Failed to create user account";
+            errorResp["data"] = respData;
+
+            sendHttpResponse(clientSocket, 500, "application/json",
+                             QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 注册成功，返回成功响应（包含详细调试信息）
+        QJsonObject successResp;
+        successResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        successResp["code"] = 200;
+
+        QJsonObject successData;
+        successData["success"] = true;
+        successData["message"] = "User registered successfully";
+        successData["username"] = username;
+        successData["userLevel"] = newUser.userLevel;
+        successData["balance"] = newUser.balance;
+        successData["points"] = newUser.points;
+        successData["inviteCode"] = userInviteCode;  // 返回生成的邀请码
+        successData["receivedInviteCode"] = inviteCode;  // 返回接收到的邀请码
+        successData["inviterUsername"] = inviterUsername;  // 返回邀请人账号
+        successData["registerTime"] = newUser.createTime;  // 返回注册时间
+
+        // 调试信息
+        QJsonObject debugInfo;
+        debugInfo["passwordSavedAs"] = "plaintext";  // 显示密码保存方式
+        debugInfo["inviteCodeGenerated"] = userInviteCode;
+        debugInfo["inviteCodeReceived"] = inviteCode.isEmpty() ? "none" : inviteCode;
+        debugInfo["inviterFound"] = !inviterUsername.isEmpty();
+        debugInfo["inviterUsername"] = inviterUsername.isEmpty() ? "none" : inviterUsername;
+        successData["debugInfo"] = debugInfo;
+
+        successResp["data"] = successData;
+
+        qDebug() << "User registered successfully:" << username;
+        qDebug() << "Generated invite code:" << userInviteCode;
+        if (!inviterUsername.isEmpty()) {
+            qDebug() << "Invited by:" << inviterUsername;
+        }
+
+        sendHttpResponse(clientSocket, 200, "application/json",
+                         QJsonDocument(successResp).toJson());
+
+    } catch (const std::exception &e) {
+        // 捕获并处理任何异常
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject respData;
+        respData["success"] = false;
+        respData["message"] = QString("Registration failed: %1").arg(e.what());
+        errorResp["data"] = respData;
+
+        qDebug() << "Registration exception:" << e.what();
+        sendHttpResponse(clientSocket, 500, "application/json",
+                         QJsonDocument(errorResp).toJson());
+    }
+}
 void HttpServer::handlePostDeviceCommand(QTcpSocket *clientSocket, const QByteArray &body) {
     qDebug() << "[POST /device/command] body =" << body;
     QJsonDocument doc = QJsonDocument::fromJson(body);
@@ -1356,6 +1702,160 @@ void HttpServer::handlePostDeviceCommand(QTcpSocket *clientSocket, const QByteAr
         emit  devCommadSend(jsonObj);
     }
     sendResponse(clientSocket, "{\"code\":200,\"msg\":\"POST /process/command success\"}");
+}
+// 添加生成邀请码的辅助函数（需要在头文件中声明）
+QString HttpServer::generateInviteCode()
+{
+    const QString chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    QString inviteCode;
+    QRandomGenerator *generator = QRandomGenerator::global();
+
+    // 生成8位邀请码
+    for (int i = 0; i < 6; i++) {
+        int index = generator->bounded(chars.length());
+        inviteCode.append(chars.at(index));
+    }
+
+    // 添加前缀，格式如：INV-XXXXXX
+    return inviteCode;
+}
+void HttpServer::handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray &body) {
+    qDebug() << "[POST /mall/login] body =" << QString::fromUtf8(body);
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
+
+    if (doc.isNull() || !doc.isObject()) {
+        qDebug() << "JSON parse error:" << parseError.errorString();
+        sendResponse(clientSocket, "{\"code\":400,\"msg\":\"Invalid JSON format\"}");
+        return;
+    }
+
+    QJsonObject jsonObj = doc.object();
+
+    // 检查是否有data字段
+    if (!jsonObj.contains("data") || !jsonObj["data"].isObject()) {
+        qDebug() << "Missing data field";
+        sendResponse(clientSocket, "{\"code\":400,\"msg\":\"Missing data field\"}");
+        return;
+    }
+
+    QJsonObject dataObj = jsonObj["data"].toObject();
+
+    // 获取用户名和密码
+    QString username = dataObj["username"].toString();
+    QString password = dataObj["password"].toString();
+
+    qDebug() << "Login attempt - Username:" << username << "Password:" << password;
+
+    // 检查是否为空
+    if (username.isEmpty() || password.isEmpty()) {
+        qDebug() << "Username or password is empty";
+        sendResponse(clientSocket, "{\"code\":400,\"msg\":\"Username and password cannot be empty\"}");
+        return;
+    }
+
+    // 检查dbManager是否已初始化
+    if (!dbManager) {
+        qDebug() << "Database manager not initialized";
+        sendResponse(clientSocket, "{\"code\":500,\"msg\":\"Database error\"}");
+        return;
+    }
+
+    // 打开数据库连接（如果尚未打开）
+    if (!dbManager->openDatabase("your_database.db")) {
+        qDebug() << "Failed to open database";
+        sendResponse(clientSocket, "{\"code\":500,\"msg\":\"Database connection failed\"}");
+        return;
+    }
+
+
+
+    // 验证用户登录
+    bool loginSuccess = dbManager->validateMallUserLogin(username, password);
+
+    if (!loginSuccess) {
+        // 兼容旧的admin/admin方式（如果需要）
+        if (username == "admin" && password == "admin") {
+            loginSuccess = true;
+            qDebug() << "Login successful for admin (legacy)";
+
+            // 如果admin用户不存在于数据库，创建它
+            if (!dbManager->checkMallUserExists("admin")) {
+                SQL_MallUser adminUser;
+                adminUser.username = "admin";
+                adminUser.password = "admin";
+                adminUser.email = "admin@example.com";
+                adminUser.inviteCode = "ADMIN001";
+                adminUser.userLevel = 10; // 管理员级别
+                adminUser.balance = 1000.0;
+                adminUser.points = 1000;
+
+                dbManager->insertMallUser(adminUser);
+                qDebug() << "Admin user created in database";
+            }
+        }
+    }
+
+    // 构建响应
+    QJsonObject responseObj;
+    responseObj["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    if (loginSuccess) {
+        // 生成token
+        QString token = generateToken(username);
+
+        // 获取用户信息
+        SQL_MallUser user = dbManager->getMallUserByUsername(username);
+
+        QJsonObject responseData;
+        responseData["username"] = user.username;
+        responseData["nickname"] = user.username; // 可以使用昵称字段，这里先用用户名
+        responseData["token"] = token;
+        responseData["userLevel"] = user.userLevel;
+        responseData["balance"] = user.balance;
+        responseData["points"] = user.points;
+        responseData["email"] = user.email;
+        responseData["phone"] = user.phone;
+        responseData["createTime"] = user.createTime;
+
+
+        responseObj["code"] = 200;
+        responseObj["msg"] = "Login successful";
+        responseObj["data"] = responseData;
+
+        qDebug() << "Login successful for user:" << username;
+    } else {
+        responseObj["code"] = 401;
+        responseObj["msg"] = "Invalid username or password";
+        responseObj["data"] = QJsonObject();
+
+        qDebug() << "Login failed for user:" << username;
+    }
+
+    // 转换为JSON并发送
+    QJsonDocument responseDoc(responseObj);
+    sendResponse(clientSocket, responseDoc.toJson());
+}
+// 生成token的辅助函数
+QString HttpServer::generateToken(const QString &username)
+{
+    // 简单的方法：用户名 + 时间戳 + 随机数
+    QString timestamp = QString::number(QDateTime::currentMSecsSinceEpoch());
+    QString random = QString::number(QRandomGenerator::global()->bounded(1000, 9999));
+
+    // 创建一个简单的token
+    QString token = QString("%1_%2_%3")
+                        .arg(username)
+                        .arg(timestamp)
+                        .arg(random);
+
+    // 计算MD5哈希（可选，增加安全性）
+    QByteArray hash = QCryptographicHash::hash(token.toUtf8(), QCryptographicHash::Md5);
+    QString tokenHash = hash.toHex();
+
+    // 添加前缀，便于识别
+    return "mall_token_" + tokenHash;
 }
 void HttpServer::handlePostDeviceProcess(QTcpSocket *clientSocket, const QByteArray &body) {
     // 1. 解析 JSON 请求体

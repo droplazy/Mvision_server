@@ -80,6 +80,43 @@ public:
     // 批量操作
     bool batchInsertOrders(const QList<SQL_Order> &orders);
     bool batchUpdateOrders(const QList<SQL_Order> &orders);
+
+    // 商城用户管理
+    bool insertMallUser(const SQL_MallUser &user);
+    bool updateMallUser(const SQL_MallUser &user);
+    bool deleteMallUser(const QString &username);
+    bool updateMallUserPassword(const QString &username, const QString &newPassword);
+    bool updateMallUserLastLogin(const QString &username);
+    bool updateMallUserBalance(const QString &username, double amount);
+    bool updateMallUserPoints(const QString &username, int points);
+
+    // 查询功能
+    QList<SQL_MallUser> getAllMallUsers();
+    SQL_MallUser getMallUserByUsername(const QString &username);
+    SQL_MallUser getMallUserByEmail(const QString &email);
+    SQL_MallUser getMallUserByPhone(const QString &phone);
+    SQL_MallUser getMallUserByInviteCode(const QString &inviteCode);
+    QList<SQL_MallUser> getMallUsersByLevel(int level);
+    QList<SQL_MallUser> getMallUsersByStatus(const QString &status);
+    QList<SQL_MallUser> getMallUsersByTimeRange(const QString &startTime, const QString &endTime);
+
+    // 验证功能
+    bool validateMallUserLogin(const QString &username, const QString &password);
+    bool checkMallUserExists(const QString &username);
+    bool checkEmailExists(const QString &email);
+    bool checkPhoneExists(const QString &phone);
+    bool checkInviteCodeExists(const QString &inviteCode);
+
+    // 统计功能
+    int getMallUserCount();
+    int getMallUserCountByLevel(int level);
+    int getMallUserCountByStatus(const QString &status);
+    double getTotalMallUserBalance();
+    int getTotalMallUserPoints();
+
+    // 批量操作
+    bool batchInsertMallUsers(const QList<SQL_MallUser> &users);
+    bool batchUpdateMallUsers(const QList<SQL_MallUser> &users);
 private:
     QSqlDatabase db;
 
@@ -88,9 +125,14 @@ private:
     bool createTable3();
     bool createTable4();
     bool createTable5();
+    bool createTable6();  // 商城用户表
 
     SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query);
     SQL_Order extractOrderFromQuery(const QSqlQuery &query);
+    SQL_MallUser extractMallUserFromQuery(const QSqlQuery &query);
+    double getInvitedUsersTotalConsumption(const QString &inviterUsername);
+    int getInvitedUserCount(const QString &inviterUsername);
+    QList<SQL_MallUser> getMallUsersByInviter(const QString &inviterUsername);
 };
 
 #endif // DATABASEMANAGER_H

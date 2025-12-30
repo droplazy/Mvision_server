@@ -90,6 +90,10 @@ private:
     void handleCreateTestOrdersSimple();
     void handleGetLoginUI(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray &body);
+    QString generateToken(const QString &username);
+    void handlePostMallRegist(QTcpSocket *clientSocket, const QByteArray &body);
+    QString generateInviteCode();
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

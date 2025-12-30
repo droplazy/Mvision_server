@@ -251,7 +251,37 @@ struct SQL_Order {
         totalPrice = unitPrice * quantity;
     }
 };
+// 在struct SQL_MallUser中添加inviterUsername字段
+struct SQL_MallUser {
+    QString username;      // 用户名（主键）
+    QString password;      // 密码
+    QString email;         // 邮箱
+    QString inviteCode;    // 邀请码
+    QString inviterUsername; // 邀请人账号（新增）
+    QString createTime;    // 创建时间
+    QString lastLoginTime; // 最后登录时间
+    QString phone;         // 手机号（可选）
+    int userLevel;         // 用户等级
+    double balance;        // 余额
+    int points;            // 积分
 
+    // 构造函数
+    SQL_MallUser()
+        : userLevel(1)
+        , balance(0.0)
+        , points(0)
+    {}
+
+    SQL_MallUser(const QString& uname, const QString& pwd, const QString& mail,
+                 const QString& invite = "", const QString& inviter = "",
+                 const QString& phoneNum = "")
+        : username(uname), password(pwd), email(mail), inviteCode(invite),
+        inviterUsername(inviter), phone(phoneNum), userLevel(1),
+        balance(0.0), points(0)
+    {
+        createTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+    }
+};
 
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）
 // QMap<QString, QString> productNameMap = {

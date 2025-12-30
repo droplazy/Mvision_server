@@ -33,7 +33,8 @@ bool DatabaseManager::createDatabase(const QString &dbName)
 
 bool DatabaseManager::createTables()
 {
-    return createTable1() && createTable2() && createTable3()&& createTable4()&& createTable5();
+    return createTable1() && createTable2() && createTable3() &&
+           createTable4() && createTable5() && createTable6();
 }
 
 bool DatabaseManager::createTable1()
@@ -1240,7 +1241,623 @@ SQL_Order DatabaseManager::extractOrderFromQuery(const QSqlQuery &query)
 
     return order;
 }
+
+
+bool DatabaseManager::createTable6()
+{
+    QSqlQuery query;
+
+    // 创建商城用户表 - 添加inviter_username字段
+    QString createTableQuery = R"(
+        CREATE TABLE IF NOT EXISTS MallUsers (
+            username TEXT PRIMARY KEY,
+            password TEXT NOT NULL,
+            email TEXT,
+            invite_code TEXT,
+            inviter_username TEXT,  -- 新增：邀请人账号
+            create_time TEXT DEFAULT (datetime('now', 'localtime')),
+            last_login_time TEXT,
+            phone TEXT,
+            user_level INTEGER DEFAULT 1,
+            balance REAL DEFAULT 0.0,
+            points INTEGER DEFAULT 0,
+            avatar_url TEXT,
+            real_name TEXT,
+            id_card TEXT,
+            address TEXT,
+            is_vip INTEGER DEFAULT 0,
+            vip_expire_time TEXT,
+            status TEXT DEFAULT 'active',  -- active, inactive, banned
+            FOREIGN KEY (inviter_username) REFERENCES MallUsers(username) ON DELETE SET NULL
+        )
+    )";
+
+    if (!query.exec(createTableQuery)) {
+        qDebug() << "Error creating table MallUsers: " << query.lastError().text();
+        return false;
+    }
+    qDebug() << "Table MallUsers created successfully.";
+
+    // 创建索引 - 添加对inviter_username的索引
+    QStringList indexQueries = {
+        "CREATE INDEX IF NOT EXISTS idx_malluser_email ON MallUsers(email)",
+        "CREATE INDEX IF NOT EXISTS idx_malluser_invite_code ON MallUsers(invite_code)",
+        "CREATE INDEX IF NOT EXISTS idx_malluser_inviter ON MallUsers(inviter_username)", // 新增索引
+        "CREATE INDEX IF NOT EXISTS idx_malluser_phone ON MallUsers(phone)",
+        "CREATE INDEX IF NOT EXISTS idx_malluser_create_time ON MallUsers(create_time)",
+        "CREATE INDEX IF NOT EXISTS idx_malluser_status ON MallUsers(status)"
+    };
+
+    for (const QString &indexQuery : indexQueries) {
+        if (!query.exec(indexQuery)) {
+            qDebug() << "Error creating index: " << query.lastError().text();
+        }
+    }
+
+    return true;
+}
+// 插入商城用户
+bool DatabaseManager::insertMallUser(const SQL_MallUser &user)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO MallUsers
+        (username, password, email, invite_code, inviter_username, phone,
+         user_level, balance, points, create_time)
+        VALUES (:username, :password, :email, :invite_code, :inviter_username, :phone,
+                :user_level, :balance, :points, :create_time)
+    )");
+
+    query.bindValue(":username", user.username);
+    query.bindValue(":password", user.password);
+    query.bindValue(":email", user.email);
+    query.bindValue(":invite_code", user.inviteCode);
+    query.bindValue(":inviter_username", user.inviterUsername);  // 新增绑定
+    query.bindValue(":phone", user.phone);
+    query.bindValue(":user_level", user.userLevel);
+    query.bindValue(":balance", user.balance);
+    query.bindValue(":points", user.points);
+    query.bindValue(":create_time", user.createTime.isEmpty() ?
+                                        QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") : user.createTime);
+
+    if (!query.exec()) {
+        qDebug() << "Error inserting mall user: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Mall user inserted successfully. Username:" << user.username;
+    return true;
+}
+
+// 更新商城用户
+// 修改updateMallUser函数，添加inviter_username字段
+bool DatabaseManager::updateMallUser(const SQL_MallUser &user)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE MallUsers
+        SET email = :email,
+            invite_code = :invite_code,
+            inviter_username = :inviter_username,  -- 新增
+            phone = :phone,
+            user_level = :user_level,
+            balance = :balance,
+            points = :points,
+            avatar_url = :avatar_url,
+            real_name = :real_name,
+            id_card = :id_card,
+            address = :address,
+            is_vip = :is_vip,
+            vip_expire_time = :vip_expire_time,
+            status = :status
+        WHERE username = :username
+    )");
+
+    query.bindValue(":username", user.username);
+    query.bindValue(":email", user.email);
+    query.bindValue(":invite_code", user.inviteCode);
+    query.bindValue(":inviter_username", user.inviterUsername);  // 新增绑定
+    query.bindValue(":phone", user.phone);
+    query.bindValue(":user_level", user.userLevel);
+    query.bindValue(":balance", user.balance);
+    query.bindValue(":points", user.points);
+    // 可以添加更多字段的绑定
+
+    if (!query.exec()) {
+        qDebug() << "Error updating mall user: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Mall user updated successfully. Username:" << user.username;
+    return true;
+}
+// 删除商城用户
+bool DatabaseManager::deleteMallUser(const QString &username)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM MallUsers WHERE username = :username");
+    query.bindValue(":username", username);
+
+    if (!query.exec()) {
+        qDebug() << "Error deleting mall user: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Mall user deleted successfully. Username:" << username;
+    return true;
+}
+
+// 更新密码
+bool DatabaseManager::updateMallUserPassword(const QString &username, const QString &newPassword)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE MallUsers SET password = :password WHERE username = :username");
+    query.bindValue(":username", username);
+    query.bindValue(":password", newPassword);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating mall user password: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Mall user password updated successfully. Username:" << username;
+    return true;
+}
+
+// 更新最后登录时间
+bool DatabaseManager::updateMallUserLastLogin(const QString &username)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE MallUsers SET last_login_time = datetime('now', 'localtime') WHERE username = :username");
+    query.bindValue(":username", username);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating last login time: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Last login time updated for user:" << username;
+    return true;
+}
+
+// 更新余额
+bool DatabaseManager::updateMallUserBalance(const QString &username, double amount)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE MallUsers SET balance = balance + :amount WHERE username = :username");
+    query.bindValue(":username", username);
+    query.bindValue(":amount", amount);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating mall user balance: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Mall user balance updated. Username:" << username << "Amount:" << amount;
+    return true;
+}
+
+// 更新积分
+bool DatabaseManager::updateMallUserPoints(const QString &username, int points)
+{
+    QSqlQuery query;
+    query.prepare("UPDATE MallUsers SET points = points + :points WHERE username = :username");
+    query.bindValue(":username", username);
+    query.bindValue(":points", points);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating mall user points: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Mall user points updated. Username:" << username << "Points:" << points;
+    return true;
+}
+
+// 获取所有商城用户
+QList<SQL_MallUser> DatabaseManager::getAllMallUsers()
+{
+    QList<SQL_MallUser> users;
+    QSqlQuery query("SELECT * FROM MallUsers ORDER BY create_time DESC");
+
+    while (query.next()) {
+        SQL_MallUser user = extractMallUserFromQuery(query);
+        users.append(user);
+    }
+
+    qDebug() << "Retrieved" << users.size() << "mall users";
+    return users;
+}
+
+// 根据用户名获取商城用户
+SQL_MallUser DatabaseManager::getMallUserByUsername(const QString &username)
+{
+    SQL_MallUser user;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM MallUsers WHERE username = :username");
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next()) {
+        user = extractMallUserFromQuery(query);
+    } else {
+        qDebug() << "Error fetching mall user by username:" << username
+                 << "Error:" << query.lastError().text();
+    }
+
+    return user;
+}
+
+// 根据邮箱获取商城用户
+SQL_MallUser DatabaseManager::getMallUserByEmail(const QString &email)
+{
+    SQL_MallUser user;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM MallUsers WHERE email = :email");
+    query.bindValue(":email", email);
+
+    if (query.exec() && query.next()) {
+        user = extractMallUserFromQuery(query);
+    } else {
+        qDebug() << "Error fetching mall user by email:" << email;
+    }
+
+    return user;
+}
+
+// 根据手机号获取商城用户
+SQL_MallUser DatabaseManager::getMallUserByPhone(const QString &phone)
+{
+    SQL_MallUser user;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM MallUsers WHERE phone = :phone");
+    query.bindValue(":phone", phone);
+
+    if (query.exec() && query.next()) {
+        user = extractMallUserFromQuery(query);
+    } else {
+        qDebug() << "Error fetching mall user by phone:" << phone;
+    }
+
+    return user;
+}
+
+// 根据邀请码获取商城用户
+SQL_MallUser DatabaseManager::getMallUserByInviteCode(const QString &inviteCode)
+{
+    SQL_MallUser user;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM MallUsers WHERE invite_code = :invite_code");
+    query.bindValue(":invite_code", inviteCode);
+
+    if (query.exec() && query.next()) {
+        user = extractMallUserFromQuery(query);
+    } else {
+        qDebug() << "Error fetching mall user by invite code:" << inviteCode;
+    }
+
+    return user;
+}
+
+// 验证用户登录
+bool DatabaseManager::validateMallUserLogin(const QString &username, const QString &password)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM MallUsers WHERE username = :username AND password = :password AND status = 'active'");
+    query.bindValue(":username", username);
+    query.bindValue(":password", password);
+
+    if (query.exec() && query.next()) {
+        int count = query.value(0).toInt();
+        if (count > 0) {
+            // 更新最后登录时间
+            updateMallUserLastLogin(username);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// 检查用户名是否存在
+bool DatabaseManager::checkMallUserExists(const QString &username)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM MallUsers WHERE username = :username");
+    query.bindValue(":username", username);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+
+    return false;
+}
+
+// 检查邮箱是否存在
+bool DatabaseManager::checkEmailExists(const QString &email)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM MallUsers WHERE email = :email");
+    query.bindValue(":email", email);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+
+    return false;
+}
+
+// 检查手机号是否存在
+bool DatabaseManager::checkPhoneExists(const QString &phone)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM MallUsers WHERE phone = :phone");
+    query.bindValue(":phone", phone);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+
+    return false;
+}
+
+// 检查邀请码是否存在
+bool DatabaseManager::checkInviteCodeExists(const QString &inviteCode)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM MallUsers WHERE invite_code = :invite_code");
+    query.bindValue(":invite_code", inviteCode);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+
+    return false;
+}
+
+// 获取用户数量
+int DatabaseManager::getMallUserCount()
+{
+    QSqlQuery query("SELECT COUNT(*) FROM MallUsers");
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
+}
+
+// 获取按等级统计的用户数量
+int DatabaseManager::getMallUserCountByLevel(int level)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM MallUsers WHERE user_level = :level");
+    query.bindValue(":level", level);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
+}
+
+// 获取按状态统计的用户数量
+int DatabaseManager::getMallUserCountByStatus(const QString &status)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM MallUsers WHERE status = :status");
+    query.bindValue(":status", status);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
+}
+
+// 获取总余额
+double DatabaseManager::getTotalMallUserBalance()
+{
+    QSqlQuery query("SELECT SUM(balance) FROM MallUsers WHERE status = 'active'");
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toDouble();
+    }
+
+    return 0.0;
+}
+
+// 获取总积分
+int DatabaseManager::getTotalMallUserPoints()
+{
+    QSqlQuery query("SELECT SUM(points) FROM MallUsers WHERE status = 'active'");
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
+}
+
+// 批量插入用户
+bool DatabaseManager::batchInsertMallUsers(const QList<SQL_MallUser> &users)
+{
+    if (users.isEmpty()) {
+        return true;
+    }
+
+    db.transaction();  // 开始事务
+
+    for (const SQL_MallUser &user : users) {
+        if (!insertMallUser(user)) {
+            db.rollback();  // 回滚事务
+            return false;
+        }
+    }
+
+    db.commit();  // 提交事务
+    qDebug() << "Batch inserted" << users.size() << "mall users successfully";
+    return true;
+}
+
+// 批量更新用户
+bool DatabaseManager::batchUpdateMallUsers(const QList<SQL_MallUser> &users)
+{
+    if (users.isEmpty()) {
+        return true;
+    }
+
+    db.transaction();  // 开始事务
+
+    for (const SQL_MallUser &user : users) {
+        if (!updateMallUser(user)) {
+            db.rollback();  // 回滚事务
+            return false;
+        }
+    }
+
+    db.commit();  // 提交事务
+    qDebug() << "Batch updated" << users.size() << "mall users successfully";
+    return true;
+}
+// 从查询结果中提取商城用户数据
+SQL_MallUser DatabaseManager::extractMallUserFromQuery(const QSqlQuery &query)
+{
+    SQL_MallUser user;
+    user.username = query.value("username").toString();
+    user.password = query.value("password").toString();
+    user.email = query.value("email").toString();
+    user.inviteCode = query.value("invite_code").toString();
+    user.inviterUsername = query.value("inviter_username").toString();  // 新增
+    user.createTime = query.value("create_time").toString();
+    user.lastLoginTime = query.value("last_login_time").toString();
+    user.phone = query.value("phone").toString();
+    user.userLevel = query.value("user_level").toInt();
+    user.balance = query.value("balance").toDouble();
+    user.points = query.value("points").toInt();
+
+    return user;
+}
+
+
+// 新增：根据邀请人获取用户列表
+QList<SQL_MallUser> DatabaseManager::getMallUsersByInviter(const QString &inviterUsername)
+{
+    QList<SQL_MallUser> users;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM MallUsers WHERE inviter_username = :inviter_username ORDER BY create_time DESC");
+    query.bindValue(":inviter_username", inviterUsername);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_MallUser user = extractMallUserFromQuery(query);
+            users.append(user);
+        }
+    } else {
+        qDebug() << "Error fetching users by inviter:" << query.lastError().text();
+    }
+
+    return users;
+}
+
+// 新增：获取用户邀请的下级用户数量
+int DatabaseManager::getInvitedUserCount(const QString &inviterUsername)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM MallUsers WHERE inviter_username = :inviter_username AND status = 'active'");
+    query.bindValue(":inviter_username", inviterUsername);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
+}
+
+// 新增：获取用户邀请的下级用户总消费（通过关联订单表）
+double DatabaseManager::getInvitedUsersTotalConsumption(const QString &inviterUsername)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        SELECT SUM(o.total_price)
+        FROM Orders o
+        JOIN MallUsers u ON o.user = u.username
+        WHERE u.inviter_username = :inviter_username
+        AND o.status = 'completed'
+    )");
+    query.bindValue(":inviter_username", inviterUsername);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toDouble();
+    }
+
+    return 0.0;
+}
 #if 0
+
+// 创建测试用户
+void createTestMallUsers()
+{
+    DatabaseManager dbManager;
+    if (!dbManager.openDatabase("your_database.db")) {
+        return;
+    }
+
+    // 确保表存在
+    dbManager.createTable6();
+
+    // 创建测试用户
+    SQL_MallUser user1;
+    user1.username = "user001";
+    user1.password = "password123";
+    user1.email = "user001@example.com";
+    user1.inviteCode = "INV001";
+    user1.phone = "13800138001";
+    user1.userLevel = 1;
+    user1.balance = 100.0;
+    user1.points = 50;
+
+    // 插入用户
+    if (dbManager.insertMallUser(user1)) {
+        qDebug() << "User created successfully";
+    }
+
+    // 验证登录
+    if (dbManager.validateMallUserLogin("user001", "password123")) {
+        qDebug() << "Login successful";
+    } else {
+        qDebug() << "Login failed";
+    }
+
+    // 查询用户
+    SQL_MallUser retrievedUser = dbManager.getMallUserByUsername("user001");
+    qDebug() << "User email:" << retrievedUser.email;
+    qDebug() << "User balance:" << retrievedUser.balance;
+
+    // 更新余额
+    dbManager.updateMallUserBalance("user001", 50.0);
+
+    // 获取用户统计
+    int totalUsers = dbManager.getMallUserCount();
+    double totalBalance = dbManager.getTotalMallUserBalance();
+    qDebug() << "Total users:" << totalUsers << "Total balance:" << totalBalance;
+}
+
+// 生成邀请码
+QString generateInviteCode()
+{
+    QString chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    QString inviteCode;
+    QRandomGenerator *generator = QRandomGenerator::global();
+
+    for (int i = 0; i < 8; i++) {
+        int index = generator->bounded(chars.length());
+        inviteCode.append(chars.at(index));
+    }
+
+    return inviteCode;
+}
+
+
 // 创建订单
 void createOrderExample()
 {
