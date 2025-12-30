@@ -213,12 +213,13 @@ DeviceStatus mqttclient::parseJsonHeartBeat(const QJsonObject& jsonObj)
     QString lastHeartbeat = jsonObj["timestamp"].toString();  // 使用 timestamp 作为最后心跳时间
     QString usedProcess = jsonObj["data"]["usedProcess"].toString();  // 使用 timestamp 作为最后心跳时间
     QString ProcessID = jsonObj["data"]["ProcessID"].toString();  // 使用 timestamp 作为最后心跳时间
+    float temp = jsonObj["data"]["temperature"].toDouble(0.0);  // 使用 timestamp 作为最后心跳时间
 
     // 创建 DeviceStatus 实例并返回
     DeviceStatus deviceStatus(serialNumber, status, location, currentAction,
                               trafficStatistics, lastHeartbeat, ip,
                               current_start, current_end, next_action,
-                              next_action_start, next_action_end,usedProcess,ProcessID);
+                              next_action_start, next_action_end,usedProcess,ProcessID,temp);
     return deviceStatus;
 }
 QString mqttclient::getMessageType(const QJsonObject& jsonObj) {

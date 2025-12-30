@@ -171,7 +171,7 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
     // 解析请求路径
     QStringList requestLines = QString(request).split("\r\n");
     QString path = requestLines.first().split(" ")[1];
-
+    //路径加个修改区别商城
     if ((path == "/home" || path == "/devices" ||path == "/process/new" ||path == ("/login")\
         ||path == "/process/center"||path == "/support" ) && request.startsWith("GET"))
     {
@@ -268,6 +268,10 @@ void HttpServer::handleGetDownload(QTcpSocket *clientSocket, const QUrlQuery &qu
     if (!file.exists()) {
         sendHttpResponse(clientSocket, 404, "Not Found",
                          QString("File '%1' not found").arg(baseName).toUtf8());
+        QStringList files = downloadDir.entryList(QDir::Files);
+        for (const QString &filename : files) {
+            qDebug() << "  -" << filename;
+        }
         return;
     }
 
@@ -411,6 +415,10 @@ void HttpServer::onReadyRead() {
                 handleGetProcess(clientSocket, query);
             } else if (path == "/download") {
                 handleGetDownload(clientSocket, query);
+            } else if (path == "/download") {
+                handleGetDownload(clientSocket, query);
+            } else if (path == "/download") {
+                handleGetDownload(clientSocket, query);
             } else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
                        || path.contains(".js") || path.contains(".png") || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
@@ -446,8 +454,8 @@ void HttpServer::onReadyRead() {
                         if (!moreData.isEmpty()) {
                             body.append(moreData);
                             remaining = contentLength - body.size();
-                            qDebug() << "Read additional" << moreData.size() << "bytes. Total:"
-                                     << body.size() << "Remaining:" << remaining;
+                            // qDebug() << "Read additional" << moreData.size() << "bytes. Total:"
+                            //          << body.size() << "Remaining:" << remaining;
                         } else {
                             break;
                         }
@@ -502,6 +510,7 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
             updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
             updatedDevice.status ="在线";
             updatedDevice.location ="杭州";
+          //  updatedDevice.Temperature=
             deviceVector[i] = updatedDevice;
           //  qDebug() << "Device information updated for serial number: " << updatedDevice.serialNumber;
             return; // Exit after updating the device
@@ -794,9 +803,35 @@ void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &quer
         // 将 JSON 对象转化为格式化的 JSON 字符串
         QJsonDocument doc(response);
         jsonData = doc.toJson(QJsonDocument::Indented);
-
-        // 打印响应
-        //qDebug() << jsonResponse;
+    }
+    else if(serial =="WARNING")
+    {
+        QJsonArray devices;
+        for ( DeviceStatus& device : deviceVector)
+        {
+            if(device.Temperature > 30)
+            {
+                    device.warningmsg = QString("设备高温，当前温度：%1").arg(device.Temperature);
+            }
+            // else if(device.newdev)
+            // {
+            //     device.warningmsg = QString("未知的新设备").arg(device.Temperature);
+            // }
+            else if(0)
+            {
+                device.warningmsg = QString("未知的新设备").arg(device.Temperature);
+            }
+            else
+            {
+                continue;
+            }
+            devices.append(device.toJsonWar());
+        }
+        // 调用接口生成响应
+        QJsonObject response = generateDeviceResponse(devices);
+        // 将 JSON 对象转化为格式化的 JSON 字符串
+        QJsonDocument doc(response);
+        jsonData = doc.toJson(QJsonDocument::Indented);
     }
     else if(!serial.isEmpty())
     {

@@ -16,25 +16,42 @@ struct DeviceStatus {
     QString trafficStatistics;     // 已用流量
     QString lastHeartbeat;         // 最后心跳时间
 
-
     QString ip;
     QString current_start;
     QString current_end;
+    QString warningmsg;
+    float Temperature = 0;           // 温度，默认0
+    bool newdev = true;
+    QString hardversion;
+
+    /*准备丢弃*/
     QString next_action;
     QString next_action_start;
     QString next_action_end;
-    QString usedProcess;         // 正在使用的流程TODO
-    QString usedProcessID;         // 正在使用的流程TODO
+    /**/
+    QString usedProcess;           // 正在使用的流程
+    QString usedProcessID;         // 正在使用的流程ID
 
-    // 构造函数，用于初始化
+    // 修改后的构造函数，添加了 Temperature 参数
     DeviceStatus(const QString& sn, const QString& st, const QString& loc,
                  const QString& action, const QString& traffic, const QString& heartbeat,
-                const QString& ip, const QString& cs, const QString& ce, const QString& na,
-const QString& nas ,const QString& nae , const QString& process ,const QString& processId)
-        : serialNumber(sn), status(st), location(loc), currentAction(action),
-        trafficStatistics(traffic), lastHeartbeat(heartbeat) ,ip(ip) ,current_start(cs), current_end(ce),
-        next_action(na),next_action_start(nas),next_action_end(nae) ,usedProcess(process) ,usedProcessID(processId) {}
-
+                 const QString& ip, const QString& cs, const QString& ce,
+                 const QString& na, const QString& nas, const QString& nae,
+                 const QString& process, const QString& processId,
+                 float temperature = 0)  // 新增温度参数，默认为0
+        : serialNumber(sn), status(st), location(loc),
+        currentAction(action), trafficStatistics(traffic),
+        lastHeartbeat(heartbeat), ip(ip),
+        current_start(cs), current_end(ce),
+        Temperature(temperature), next_action(na), next_action_start(nas),
+        next_action_end(nae), usedProcess(process),
+        usedProcessID(processId)  // 初始化温度
+    {
+        // 可以根据温度自动设置警告信息
+        if (temperature > 60) {  // 假设60度是高温阈值
+            warningmsg = QString("设备高温，当前温度：%1").arg(temperature);
+        }
+    }
     // 将结构体转化为 JSON 对象
     QJsonObject toJsonAll() const {
         QJsonObject jsonObj;
@@ -49,7 +66,15 @@ const QString& nas ,const QString& nae , const QString& process ,const QString& 
 
         return jsonObj;
     }
+    // 将结构体转化为 JSON 对象
+    QJsonObject toJsonWar() const {
+        QJsonObject jsonObj;
+        jsonObj["serial_number"] = serialNumber;
+        jsonObj["warning"] = warningmsg;
+        jsonObj["last_heartbeat"] = lastHeartbeat;
 
+        return jsonObj;
+    }
     // 将结构体转化为 JSON 对象
     QJsonObject toJsonSingle() const {
         QJsonObject jsonObj;
@@ -70,6 +95,8 @@ const QString& nas ,const QString& nae , const QString& process ,const QString& 
         jsonObj["traffic_statistics"] = trafficStatistics;
         jsonObj["serial_number"] = serialNumber;
         jsonObj["status"] = status;
+        jsonObj["warning"] = warningmsg;
+        jsonObj["hard-version"] = hardversion;
 
 
         return jsonObj;
