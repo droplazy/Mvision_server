@@ -22,6 +22,7 @@ struct DeviceStatus {
     QString warningmsg;
     float Temperature = 0;           // 温度，默认0
     bool newdev = true;
+    bool warining_ignore=false;
     QString hardversion;
 
     /*准备丢弃*/

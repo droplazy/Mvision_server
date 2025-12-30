@@ -415,10 +415,6 @@ void HttpServer::onReadyRead() {
                 handleGetProcess(clientSocket, query);
             } else if (path == "/download") {
                 handleGetDownload(clientSocket, query);
-            } else if (path == "/download") {
-                handleGetDownload(clientSocket, query);
-            } else if (path == "/download") {
-                handleGetDownload(clientSocket, query);
             } else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
                        || path.contains(".js") || path.contains(".png") || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
@@ -483,9 +479,13 @@ void HttpServer::onReadyRead() {
                     handlePostProcessUpdate(clientSocket, query, body);
                 } else if (path == "/process/delete") {
                     handlePostProcessDelete(clientSocket, body);
+                } else if (path == "/device/warning-ignore") {
+                    handlePostWarningIgnore(clientSocket, body);
                 } else if (path == "/auth/login") {
                     handlePostAuthLogin(clientSocket, body);
-                } else if (path == "/process/todev") {
+                }else if (path == "/auth/login") {
+                    handlePostAuthLogin(clientSocket, body);
+                }else if (path == "/process/todev") {
                     handlePostDeviceProcess(clientSocket, body);
                 } else {
                     qDebug() << path << "[POST /process/create] body =" << body;
@@ -511,7 +511,18 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
             updatedDevice.status ="在线";
             updatedDevice.location ="杭州";
           //  updatedDevice.Temperature=
-            deviceVector[i] = updatedDevice;
+          //  deviceVector[i] = updatedDevice;
+            deviceVector[i].usedProcessID =   updatedDevice.usedProcessID;
+            deviceVector[i].usedProcess =   updatedDevice.usedProcess;
+            deviceVector[i].hardversion =   updatedDevice.hardversion;
+            deviceVector[i].current_end =   updatedDevice.current_end;
+            deviceVector[i].current_start =   updatedDevice.current_start;
+            deviceVector[i].ip =   updatedDevice.ip;
+            deviceVector[i].lastHeartbeat =   updatedDevice.lastHeartbeat;
+            deviceVector[i].trafficStatistics =   updatedDevice.trafficStatistics;
+            deviceVector[i].checksum =   updatedDevice.checksum;
+            deviceVector[i].Temperature =   updatedDevice.Temperature;
+
           //  qDebug() << "Device information updated for serial number: " << updatedDevice.serialNumber;
             return; // Exit after updating the device
         }
@@ -560,7 +571,50 @@ void HttpServer::handlePostAuthLogin(QTcpSocket *clientSocket, const QByteArray 
 
     sendResponse(clientSocket, jsonData);
 }
+void HttpServer::handlePostWarningIgnore(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    qDebug() << "[POST /auth/login] body =" << body;
 
+    QString qjson = QString(body);
+    // 直接打印 body 数据
+    qDebug() << "Raw JSON data:" << qjson;
+    // QByteArray response;
+
+    QJsonObject  result = parseJsonData(qjson);
+    QJsonObject  jsonObject;
+    if(!result.isEmpty())
+    {
+        QJsonObject rootObj = result;
+
+        // 获取devices数组
+        if (rootObj.contains("devices") && rootObj["devices"].isArray()) {
+            QJsonArray devicesArray = rootObj["devices"].toArray();
+
+            // 遍历数组
+            for (int i = 0; i < devicesArray.size(); ++i) {
+                QJsonObject deviceObj = devicesArray[i].toObject();
+
+                // 获取serial_number
+                QString serialNumber = deviceObj["serial_number"].toString();
+                DeviceStatus* foundDevice = findDeviceBySerialNumber(deviceVector, serialNumber);
+                if(nullptr != foundDevice)
+                {
+                    foundDevice->warining_ignore=true;
+                //    foundDevice->
+                    qDebug() << "Device" << i << "serial number:" << serialNumber << "set ignore warning :" <<foundDevice->warining_ignore;
+
+                }
+                else
+                {
+                    qDebug() << "Device" << i << "serial number:" << serialNumber << "not found ";
+
+                }
+            }
+        }
+    }
+    QByteArray json = "{\"code\":200,\"message\":\"ok\"}";
+    sendResponse(clientSocket, json);
+}
 void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query, const QByteArray &body, QString verify)
 {
     qDebug() << "=== handlePostFileUpload called ===";
@@ -809,23 +863,21 @@ void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &quer
         QJsonArray devices;
         for ( DeviceStatus& device : deviceVector)
         {
-            if(device.Temperature > 30)
+            if(device.Temperature > 30 && !device.warining_ignore)
             {
-                    device.warningmsg = QString("设备高温，当前温度：%1").arg(device.Temperature);
+                device.warningmsg = QString("设备高温，当前温度：%1").arg(device.Temperature);
+                devices.append(device.toJsonWar());
+                qDebug()<< "flag:" << device.warining_ignore;
             }
-            // else if(device.newdev)
-            // {
-            //     device.warningmsg = QString("未知的新设备").arg(device.Temperature);
-            // }
             else if(0)
             {
                 device.warningmsg = QString("未知的新设备").arg(device.Temperature);
+                devices.append(device.toJsonWar());
             }
             else
             {
                 continue;
             }
-            devices.append(device.toJsonWar());
         }
         // 调用接口生成响应
         QJsonObject response = generateDeviceResponse(devices);

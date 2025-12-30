@@ -78,6 +78,7 @@ private:
     void createDownloadDirectoryIfNeeded();
     void createUploadDirectoryIfNeeded();
     QString getHeaderValue(QTcpSocket *clientSocket, const QString &headerName);
+    void handlePostWarningIgnore(QTcpSocket *clientSocket, const QByteArray &body);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
