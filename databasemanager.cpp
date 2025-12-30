@@ -33,7 +33,7 @@ bool DatabaseManager::createDatabase(const QString &dbName)
 
 bool DatabaseManager::createTables()
 {
-    return createTable1() && createTable2() && createTable3()&& createTable4();
+    return createTable1() && createTable2() && createTable3()&& createTable4()&& createTable5();
 }
 
 bool DatabaseManager::createTable1()
@@ -542,6 +542,286 @@ bool DatabaseManager::createTable4()
 
     return true;
 }
+
+bool DatabaseManager::createTable5()
+{
+    QSqlQuery query;
+
+    // 创建订单表
+    QString createTableQuery = R"(
+        CREATE TABLE IF NOT EXISTS Orders (
+            order_id TEXT PRIMARY KEY,
+            product_id TEXT NOT NULL,
+            unit_price REAL NOT NULL,
+            quantity INTEGER NOT NULL,
+            total_price REAL NOT NULL,
+            note TEXT,
+            user TEXT NOT NULL,
+            contact_info TEXT,
+            status TEXT DEFAULT 'pending',
+            create_time TEXT DEFAULT (datetime('now', 'localtime')),
+            update_time TEXT DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (product_id) REFERENCES Products(product_id) ON DELETE SET NULL
+        )
+    )";
+
+    if (!query.exec(createTableQuery)) {
+        qDebug() << "Error creating table Orders: " << query.lastError().text();
+        return false;
+    }
+    qDebug() << "Table Orders created successfully.";
+
+    // 创建索引
+    QStringList indexQueries = {
+        "CREATE INDEX IF NOT EXISTS idx_order_status ON Orders(status)",
+        "CREATE INDEX IF NOT EXISTS idx_order_user ON Orders(user)",
+        "CREATE INDEX IF NOT EXISTS idx_order_product ON Orders(product_id)",
+        "CREATE INDEX IF NOT EXISTS idx_order_create_time ON Orders(create_time)"
+    };
+
+    for (const QString &indexQuery : indexQueries) {
+        if (!query.exec(indexQuery)) {
+            qDebug() << "Error creating index: " << query.lastError().text();
+        }
+    }
+
+    return true;
+}
+// 插入订单
+bool DatabaseManager::insertOrder(const SQL_Order &order)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO Orders
+        (order_id, product_id, unit_price, quantity, total_price,
+         note, user, contact_info, status)
+        VALUES (:order_id, :product_id, :unit_price, :quantity, :total_price,
+                :note, :user, :contact_info, :status)
+    )");
+
+    query.bindValue(":order_id", order.orderId);
+    query.bindValue(":product_id", order.productId);
+    query.bindValue(":unit_price", order.unitPrice);
+    query.bindValue(":quantity", order.quantity);
+    query.bindValue(":total_price", order.totalPrice);
+    query.bindValue(":note", order.note);
+    query.bindValue(":user", order.user);
+    query.bindValue(":contact_info", order.contactInfo);
+    query.bindValue(":status", order.status.isEmpty() ? "pending" : order.status);
+
+    if (!query.exec()) {
+        qDebug() << "Error inserting order: " << query.lastError().text();
+        qDebug() << "Last query:" << query.lastQuery();
+        return false;
+    }
+
+    qDebug() << "Order inserted successfully. ID:" << order.orderId;
+    return true;
+}
+
+// 更新订单
+bool DatabaseManager::updateOrder(const SQL_Order &order)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE Orders
+        SET product_id = :product_id,
+            unit_price = :unit_price,
+            quantity = :quantity,
+            total_price = :total_price,
+            note = :note,
+            user = :user,
+            contact_info = :contact_info,
+            status = :status,
+            update_time = datetime('now', 'localtime')
+        WHERE order_id = :order_id
+    )");
+
+    query.bindValue(":order_id", order.orderId);
+    query.bindValue(":product_id", order.productId);
+    query.bindValue(":unit_price", order.unitPrice);
+    query.bindValue(":quantity", order.quantity);
+    query.bindValue(":total_price", order.totalPrice);
+    query.bindValue(":note", order.note);
+    query.bindValue(":user", order.user);
+    query.bindValue(":contact_info", order.contactInfo);
+    query.bindValue(":status", order.status);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating order: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No order found with ID:" << order.orderId;
+        return false;
+    }
+
+    qDebug() << "Order updated successfully. ID:" << order.orderId;
+    return true;
+}
+
+// 更新订单状态
+bool DatabaseManager::updateOrderStatus(const QString &orderId, const QString &status)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE Orders
+        SET status = :status,
+            update_time = datetime('now', 'localtime')
+        WHERE order_id = :order_id
+    )");
+
+    query.bindValue(":order_id", orderId);
+    query.bindValue(":status", status);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating order status: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No order found with ID:" << orderId;
+        return false;
+    }
+
+    qDebug() << "Order status updated successfully. ID:" << orderId << "Status:" << status;
+    return true;
+}
+
+// 删除订单
+bool DatabaseManager::deleteOrder(const QString &orderId)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM Orders WHERE order_id = :order_id");
+    query.bindValue(":order_id", orderId);
+
+    if (!query.exec()) {
+        qDebug() << "Error deleting order: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Order deleted successfully. ID:" << orderId;
+    return true;
+}
+
+// 获取所有订单
+QList<SQL_Order> DatabaseManager::getAllOrders()
+{
+    QList<SQL_Order> orders;
+    QSqlQuery query("SELECT * FROM Orders ORDER BY create_time DESC");
+
+    while (query.next()) {
+        SQL_Order order = extractOrderFromQuery(query);
+        orders.append(order);
+    }
+
+    qDebug() << "Retrieved" << orders.size() << "orders";
+    return orders;
+}
+
+// 根据ID获取订单
+SQL_Order DatabaseManager::getOrderById(const QString &orderId)
+{
+    SQL_Order order;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Orders WHERE order_id = :order_id");
+    query.bindValue(":order_id", orderId);
+
+    if (query.exec() && query.next()) {
+        order = extractOrderFromQuery(query);
+    } else {
+        qDebug() << "Error fetching order by ID:" << orderId
+                 << "Error:" << query.lastError().text();
+    }
+
+    return order;
+}
+
+// 根据用户获取订单
+QList<SQL_Order> DatabaseManager::getOrdersByUser(const QString &user)
+{
+    QList<SQL_Order> orders;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Orders WHERE user = :user ORDER BY create_time DESC");
+    query.bindValue(":user", user);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Order order = extractOrderFromQuery(query);
+            orders.append(order);
+        }
+    } else {
+        qDebug() << "Error fetching orders by user:" << query.lastError().text();
+    }
+
+    return orders;
+}
+
+// 根据状态获取订单
+QList<SQL_Order> DatabaseManager::getOrdersByStatus(const QString &status)
+{
+    QList<SQL_Order> orders;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Orders WHERE status = :status ORDER BY create_time DESC");
+    query.bindValue(":status", status);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Order order = extractOrderFromQuery(query);
+            orders.append(order);
+        }
+    } else {
+        qDebug() << "Error fetching orders by status:" << query.lastError().text();
+    }
+
+    return orders;
+}
+
+// 根据产品获取订单
+QList<SQL_Order> DatabaseManager::getOrdersByProduct(const QString &productId)
+{
+    QList<SQL_Order> orders;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Orders WHERE product_id = :product_id ORDER BY create_time DESC");
+    query.bindValue(":product_id", productId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Order order = extractOrderFromQuery(query);
+            orders.append(order);
+        }
+    } else {
+        qDebug() << "Error fetching orders by product:" << query.lastError().text();
+    }
+
+    return orders;
+}
+
+// 根据时间范围获取订单
+QList<SQL_Order> DatabaseManager::getOrdersByTimeRange(const QString &startTime, const QString &endTime)
+{
+    QList<SQL_Order> orders;
+    QSqlQuery query;
+    query.prepare(R"(
+        SELECT * FROM Orders
+        WHERE create_time >= :start_time AND create_time <= :end_time
+        ORDER BY create_time DESC
+    )");
+    query.bindValue(":start_time", startTime);
+    query.bindValue(":end_time", endTime);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Order order = extractOrderFromQuery(query);
+            orders.append(order);
+        }
+    } else {
+        qDebug() << "Error fetching orders by time range:" << query.lastError().text();
+    }
+
+    return orders;
+}
 bool DatabaseManager::insertCommandHistory(const SQL_CommandHistory &command)
 {
     QSqlQuery query;
@@ -847,7 +1127,168 @@ bool DatabaseManager::batchUpdateCommands(const QList<SQL_CommandHistory> &comma
     return true;
 }
 
+// 根据状态统计订单数量
+int DatabaseManager::getOrderCountByStatus(const QString &status)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM Orders WHERE status = :status");
+    query.bindValue(":status", status);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
+}
+
+// 获取总销售额
+double DatabaseManager::getTotalSales()
+{
+    QSqlQuery query("SELECT SUM(total_price) FROM Orders WHERE status = 'completed'");
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toDouble();
+    }
+
+    return 0.0;
+}
+
+// 获取指定产品的销售额
+double DatabaseManager::getTotalSalesByProduct(const QString &productId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT SUM(total_price) FROM Orders WHERE product_id = :product_id AND status = 'completed'");
+    query.bindValue(":product_id", productId);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toDouble();
+    }
+
+    return 0.0;
+}
+
+// 按状态统计订单
+QMap<QString, int> DatabaseManager::getOrderStatistics()
+{
+    QMap<QString, int> statistics;
+    QSqlQuery query("SELECT status, COUNT(*) FROM Orders GROUP BY status");
+
+    while (query.next()) {
+        QString status = query.value(0).toString();
+        int count = query.value(1).toInt();
+        statistics[status] = count;
+    }
+
+    return statistics;
+}
+// 批量插入订单
+bool DatabaseManager::batchInsertOrders(const QList<SQL_Order> &orders)
+{
+    if (orders.isEmpty()) {
+        return true;
+    }
+
+    db.transaction();  // 开始事务
+
+    for (const SQL_Order &order : orders) {
+        if (!insertOrder(order)) {
+            db.rollback();  // 回滚事务
+            return false;
+        }
+    }
+
+    db.commit();  // 提交事务
+    qDebug() << "Batch inserted" << orders.size() << "orders successfully";
+    return true;
+}
+
+// 批量更新订单
+bool DatabaseManager::batchUpdateOrders(const QList<SQL_Order> &orders)
+{
+    if (orders.isEmpty()) {
+        return true;
+    }
+
+    db.transaction();  // 开始事务
+
+    for (const SQL_Order &order : orders) {
+        if (!updateOrder(order)) {
+            db.rollback();  // 回滚事务
+            return false;
+        }
+    }
+
+    db.commit();  // 提交事务
+    qDebug() << "Batch updated" << orders.size() << "orders successfully";
+    return true;
+}
+// 从查询结果中提取订单数据
+SQL_Order DatabaseManager::extractOrderFromQuery(const QSqlQuery &query)
+{
+    SQL_Order order;
+    order.orderId = query.value("order_id").toString();
+    order.productId = query.value("product_id").toString();
+    order.unitPrice = query.value("unit_price").toDouble();
+    order.quantity = query.value("quantity").toInt();
+    order.totalPrice = query.value("total_price").toDouble();
+    order.note = query.value("note").toString();
+    order.user = query.value("user").toString();
+    order.contactInfo = query.value("contact_info").toString();
+    order.status = query.value("status").toString();
+    order.createTime = query.value("create_time").toString();
+    order.updateTime = query.value("update_time").toString();
+
+    return order;
+}
 #if 0
+// 创建订单
+void createOrderExample()
+{
+    DatabaseManager dbManager;
+    if (!dbManager.openDatabase("your_database.db")) {
+        return;
+    }
+
+    // 确保表存在
+    dbManager.createTable5();
+
+    // 创建订单
+    SQL_Order order;
+    order.orderId = "ORD" + QDateTime::currentDateTime().toString("yyyyMMddHHmmss");
+    order.productId = "PROD001";
+    order.unitPrice = 99.99;
+    order.quantity = 2;
+    order.calculateTotal(); // 计算总价
+    order.note = "请尽快发货";
+    order.user = "张三";
+    order.contactInfo = "13800138000";
+    order.status = "pending";
+
+    // 插入订单
+    if (dbManager.insertOrder(order)) {
+        qDebug() << "Order created successfully";
+    }
+
+    // 查询用户的所有订单
+    QList<SQL_Order> userOrders = dbManager.getOrdersByUser("张三");
+    qDebug() << "User has" << userOrders.size() << "orders";
+
+    // 更新订单状态
+    dbManager.updateOrderStatus(order.orderId, "paid");
+
+    // 获取统计信息
+    int pendingCount = dbManager.getOrderCountByStatus("pending");
+    double totalSales = dbManager.getTotalSales();
+    qDebug() << "Pending orders:" << pendingCount << "Total sales:" << totalSales;
+}
+
+// 生成订单ID的辅助函数
+QString generateOrderId()
+{
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMddHHmmss");
+    QString random = QString::number(QRandomGenerator::global()->bounded(1000, 9999));
+    return "ORD_" + timestamp + "_" + random;
+}
 static SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query)
 {
     SQL_CommandHistory command;

@@ -216,4 +216,52 @@ struct SQL_CommandHistory {
         start_time(start), end_time(end), remark(rem),
         Completeness(comp), completed_url(url) {}
 };
+
+// SQL_Order.h 或直接在 DatabaseManager.h 中添加
+struct SQL_Order {
+    QString orderId;           // 订单ID（主键）
+    QString productId;         // 产品ID
+    double unitPrice;          // 单价
+    int quantity;              // 数量
+    double totalPrice;         // 总价
+    QString note;              // 备注
+    QString user;              // 用户
+    QString contactInfo;       // 联系方式
+    QString status;            // 订单状态（pending, paid, shipped, completed, cancelled）
+    QString createTime;        // 创建时间
+    QString updateTime;        // 更新时间
+
+    // 构造函数
+    SQL_Order()
+        : unitPrice(0.0)
+        , quantity(0)
+        , totalPrice(0.0)
+    {}
+
+    SQL_Order(const QString& oid, const QString& pid, double uprice, int qty,
+              double tprice, const QString& n, const QString& u,
+              const QString& contact, const QString& stat = "pending")
+        : orderId(oid), productId(pid), unitPrice(uprice), quantity(qty),
+        totalPrice(tprice), note(n), user(u), contactInfo(contact),
+        status(stat)
+    {}
+
+    // 计算总价
+    void calculateTotal() {
+        totalPrice = unitPrice * quantity;
+    }
+};
+
+
+// // 产品ID到名称的映射（这里需要你根据实际情况完善）
+// QMap<QString, QString> productNameMap = {
+//     {"PROD001", "iPhone 15 Pro"}, {"PROD002", "MacBook Pro"},
+//     {"PROD003", "iPad Air"},      {"PROD004", "Apple Watch"},
+//     {"PROD005", "AirPods Pro"},   {"PROD006", "iMac"},
+//     {"PROD007", "Mac mini"} // 在这里添加更多产品映射...
+// };
+#define LOGIN_BACKGROUND_PIC    "192.168.10.103:/images/login-bg.jpg"
+#define LOGIN_GUIDE_TEXT        "欢迎登录设备管理系统"
+#define LOGIN_SLOGAN1           "安全可靠，智能管理"
+#define LOGIN_SLOGAN2           "让设备管理更简单"
 #endif // PUBLICHEADER_H

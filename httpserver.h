@@ -80,6 +80,16 @@ private:
     QString getHeaderValue(QTcpSocket *clientSocket, const QString &headerName);
     void handlePostWarningIgnore(QTcpSocket *clientSocket, const QByteArray &body);
     void handleGetCommandList(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void extracted(QString &statusFilter, QString &userFilter,
+                   QList<SQL_Order> &orders, QList<SQL_Order> &allOrders);
+    void handleGetOrderList(QTcpSocket *clientSocket, const QUrlQuery &query);
+
+
+
+    //订单数据库测试接口
+    void handleCreateTestOrdersSimple();
+    void handleGetLoginUI(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &query);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

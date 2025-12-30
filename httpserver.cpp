@@ -13,21 +13,22 @@
 #include <QDateTime>
 #define MANAGER_USERNAME "123"
 #define MANAGER_PASSWD   "123"
-
+#include <QRandomGenerator>
 
 
 HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
-
+    handleCreateTestOrdersSimple();
     generateTextData();
     createDownloadDirectoryIfNeeded();
+    createUploadDirectoryIfNeeded();
 }
 
 void HttpServer::createDownloadDirectoryIfNeeded()
 {
     QDir currentDir(QDir::currentPath());
     QString downloadPath = currentDir.filePath("Download");
-    qDebug() << downloadPath << " is created ! ... ";
+  //  qDebug() << downloadPath << " is created ! ... ";
     if (!QDir(downloadPath).exists()) {
         QDir().mkdir(downloadPath);
     }
@@ -36,7 +37,6 @@ void HttpServer::createUploadDirectoryIfNeeded()
 {
     QDir currentDir(QDir::currentPath());
     QString downloadPath = currentDir.filePath("Upload");
-    qDebug() << downloadPath << " is created ! ... ";
     if (!QDir(downloadPath).exists()) {
         QDir().mkdir(downloadPath);
     }
@@ -145,7 +145,7 @@ void HttpServer::generateTextData()
 
 #endif
     QList<SQL_Device> devices = dbManager->getAllDevices();
-        processVector = dbManager->getAllProcessSteps();
+    processVector = dbManager->getAllProcessSteps();
     for (const SQL_Device &device : devices) {
         deviceVector.append(DeviceStatus(device.serial_number, device.device_status, "未知", "未知", device.total_flow,
                                          "未知", device.ip_address,
@@ -173,13 +173,15 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
     QString path = requestLines.first().split(" ")[1];
     //路径加个修改区别商城
     if ((path == "/home" || path == "/devices" ||path == "/process/new" ||path == ("/login")\
-        ||path == "/process/center"||path == "/support" ) && request.startsWith("GET"))
+         ||path == "/process/center"||path == "/support" ) && request.startsWith("GET"))
     {
         path = "/index.html";
     }
     // 使用绝对路径返回文件
-    QString basePath = "E:/qtpro/MuiltiControlSer/www/";
+  //  QString basePath = "E:/qtpro/MuiltiControlSer/www/";
 
+    QDir currentDir(QDir::currentPath());
+    QString basePath = currentDir.filePath("www/");
 
     QString filePath = basePath + path.mid(1);  // 去掉路径中的斜杠
     qDebug() << "Requested file: " << filePath;
@@ -411,14 +413,20 @@ void HttpServer::onReadyRead() {
         if (method == "GET") {
             if (path == "/device") {
                 handleGetDevice(clientSocket, query);
-            } else if (path == "/process/get") {
+            } else if (path == "/mall/login/para") {
+                handleGetLoginUI(clientSocket, query);
+            }else if (path.contains( "/images")) {
+                handleBGimagesGet(clientSocket, query);
+            }else if (path == "/process/get") {
                 handleGetProcess(clientSocket, query);
             } else if (path == "/download") {
                 handleGetDownload(clientSocket, query);
             } else if (path == "/command/history") {
                 handleGetCommandList(clientSocket, query);
-            }else if (path == "/home" || path.contains(".css") || path.contains(".jpg") || path.contains("/login") \
-                       || path.contains(".js") || path.contains(".png") || path.contains(".html") \
+            } else if (path == "/order/dispose/list") {
+                handleGetOrderList(clientSocket, query);
+            }else if (path == "/home" || path.contains(".css") /*|| path.contains(".jpg")*/ || path.contains("/login") \
+                       || path.contains(".js") /*|| path.contains(".png")*/ || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
                        || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")) {
                 ShowHomepage(clientSocket, request);
@@ -512,8 +520,8 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
             updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
             updatedDevice.status ="在线";
             updatedDevice.location ="杭州";
-          //  updatedDevice.Temperature=
-          //  deviceVector[i] = updatedDevice;
+            //  updatedDevice.Temperature=
+            //  deviceVector[i] = updatedDevice;
             deviceVector[i].usedProcessID =   updatedDevice.usedProcessID;
             deviceVector[i].usedProcess =   updatedDevice.usedProcess;
             deviceVector[i].hardversion =   updatedDevice.hardversion;
@@ -524,14 +532,15 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
             deviceVector[i].trafficStatistics =   updatedDevice.trafficStatistics;
             deviceVector[i].checksum =   updatedDevice.checksum;
             deviceVector[i].Temperature =   updatedDevice.Temperature;
+            deviceVector[i].status =   updatedDevice.status;
 
-          //  qDebug() << "Device information updated for serial number: " << updatedDevice.serialNumber;
+            //  qDebug() << "Device information updated for serial number: " << updatedDevice.serialNumber;
             return; // Exit after updating the device
         }
     }
 
     // If no device is found with the given serial number, you can optionally log it
- //   qDebug() << "Device with serial number " << updatedDevice.serialNumber << " not found!";
+    //   qDebug() << "Device with serial number " << updatedDevice.serialNumber << " not found!";
 }
 
 // 发送404响应
@@ -550,7 +559,7 @@ void HttpServer::handlePostAuthLogin(QTcpSocket *clientSocket, const QByteArray 
     QString qjson = QString(body);
     // 直接打印 body 数据
     qDebug() << "Raw JSON data:" << qjson;
-   // QByteArray response;
+    // QByteArray response;
 
     QJsonObject  result = parseJsonData(qjson);
     int code=400;
@@ -602,7 +611,7 @@ void HttpServer::handlePostWarningIgnore(QTcpSocket *clientSocket, const QByteAr
                 if(nullptr != foundDevice)
                 {
                     foundDevice->warining_ignore=true;
-                //    foundDevice->
+                    //    foundDevice->
                     qDebug() << "Device" << i << "serial number:" << serialNumber << "set ignore warning :" <<foundDevice->warining_ignore;
 
                 }
@@ -777,21 +786,21 @@ QString HttpServer::getHeaderValue(QTcpSocket *clientSocket, const QString &head
 }
 QByteArray HttpServer::getContentType(QString &filePath)
 {
-        QFileInfo fileInfo(filePath);
-        QString extension = fileInfo.suffix().toLower();
+    QFileInfo fileInfo(filePath);
+    QString extension = fileInfo.suffix().toLower();
 
-        if (extension == "html") {
-            return "text/html";
-        } else if (extension == "css") {
-            return "text/css";
-        } else if (extension == "js") {
-            return "application/javascript";
-        } else if (extension == "jpg" || extension == "jpeg") {
-            return "image/jpeg";
-        } else if (extension == "png") {
-            return "image/png";
-        }
-        return "application/octet-stream";  // 默认二进制类型
+    if (extension == "html") {
+        return "text/html";
+    } else if (extension == "css") {
+        return "text/css";
+    } else if (extension == "js") {
+        return "application/javascript";
+    } else if (extension == "jpg" || extension == "jpeg") {
+        return "image/jpeg";
+    } else if (extension == "png") {
+        return "image/png";
+    }
+    return "application/octet-stream";  // 默认二进制类型
 }
 
 void HttpServer::printStaticFiles(const QByteArray &htmlContent) {
@@ -841,10 +850,121 @@ void HttpServer::sendNotFound(QTcpSocket *clientSocket) {
     sendResponse(clientSocket, json);
 }
 
+void HttpServer::handleGetLoginUI(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    Q_UNUSED(query); // 这个接口可能不需要查询参数
+
+    // 构建JSON响应
+    QJsonObject jsonResponse;
+
+    // 时间戳
+    jsonResponse["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    // 构建data对象
+    QJsonObject dataObj;
+    dataObj["backgroundpic"] = LOGIN_BACKGROUND_PIC;  // 使用宏
+    dataObj["guide"] = LOGIN_GUIDE_TEXT;              // 使用宏
+    dataObj["Slogan1"] = LOGIN_SLOGAN1;               // 使用宏
+    dataObj["Slogan2"] = LOGIN_SLOGAN2;               // 使用宏
+
+    jsonResponse["data"] = dataObj;
+
+    // 转换为JSON字符串
+    QJsonDocument jsonDoc(jsonResponse);
+    QByteArray jsonData = jsonDoc.toJson(QJsonDocument::Indented);
+
+    // 发送响应
+    sendResponse(clientSocket, jsonData);
+}
+
+void HttpServer::handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    // 从查询参数获取文件名
+    QString fileName = query.queryItemValue("filename");
+
+    qDebug() << "Image request - filename:" << fileName;
+
+    if (fileName.isEmpty()) {
+        qDebug() << "Error: No filename specified";
+        sendResponse(clientSocket, "HTTP/1.1 400 Bad Request\r\n\r\nNo filename specified");
+        return;
+    }
+
+    // 安全检查：防止目录遍历攻击
+    if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
+        qDebug() << "Security check failed: Invalid filename" << fileName;
+        sendResponse(clientSocket, "HTTP/1.1 403 Forbidden\r\n\r\nInvalid filename");
+        return;
+    }
+
+    // 只允许图片文件扩展名
+    QString extension = QFileInfo(fileName).suffix().toLower();
+    QStringList allowedExtensions = {"jpg", "jpeg", "png", "gif", "bmp", "svg", "webp", "ico"};
+
+    if (!allowedExtensions.contains(extension)) {
+        qDebug() << "Security check failed: Invalid file extension" << extension;
+        sendResponse(clientSocket, "HTTP/1.1 403 Forbidden\r\n\r\nInvalid file extension");
+        return;
+    }
+
+    // 在当前应用程序目录的images子目录中查找文件
+    // QString appDir = QCoreApplication::applicationDirPath();
+    // QString imagePath = appDir + "/images/" + fileName;
+    QDir currentDir(QDir::currentPath());
+    QString imagePath = currentDir.filePath("images/"+fileName);
+    qDebug() << "Looking for image at:" << imagePath;
+
+    QFileInfo fileInfo(imagePath);
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        qDebug() << "Image not found:" << imagePath;
+        QString response = QString("HTTP/1.1 404 Not Found\r\n"
+                                   "Content-Type: text/html\r\n\r\n"
+                                   "<h1>404 Not Found</h1>"
+                                   "<p>Image '%1' not found in images directory.</p>")
+                               .arg(fileName);
+        clientSocket->write(response.toUtf8());
+        return;
+    }
+
+    // 读取文件
+    QFile file(imagePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "Cannot open file:" << imagePath << file.errorString();
+        sendResponse(clientSocket, "HTTP/1.1 500 Internal Server Error\r\n\r\nCannot open file");
+        return;
+    }
+
+    QByteArray fileData = file.readAll();
+    file.close();
+
+    // 确定MIME类型
+    QString mimeType = "application/octet-stream";
+    if (extension == "jpg" || extension == "jpeg") mimeType = "image/jpeg";
+    else if (extension == "png") mimeType = "image/png";
+    else if (extension == "gif") mimeType = "image/gif";
+    else if (extension == "bmp") mimeType = "image/bmp";
+    else if (extension == "svg") mimeType = "image/svg+xml";
+    else if (extension == "webp") mimeType = "image/webp";
+    else if (extension == "ico") mimeType = "image/x-icon";
+
+    // 发送响应
+    QString header = QString("HTTP/1.1 200 OK\r\n"
+                             "Content-Type: %1\r\n"
+                             "Content-Length: %2\r\n"
+                             "Connection: close\r\n\r\n")
+                         .arg(mimeType)
+                         .arg(fileData.size());
+
+    clientSocket->write(header.toUtf8());
+    clientSocket->write(fileData);
+    clientSocket->flush();
+
+    qDebug() << "Image served successfully:" << fileName << "Size:" << fileData.size() << "bytes";
+}
 // ====== 处理接口 ======
 void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &query) {
     QString serial = query.queryItemValue("serial_number");
- //   qDebug() << "[GET /device] serial_number =" << serial;
+    //   qDebug() << "[GET /device] serial_number =" << serial;
     QByteArray jsonData;
 
     if(serial =="ALL")
@@ -889,23 +1009,23 @@ void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &quer
     }
     else if(!serial.isEmpty())
     {
-       // QString targetSerialNumber = "SN999321";
+        // QString targetSerialNumber = "SN999321";
         DeviceStatus* foundDevice = findDeviceBySerialNumber(deviceVector, serial);
-       if(nullptr != foundDevice)
+        if(nullptr != foundDevice)
         {
 
-           QJsonObject jsonResponse = generateJsonHearResponse(foundDevice->toJsonSingle());
+            QJsonObject jsonResponse = generateJsonHearResponse(foundDevice->toJsonSingle());
 
-           QJsonDocument doc(jsonResponse);
-           jsonData =   doc.toJson(QJsonDocument::Indented);
-       }
-       else
-       {
+            QJsonDocument doc(jsonResponse);
+            jsonData =   doc.toJson(QJsonDocument::Indented);
+        }
+        else
+        {
 
-           QJsonObject response = generateFailureResponse();
-           QJsonDocument doc(response);
-           jsonData = doc.toJson(QJsonDocument::Indented);
-       }
+            QJsonObject response = generateFailureResponse();
+            QJsonDocument doc(response);
+            jsonData = doc.toJson(QJsonDocument::Indented);
+        }
     }
     else
     {
@@ -915,6 +1035,155 @@ void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &quer
     }
     // QByteArray jsonData = doc.toJson(QJsonDocument::Indented);
     // qDebug() << jsonData;
+    sendResponse(clientSocket, jsonData);
+}
+void HttpServer::extracted(QString &statusFilter, QString &userFilter,
+                           QList<SQL_Order> &orders,
+                           QList<SQL_Order> &allOrders) {
+    for (const SQL_Order &order : allOrders) {
+        if (order.status == statusFilter && order.user == userFilter) {
+            orders.append(order);
+        }
+    }
+}
+void HttpServer::handleGetOrderList(QTcpSocket *clientSocket,
+                                    const QUrlQuery &query) {
+    // 打开数据库
+
+    // 解析查询参数
+    int limit = 1000; // 默认最大1000条
+    int offset = 0;
+    QString statusFilter;
+    QString userFilter;
+
+    QString limitStr = query.queryItemValue("limit");
+    QString offsetStr = query.queryItemValue("offset");
+    statusFilter = query.queryItemValue("status");
+    userFilter = query.queryItemValue("user");
+
+    // 处理分页参数
+    if (!limitStr.isEmpty()) {
+        bool ok;
+        int requestedLimit = limitStr.toInt(&ok);
+        if (ok && requestedLimit > 0 && requestedLimit <= 1000) {
+            limit = requestedLimit;
+        } else if (requestedLimit > 1000) {
+            limit = 1000;
+        }
+    }
+
+    if (!offsetStr.isEmpty()) {
+        bool ok;
+        offset = offsetStr.toInt(&ok);
+        if (!ok || offset < 0)
+            offset = 0;
+    }
+
+    // 获取订单数据
+    QList<SQL_Order> orders;
+
+    // 根据过滤条件获取数据
+    if (!statusFilter.isEmpty() && !userFilter.isEmpty()) {
+        // 先获取所有数据，然后在代码中过滤
+        QList<SQL_Order> allOrders = dbManager->getAllOrders();
+        extracted(statusFilter, userFilter, orders, allOrders);
+    } else if (!statusFilter.isEmpty()) {
+        orders = dbManager->getOrdersByStatus(statusFilter);
+    } else if (!userFilter.isEmpty()) {
+        orders = dbManager->getOrdersByUser(userFilter);
+    } else {
+        orders = dbManager->getAllOrders();
+    }
+
+    // 应用分页（限制最大返回数量）
+    int totalCount = orders.size();
+    int startIdx = qMin(offset, totalCount);
+    int endIdx = qMin(offset + limit, totalCount);
+
+    QList<SQL_Order> pagedOrders;
+    for (int i = startIdx; i < endIdx; i++) {
+        pagedOrders.append(orders[i]);
+    }
+
+    QString action = "action";        // $1
+    QString subAction = "sub_action"; // $2
+    QString startTime = "start_time"; // $3
+    QString endTime = "end_time";     // $4
+
+
+    // 构建JSON响应
+    QJsonObject jsonResponse;
+    jsonResponse["timestamp"] =
+        QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QJsonArray dataArray;
+
+    for (const SQL_Order &order : pagedOrders) {
+        // 获取产品名称（$5）
+        QString productName = "todo";
+        // 获取显示状态
+        QString displayStatus = "待验证";
+
+        // 获取验证人
+        QString verifier = "todo";
+
+        // 构建content文本（单行格式）
+        QString content = QString("订单详情：商品名称：%1，下单单价：%"
+                                  "2元，下单总数：%3，客户备注：%4")
+                              .arg(productName) // $5
+                              .arg(QString::number(order.unitPrice, 'f', 2))
+                              .arg(order.quantity)
+                              .arg(order.note.isEmpty() ? "无" : order.note);
+
+        // 将createTime转换为ISO格式
+        QString isoOrderTime = order.createTime;
+        QDateTime createTime =
+            QDateTime::fromString(order.createTime, "yyyy-MM-dd HH:mm:ss");
+        if (createTime.isValid()) {
+            isoOrderTime = createTime.toString(Qt::ISODate);
+        } else {
+            // 尝试其他常见格式
+            createTime =
+                QDateTime::fromString(order.createTime, "yyyy/MM/dd HH:mm:ss");
+            if (createTime.isValid()) {
+                isoOrderTime = createTime.toString(Qt::ISODate);
+            }
+            // 如果都不行，保持原样
+        }
+
+        // 构建订单对象
+        QJsonObject orderObj;
+        orderObj["orderId"] = order.orderId;
+        orderObj["content"] = content;
+        orderObj["user"] = order.user;
+        orderObj["orderTime"] = isoOrderTime;
+        orderObj["status"] = displayStatus;
+
+        // 只有当有验证人时才添加verifier字段（匹配D00005的示例）
+        if (!verifier.isEmpty()) {
+            orderObj["verifier"] = verifier;
+        }
+
+        // 构建defaultParams对象
+        QJsonObject defaultParams;
+        defaultParams["action"] = action;          // $1
+        defaultParams["subAction"] = subAction;    // $2
+        defaultParams["devices"] = order.quantity; // devices = quantity
+        defaultParams["startTime"] = startTime;    // $3
+        defaultParams["endTime"] = endTime;        // $4
+        defaultParams["remark"] = order.note;      // remark = note
+
+        orderObj["defaultParams"] = defaultParams;
+
+        dataArray.append(orderObj);
+    }
+
+    jsonResponse["data"] = dataArray;
+
+    // 发送响应
+    QJsonDocument jsonDoc(jsonResponse);
+    QByteArray jsonData = jsonDoc.toJson(QJsonDocument::Indented);
+
     sendResponse(clientSocket, jsonData);
 }
 void HttpServer::handleGetCommandList(QTcpSocket *clientSocket, const QUrlQuery &query)
@@ -1020,7 +1289,7 @@ void HttpServer::handleGetCommandList(QTcpSocket *clientSocket, const QUrlQuery 
 
 void HttpServer::handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &query) {
     QString processId = query.queryItemValue("process_id");
-//    qDebug() << "[GET /process/get] process_id =" << processId;
+    //    qDebug() << "[GET /process/get] process_id =" << processId;
     QByteArray jsonData;
     if(processId == "ALL" || processId == "all")
     {
@@ -1083,7 +1352,7 @@ void HttpServer::handlePostDeviceCommand(QTcpSocket *clientSocket, const QByteAr
     QJsonDocument doc = QJsonDocument::fromJson(body);
     if (!doc.isNull()) {
         QJsonObject jsonObj = doc.object();
-      //  qDebug() << "Parsed JSON body:" << jsonObj;
+        //  qDebug() << "Parsed JSON body:" << jsonObj;
         emit  devCommadSend(jsonObj);
     }
     sendResponse(clientSocket, "{\"code\":200,\"msg\":\"POST /process/command success\"}");
@@ -1105,7 +1374,7 @@ void HttpServer::handlePostDeviceProcess(QTcpSocket *clientSocket, const QByteAr
 
     // 2. 查找对应的 process_id
     bool found = false;
- //   QJsonArray responseData;
+    //   QJsonArray responseData;
 
     for (const Machine_Process_Total &process : std::as_const(processVector)) {
         if (process.process_id == processId) {
@@ -1176,7 +1445,7 @@ void HttpServer::handlePostDeviceAdd(QTcpSocket *clientSocket, const QUrlQuery &
 
             // 提取 serial_number 和 verification_code
             if (dataObj.contains("serial_number") && dataObj["serial_number"].isString()) {
-                 serialNumber = dataObj["serial_number"].toString();
+                serialNumber = dataObj["serial_number"].toString();
                 qDebug() << "Serial Number: " << serialNumber;
             } else {
                 qWarning() << "Missing or invalid 'serial_number' field.";
@@ -1186,7 +1455,7 @@ void HttpServer::handlePostDeviceAdd(QTcpSocket *clientSocket, const QUrlQuery &
             }
 
             if (dataObj.contains("verification_code") && dataObj["verification_code"].isString()) {
-                 verificationCode = dataObj["verification_code"].toString();
+                verificationCode = dataObj["verification_code"].toString();
                 qDebug() << "Verification Code: " << verificationCode;
             } else {
                 qWarning() << "Missing or invalid 'verification_code' field.";
@@ -1201,9 +1470,9 @@ void HttpServer::handlePostDeviceAdd(QTcpSocket *clientSocket, const QUrlQuery &
             else
             {
                 deviceVector.append(DeviceStatus(serialNumber, "离线", "未知", "未知 ","0",
-                                             "未知", "未知",
-                                             "未知", "未知", "未知",
-                                             "未知", "未知","未知", "未知"));
+                                                 "未知", "未知",
+                                                 "未知", "未知", "未知",
+                                                 "未知", "未知","未知", "未知"));
                 SQL_Device insert_dev;
                 insert_dev.device_status = "离线";
                 insert_dev.serial_number = serialNumber;
@@ -1244,7 +1513,7 @@ bool HttpServer::deleteProcessByProcessId(const QString& process_id) {
 // }
 
 void HttpServer::handlePostProcessCreate(QTcpSocket *clientSocket, const QByteArray &body) {
-  //  qDebug() << "[POST /process/create] body =" << body;
+    //  qDebug() << "[POST /process/create] body =" << body;
     QJsonDocument doc = QJsonDocument::fromJson(body);
     if (!doc.isNull()) {
         QJsonObject jsonObj = doc.object();
@@ -1329,7 +1598,7 @@ void HttpServer::handlePostProcessDelete(QTcpSocket *clientSocket, const QByteAr
     if (!doc.isNull()) {
         QJsonObject jsonObj = doc.object();
         processDeleteRequest(jsonObj);
-       // qDebug() << "Parsed JSON body:" << jsonObj;
+        // qDebug() << "Parsed JSON body:" << jsonObj;
     }
     sendResponse(clientSocket, "{\"code\":200,\"msg\":\"POST /process/delete success\"}");
 }
@@ -1423,7 +1692,7 @@ QJsonObject HttpServer::generateFailureResponse() {
 DeviceStatus* HttpServer::findDeviceBySerialNumber(QVector<DeviceStatus>& devices, const QString& serialNumber) {
     for (auto& device : devices) {
         if (device.serialNumber == serialNumber) {
-         //   device.printInfo();
+            //   device.printInfo();
             return &device;  // 找到并返回指针
         }
     }
@@ -1578,4 +1847,47 @@ bool HttpServer::parseMachineProcess(const QJsonObject &rootObj, QVector<Machine
     }
 
     return true;
+}
+void HttpServer::handleCreateTestOrdersSimple()
+{
+    // Q_UNUSED(query);
+
+    // DatabaseManager dbManager;
+    // if (!dbManager.openDatabase("your_database.db")) {
+    //     sendResponse(clientSocket, "{\"code\":500,\"msg\":\"Database error\"}");
+    //     return;
+    // }
+
+    // 确保表存在
+    //dbManager.createTable5();
+
+    QList<SQL_Order> orders;
+    QDateTime now = QDateTime::currentDateTime();
+
+    // 生成10个测试订单
+    for (int i = 1; i <= 10; i++) {
+        SQL_Order order;
+        order.orderId = QString("TEST%1").arg(now.toString("yyyyMMdd")) +
+                        QString::number(i).rightJustified(3, '0');
+        order.productId = QString("PROD%1").arg(QRandomGenerator::global()->bounded(1, 6), 3, 10, QChar('0'));
+        order.unitPrice = QRandomGenerator::global()->bounded(100, 1001);
+        order.quantity = QRandomGenerator::global()->bounded(1, 6);
+        order.totalPrice = order.unitPrice * order.quantity;
+        order.user = QString("用户%1").arg(QRandomGenerator::global()->bounded(1, 11));
+        order.contactInfo = QString("138%1").arg(QRandomGenerator::global()->bounded(10000000, 99999999));
+
+        // 随机状态
+        QStringList statusOptions = {"pending", "paid", "completed", "cancelled"};
+        order.status = statusOptions[QRandomGenerator::global()->bounded(statusOptions.size())];
+
+        order.note = QString("测试订单%1，备注信息").arg(i);
+        order.createTime = now.addDays(-QRandomGenerator::global()->bounded(30)).toString("yyyy-MM-dd HH:mm:ss");
+
+        orders.append(order);
+
+        // 插入数据库
+        dbManager->insertOrder(order);
+    }
+
+
 }

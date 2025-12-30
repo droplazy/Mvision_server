@@ -18,7 +18,7 @@ public:
     ~DatabaseManager();
 
     bool createDatabase(const QString &dbName);
-    bool createTables();
+    bool createTables();// 订单表
     bool openDatabase(const QString &dbName);
 
     //设备增删改查
@@ -58,7 +58,28 @@ public:
     // 批量操作
     bool batchInsertCommands(const QList<SQL_CommandHistory> &commands);
     bool batchUpdateCommands(const QList<SQL_CommandHistory> &commands);
-        SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query);
+    // 订单管理
+    bool insertOrder(const SQL_Order &order);
+    bool updateOrder(const SQL_Order &order);
+    bool deleteOrder(const QString &orderId);
+    bool updateOrderStatus(const QString &orderId, const QString &status);
+
+    QList<SQL_Order> getAllOrders();
+    QList<SQL_Order> getOrdersByUser(const QString &user);
+    QList<SQL_Order> getOrdersByStatus(const QString &status);
+    QList<SQL_Order> getOrdersByProduct(const QString &productId);
+    QList<SQL_Order> getOrdersByTimeRange(const QString &startTime, const QString &endTime);
+    SQL_Order getOrderById(const QString &orderId);
+
+    // 统计功能
+    int getOrderCountByStatus(const QString &status);
+    double getTotalSales();
+    double getTotalSalesByProduct(const QString &productId);
+    QMap<QString, int> getOrderStatistics(); // 按状态统计
+
+    // 批量操作
+    bool batchInsertOrders(const QList<SQL_Order> &orders);
+    bool batchUpdateOrders(const QList<SQL_Order> &orders);
 private:
     QSqlDatabase db;
 
@@ -66,6 +87,10 @@ private:
     bool createTable2();
     bool createTable3();
     bool createTable4();
+    bool createTable5();
+
+    SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query);
+    SQL_Order extractOrderFromQuery(const QSqlQuery &query);
 };
 
 #endif // DATABASEMANAGER_H
