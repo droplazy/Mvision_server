@@ -94,6 +94,12 @@ private:
     QString generateToken(const QString &username);
     void handlePostMallRegist(QTcpSocket *clientSocket, const QByteArray &body);
     QString generateInviteCode();
+    void handlePostMallPasswdReset(QTcpSocket *clientSocket, const QByteArray &body);
+    void handlePostMallSendMailCode(QTcpSocket *clientSocket, const QByteArray &body);
+    void handleGetAuthInfo(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void handleGetAuthPromote(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByteArray &body);
+    QString generateWithdrawId();
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

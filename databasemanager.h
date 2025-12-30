@@ -99,7 +99,7 @@ public:
     QList<SQL_MallUser> getMallUsersByLevel(int level);
     QList<SQL_MallUser> getMallUsersByStatus(const QString &status);
     QList<SQL_MallUser> getMallUsersByTimeRange(const QString &startTime, const QString &endTime);
-
+    QList<SQL_MallUser> getMallUsersByInviter(const QString &inviterUsername);
     // 验证功能
     bool validateMallUserLogin(const QString &username, const QString &password);
     bool checkMallUserExists(const QString &username);
@@ -117,6 +117,8 @@ public:
     // 批量操作
     bool batchInsertMallUsers(const QList<SQL_MallUser> &users);
     bool batchUpdateMallUsers(const QList<SQL_MallUser> &users);
+    bool createWithdrawRecord(const QString &withdrawId, const QString &username, double amount, const QString &alipayAccount, const QString &remark = "");
+    QList<SQL_WithdrawRecord> getWithdrawRecordsByUsername(const QString &username);
 private:
     QSqlDatabase db;
 
@@ -132,7 +134,7 @@ private:
     SQL_MallUser extractMallUserFromQuery(const QSqlQuery &query);
     double getInvitedUsersTotalConsumption(const QString &inviterUsername);
     int getInvitedUserCount(const QString &inviterUsername);
-    QList<SQL_MallUser> getMallUsersByInviter(const QString &inviterUsername);
+    bool createWithdrawTable();
 };
 
 #endif // DATABASEMANAGER_H

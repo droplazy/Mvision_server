@@ -34,7 +34,7 @@ bool DatabaseManager::createDatabase(const QString &dbName)
 bool DatabaseManager::createTables()
 {
     return createTable1() && createTable2() && createTable3() &&
-           createTable4() && createTable5() && createTable6();
+           createTable4() && createTable5() && createTable6() &&createWithdrawTable();
 }
 
 bool DatabaseManager::createTable1()
@@ -1791,6 +1791,99 @@ double DatabaseManager::getInvitedUsersTotalConsumption(const QString &inviterUs
     }
 
     return 0.0;
+}
+bool DatabaseManager::createWithdrawRecord(const QString &withdrawId, const QString &username,
+                                           double amount, const QString &alipayAccount,
+                                           const QString &remark)
+{
+    QSqlQuery query;
+
+    query.prepare(R"(
+        INSERT INTO WithdrawRecords
+        (withdraw_id, username, amount, alipay_account, remark)
+        VALUES (:withdraw_id, :username, :amount, :alipay_account, :remark)
+    )");
+
+    query.bindValue(":withdraw_id", withdrawId);
+    query.bindValue(":username", username);
+    query.bindValue(":amount", amount);
+    query.bindValue(":alipay_account", alipayAccount);
+    query.bindValue(":remark", remark);
+
+    if (!query.exec()) {
+        qDebug() << "Error creating withdraw record: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Withdraw record created successfully. ID:" << withdrawId;
+    return true;
+}
+bool DatabaseManager::createWithdrawTable()
+{
+    QSqlQuery query;
+
+    QString createTableQuery = R"(
+        CREATE TABLE IF NOT EXISTS WithdrawRecords (
+            withdraw_id TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            amount REAL NOT NULL,
+            alipay_account TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',  -- pending, processing, completed, failed
+            create_time TEXT DEFAULT (datetime('now', 'localtime')),
+            update_time TEXT DEFAULT (datetime('now', 'localtime')),
+            remark TEXT,
+            FOREIGN KEY (username) REFERENCES MallUsers(username) ON DELETE CASCADE
+        )
+    )";
+
+    if (!query.exec(createTableQuery)) {
+        qDebug() << "Error creating WithdrawRecords table: " << query.lastError().text();
+        return false;
+    }
+
+    // 创建索引
+    QStringList indexQueries = {
+        "CREATE INDEX IF NOT EXISTS idx_withdraw_username ON WithdrawRecords(username)",
+        "CREATE INDEX IF NOT EXISTS idx_withdraw_status ON WithdrawRecords(status)",
+        "CREATE INDEX IF NOT EXISTS idx_withdraw_time ON WithdrawRecords(create_time)"
+    };
+
+    for (const QString &indexQuery : indexQueries) {
+        if (!query.exec(indexQuery)) {
+            qDebug() << "Error creating index: " << query.lastError().text();
+        }
+    }
+
+    qDebug() << "WithdrawRecords table created successfully.";
+    return true;
+}
+QList<SQL_WithdrawRecord> DatabaseManager::getWithdrawRecordsByUsername(const QString &username)
+{
+    QList<SQL_WithdrawRecord> records;
+
+    QSqlQuery query;
+    query.prepare("SELECT * FROM WithdrawRecords WHERE username = :username ORDER BY create_time DESC");
+    query.bindValue(":username", username);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_WithdrawRecord record;
+            record.withdrawId = query.value("withdraw_id").toString();
+            record.username = query.value("username").toString();
+            record.amount = query.value("amount").toDouble();
+            record.alipayAccount = query.value("alipay_account").toString();
+            record.status = query.value("status").toString();
+            record.createTime = query.value("create_time").toString();
+            record.updateTime = query.value("update_time").toString();
+            record.remark = query.value("remark").toString();
+
+            records.append(record);
+        }
+    } else {
+        qDebug() << "Error fetching withdraw records: " << query.lastError().text();
+    }
+
+    return records;
 }
 #if 0
 

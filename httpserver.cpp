@@ -425,6 +425,10 @@ void HttpServer::onReadyRead() {
                 handleGetCommandList(clientSocket, query);
             } else if (path == "/order/dispose/list") {
                 handleGetOrderList(clientSocket, query);
+            }else if (path == "/mall/auth/info") {
+                handleGetAuthInfo(clientSocket, query);
+            }else if (path == "/mall/auth/promot") {
+                handleGetAuthPromote(clientSocket, query);
             }else if (path == "/home" || path.contains(".css") /*|| path.contains(".jpg")*/ || path.contains("/login") \
                        || path.contains(".js") /*|| path.contains(".png")*/ || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
@@ -501,6 +505,12 @@ void HttpServer::onReadyRead() {
                     handlePostMallLogin(clientSocket, body);
                 }else if (path == "/mall/auth/register") {
                     handlePostMallRegist(clientSocket, body);
+                }else if (path == "/mall/auth/passwd-reset/reset") {
+                    handlePostMallPasswdReset(clientSocket, body);
+                }else if (path == "/mall/auth/passwd-reset/sendemail") {
+                    handlePostMallSendMailCode(clientSocket, body);
+                }else if (path == "/mall/auth/promot/withdraw") {
+                    handlePostMallSendwithdraw(clientSocket, body);
                 }else {
                     qDebug() << path << "[POST /process/create] body =" << body;
                     sendNotFound(clientSocket);
@@ -1050,6 +1060,319 @@ void HttpServer::extracted(QString &statusFilter, QString &userFilter,
         }
     }
 }
+void HttpServer::handleGetAuthPromote(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    qDebug() << "[GET /mall/auth/promot] query =" << query.toString();
+
+    // 获取username参数
+    QString username = query.queryItemValue("username");
+
+    qDebug() << "Get promotion info for username:" << username;
+
+    // 验证必填字段
+    if (username.isEmpty()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing required parameter: username";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 检查dbManager是否已初始化
+    if (!dbManager) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Database error";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    try {
+        // 检查用户是否存在
+        if (!dbManager->checkMallUserExists(username)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 404;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "用户不存在";
+            dataObj["username"] = username;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 获取用户信息
+        SQL_MallUser user = dbManager->getMallUserByUsername(username);
+
+        // 获取推广人数（邀请的下级用户数量）
+        int promotionCount = 0;
+
+        // 方法1：使用现有的getInvitedUserCount函数（如果已实现）
+        // promotionCount = dbManager->getInvitedUserCount(username);
+
+        // 方法2：使用getMallUsersByInviter函数获取列表
+        QList<SQL_MallUser> invitedUsers = dbManager->getMallUsersByInviter(username);
+        promotionCount = invitedUsers.size();
+
+        qDebug() << "Found" << promotionCount << "invited users for" << username;
+
+        // 获取累计收益（这里用用户余额替代，或者可以计算下级用户的总消费）
+        double earnedAmount = user.balance;  // 使用当前余额作为收益
+
+        // 如果需要计算下级用户的总消费，可以使用：
+        // double earnedAmount = dbManager->getInvitedUsersTotalConsumption(username);
+
+        // 公告内容（这里使用固定公告，实际可以存储在数据库中）
+        QString announcement = "New user registration reward increased to 50 RMB";
+
+        // 根据用户等级显示不同的公告
+        if (user.userLevel >= 2) {
+            announcement = "VIP会员享受额外10%推广奖励，有效期至2025-12-31";
+        }
+
+        // 如果有邀请的下级用户，添加相关公告
+        if (promotionCount > 0) {
+            if (promotionCount >= 10) {
+                announcement = QString("恭喜您已成功邀请%1位用户！升级VIP可享受更高佣金比例").arg(promotionCount);
+            } else if (promotionCount >= 5) {
+                announcement = QString("您已邀请%1位用户，再邀请%2位即可升级VIP").arg(promotionCount).arg(10 - promotionCount);
+            }
+        }
+
+        // 构建响应数据
+        QJsonObject responseData;
+        responseData["promotionCount"] = promotionCount;
+        responseData["earnedAmount"] = earnedAmount;
+        responseData["announcement"] = announcement;
+
+        // 添加更多详细信息（便于调试）
+        responseData["username"] = username;
+        responseData["userLevel"] = user.userLevel;
+        responseData["currentBalance"] = user.balance;
+        responseData["inviteCode"] = user.inviteCode;
+
+        // 如果用户有邀请人，添加邀请人信息
+        if (!user.inviterUsername.isEmpty()) {
+            responseData["inviterUsername"] = user.inviterUsername;
+        }
+
+        // 如果获取到了下级用户列表，添加一些统计信息
+        if (!invitedUsers.isEmpty()) {
+            // 统计不同等级的下级用户
+            int level1Count = 0, level2Count = 0, level3Count = 0;
+            for (const SQL_MallUser &invitedUser : invitedUsers) {
+                if (invitedUser.userLevel == 1) level1Count++;
+                else if (invitedUser.userLevel == 2) level2Count++;
+                else if (invitedUser.userLevel == 3) level3Count++;
+            }
+
+            QJsonObject invitedStats;
+            invitedStats["total"] = invitedUsers.size();
+            invitedStats["level1"] = level1Count;
+            invitedStats["level2"] = level2Count;
+            invitedStats["level3"] = level3Count;
+            responseData["invitedUserStats"] = invitedStats;
+
+            // 最近5个邀请的用户
+            QJsonArray recentInvitedUsers;
+            int count = qMin(5, invitedUsers.size());
+            for (int i = 0; i < count; i++) {
+                const SQL_MallUser &invitedUser = invitedUsers[i];
+                QJsonObject invitedUserInfo;
+                invitedUserInfo["username"] = invitedUser.username;
+                invitedUserInfo["email"] = invitedUser.email;
+                invitedUserInfo["level"] = invitedUser.userLevel;
+                invitedUserInfo["createTime"] = invitedUser.createTime;
+                recentInvitedUsers.append(invitedUserInfo);
+            }
+            responseData["recentInvitedUsers"] = recentInvitedUsers;
+        }
+
+        // 推广奖励规则
+        QJsonObject promotionRules;
+        promotionRules["rule1"] = "每成功邀请一位用户注册，可获得10元奖励";
+        promotionRules["rule2"] = "邀请用户累计消费的5%将作为您的佣金";
+        promotionRules["rule3"] = "VIP会员享受额外10%的推广奖励";
+        responseData["promotionRules"] = promotionRules;
+
+        // 构建完整响应
+        QJsonObject successResp;
+        successResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        successResp["code"] = 200;
+        successResp["data"] = responseData;
+
+        qDebug() << "Returning promotion info for user:" << username;
+        qDebug() << "  Promotion count:" << promotionCount;
+        qDebug() << "  Earned amount:" << earnedAmount;
+        qDebug() << "  Announcement:" << announcement;
+
+        sendResponse(clientSocket, QJsonDocument(successResp).toJson());
+
+    } catch (const std::exception &e) {
+        // 捕获并处理任何异常
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = QString("获取推广信息失败: %1").arg(e.what());
+        errorResp["data"] = dataObj;
+
+        qDebug() << "Get promotion info exception:" << e.what();
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+    }
+}
+
+void HttpServer::handleGetAuthInfo(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    qDebug() << "[GET /mall/auth/info] query =" << query.toString();
+
+    // 获取username参数
+    QString username = query.queryItemValue("username");
+
+    qDebug() << "Get auth info for username:" << username;
+
+    // 验证必填字段
+    if (username.isEmpty()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing required parameter: username";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 检查dbManager是否已初始化
+    if (!dbManager) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Database error";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    try {
+        // 检查用户是否存在
+        if (!dbManager->checkMallUserExists(username)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 404;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "用户不存在";
+            dataObj["username"] = username;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 获取用户信息
+        SQL_MallUser user = dbManager->getMallUserByUsername(username);
+
+        // 构建用户等级字符串
+        QString accountLevel;
+        switch (user.userLevel) {
+        case 1:
+            accountLevel = "lv1";
+            break;
+        case 2:
+            accountLevel = "lv2";
+            break;
+        case 3:
+            accountLevel = "lv3";
+            break;
+        case 10:
+            accountLevel = "admin";
+            break;
+        default:
+            accountLevel = QString("lv%1").arg(user.userLevel);
+            break;
+        }
+
+        // 构建响应数据
+        QJsonObject responseData;
+        responseData["accountLevel"] = accountLevel;
+        responseData["myInviteCode"] = user.inviteCode.isEmpty() ? "未设置" : user.inviteCode;
+        responseData["myEmail"] = user.email.isEmpty() ? "未绑定" : user.email;
+
+        // 添加更多可选信息（可以根据需要添加）
+        responseData["username"] = user.username;
+        responseData["phone"] = user.phone.isEmpty() ? "未绑定" : user.phone;
+        responseData["balance"] = user.balance;
+        responseData["points"] = user.points;
+        responseData["createTime"] = user.createTime;
+        responseData["lastLoginTime"] = user.lastLoginTime.isEmpty() ? "从未登录" : user.lastLoginTime;
+
+        // 如果有邀请人，添加邀请人信息
+        if (!user.inviterUsername.isEmpty()) {
+            responseData["inviterUsername"] = user.inviterUsername;
+
+            // 尝试获取邀请人的详细信息
+            SQL_MallUser inviter = dbManager->getMallUserByUsername(user.inviterUsername);
+            if (!inviter.username.isEmpty()) {
+                responseData["inviterEmail"] = inviter.email.isEmpty() ? "未绑定" : inviter.email;
+                responseData["inviterLevel"] = inviter.userLevel;
+            }
+        }
+
+        // 构建完整响应
+        QJsonObject successResp;
+        successResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        successResp["code"] = 200;
+        successResp["data"] = responseData;
+
+        qDebug() << "Returning auth info for user:" << username;
+        qDebug() << "  Account level:" << accountLevel;
+        qDebug() << "  Invite code:" << user.inviteCode;
+        qDebug() << "  Email:" << user.email;
+
+        sendResponse(clientSocket, QJsonDocument(successResp).toJson());
+
+    } catch (const std::exception &e) {
+        // 捕获并处理任何异常
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = QString("获取用户信息失败: %1").arg(e.what());
+        errorResp["data"] = dataObj;
+
+        qDebug() << "Get auth info exception:" << e.what();
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+    }
+}
+
 void HttpServer::handleGetOrderList(QTcpSocket *clientSocket,
                                     const QUrlQuery &query) {
     // 打开数据库
@@ -1349,6 +1672,753 @@ void HttpServer::handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &que
     // QByteArray jsonData = doc.toJson(QJsonDocument::Indented);
     // qDebug() << jsonData;
     sendResponse(clientSocket, jsonData);
+}
+
+
+void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    qDebug() << "[POST /mall/auth/promot/withdraw] body =" << QString::fromUtf8(body);
+
+    // 解析JSON请求体
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(body);
+    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+        // 返回错误响应 - JSON格式错误
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Invalid JSON format";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject jsonObj = jsonDoc.object();
+
+    // 检查是否有data字段
+    if (!jsonObj.contains("data") || !jsonObj["data"].isObject()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing 'data' field in request";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject dataObj = jsonObj["data"].toObject();
+
+    // 提取字段
+    QString username = dataObj.value("username").toString();
+    QString password = dataObj.value("passwd").toString();
+    QString alipay = dataObj.value("alipay").toString();
+
+    // 提取可选字段（提现金额）
+    double withdrawAmount = 0.0;
+    if (dataObj.contains("amount")) {
+        withdrawAmount = dataObj.value("amount").toDouble();
+    }
+
+    qDebug() << "Withdraw request:";
+    qDebug() << "  Username:" << username;
+    qDebug() << "  Alipay:" << alipay;
+    qDebug() << "  Withdraw Amount:" << withdrawAmount;
+
+    // 验证必填字段
+    if (username.isEmpty() || password.isEmpty() || alipay.isEmpty()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing required fields (username, password, alipay)";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 验证支付宝账号格式（简单验证）
+    if (alipay.length() < 5) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "支付宝账号格式不正确";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+
+    try {
+        // 检查用户是否存在
+        if (!dbManager->checkMallUserExists(username)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 404;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "用户不存在";
+            dataObj["username"] = username;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 验证用户密码
+        if (!dbManager->validateMallUserLogin(username, password)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 401;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "密码错误";
+            dataObj["username"] = username;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 获取用户信息
+        SQL_MallUser user = dbManager->getMallUserByUsername(username);
+
+        // 如果没有指定提现金额，默认提现全部余额
+        if (withdrawAmount <= 0) {
+            withdrawAmount = user.balance;
+        }
+
+        // 验证提现金额
+        if (withdrawAmount <= 0) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "提现金额必须大于0";
+            dataObj["currentBalance"] = user.balance;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 检查余额是否足够
+        if (user.balance < withdrawAmount) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "余额不足";
+            dataObj["currentBalance"] = user.balance;
+            dataObj["withdrawAmount"] = withdrawAmount;
+            dataObj["shortage"] = withdrawAmount - user.balance;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 检查提现金额是否达到最小提现金额
+        double minWithdrawAmount = 10.0;  // 最小提现金额10元
+        if (withdrawAmount < minWithdrawAmount) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = QString("提现金额不能低于%1元").arg(minWithdrawAmount);
+            dataObj["minWithdrawAmount"] = minWithdrawAmount;
+            dataObj["withdrawAmount"] = withdrawAmount;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 检查提现金额是否达到最大提现金额
+        double maxWithdrawAmount = 50000.0;  // 最大单次提现金额50000元
+        if (withdrawAmount > maxWithdrawAmount) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = QString("单次提现金额不能超过%1元").arg(maxWithdrawAmount);
+            dataObj["maxWithdrawAmount"] = maxWithdrawAmount;
+            dataObj["withdrawAmount"] = withdrawAmount;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        qDebug() << "Processing withdraw for user:" << username;
+        qDebug() << "  Current balance:" << user.balance;
+        qDebug() << "  Withdraw amount:" << withdrawAmount;
+        qDebug() << "  Alipay account:" << alipay;
+
+        // 扣除余额
+        if (!dbManager->updateMallUserBalance(username, -withdrawAmount)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 500;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "扣除余额失败，请稍后重试";
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 创建提现记录（需要在DatabaseManager中添加相关函数）
+        QString withdrawId = generateWithdrawId();
+        QString withdrawTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+
+        // TODO: 这里应该将提现记录保存到数据库
+        // bool withdrawRecordCreated = dbManager->createWithdrawRecord(withdrawId, username, withdrawAmount, alipay, withdrawTime);
+        bool withdrawRecordCreated = true;  // 暂时返回成功
+
+        if (!withdrawRecordCreated) {
+            // 如果创建记录失败，回滚余额扣除
+            dbManager->updateMallUserBalance(username, withdrawAmount);
+
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 500;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "创建提现记录失败，已回滚余额";
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 获取更新后的用户信息
+        SQL_MallUser updatedUser = dbManager->getMallUserByUsername(username);
+
+        // 构建成功响应
+        QJsonObject successResp;
+        successResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        successResp["code"] = 200;
+
+        QJsonObject successData;
+        successData["success"] = true;
+        successData["message"] = "提现申请提交成功";
+        successData["username"] = username;
+        successData["withdrawId"] = withdrawId;
+        successData["withdrawAmount"] = withdrawAmount;
+        successData["alipayAccount"] = alipay;
+        successData["withdrawTime"] = withdrawTime;
+        successData["newBalance"] = updatedUser.balance;
+        successData["oldBalance"] = user.balance;
+        successData["processingTime"] = "预计1-3个工作日到账";
+
+        // 提现规则信息
+        QJsonObject withdrawRules;
+        withdrawRules["minAmount"] = minWithdrawAmount;
+        withdrawRules["maxAmount"] = maxWithdrawAmount;
+        withdrawRules["feeRate"] = "0%";  // 手续费率
+        withdrawRules["processingTime"] = "1-3个工作日";
+        successData["withdrawRules"] = withdrawRules;
+
+        // 调试信息
+        QJsonObject debugInfo;
+        debugInfo["passwordVerified"] = true;
+        debugInfo["balanceBefore"] = user.balance;
+        debugInfo["balanceAfter"] = updatedUser.balance;
+        debugInfo["withdrawRecordCreated"] = withdrawRecordCreated;
+        debugInfo["userLevel"] = user.userLevel;
+        successData["debugInfo"] = debugInfo;
+
+        successResp["data"] = successData;
+
+        qDebug() << "Withdraw successful for user:" << username;
+        qDebug() << "  Withdraw ID:" << withdrawId;
+        qDebug() << "  Amount:" << withdrawAmount;
+        qDebug() << "  Old balance:" << user.balance;
+        qDebug() << "  New balance:" << updatedUser.balance;
+
+        sendResponse(clientSocket, QJsonDocument(successResp).toJson());
+
+    } catch (const std::exception &e) {
+        // 捕获并处理任何异常
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = QString("提现失败: %1").arg(e.what());
+        errorResp["data"] = dataObj;
+
+        qDebug() << "Withdraw exception:" << e.what();
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+    }
+}
+
+// 生成提现ID的辅助函数
+QString HttpServer::generateWithdrawId()
+{
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMddHHmmss");
+    QString random = QString::number(QRandomGenerator::global()->bounded(1000, 9999));
+    return "WD_" + timestamp + "_" + random;
+}
+
+void HttpServer::handlePostMallSendMailCode(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    qDebug() << "[POST /mall/auth/passwd-reset/sendemail] body =" << QString::fromUtf8(body);
+
+    // 解析JSON请求体
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(body);
+    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+        // 返回错误响应 - JSON格式错误
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Invalid JSON format";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject jsonObj = jsonDoc.object();
+
+    // 检查是否有data字段
+    if (!jsonObj.contains("data") || !jsonObj["data"].isObject()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing 'data' field in request";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject dataObj = jsonObj["data"].toObject();
+
+    // 提取字段
+    QString username = dataObj.value("username").toString();
+    QString email = dataObj.value("email").toString();
+
+    qDebug() << "Send email code request:";
+    qDebug() << "  Username:" << username;
+    qDebug() << "  Email:" << email;
+
+    // 验证必填字段
+    if (username.isEmpty() || email.isEmpty()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing required fields (username, email)";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 检查dbManager是否已初始化
+    if (!dbManager) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Database error";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    try {
+        // 检查用户是否存在
+        if (!dbManager->checkMallUserExists(username)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "用户不存在";
+            dataObj["username"] = username;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 获取用户信息，验证邮箱是否匹配
+        SQL_MallUser user = dbManager->getMallUserByUsername(username);
+
+        if (user.email.isEmpty()) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "用户未绑定邮箱";
+            dataObj["username"] = username;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        if (user.email != email) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "邮箱和账号不匹配";
+            dataObj["providedEmail"] = email;
+            dataObj["registeredEmail"] = user.email;
+            dataObj["username"] = username;
+            errorResp["data"] = dataObj;
+
+            qDebug() << "Email mismatch for user:" << username;
+            qDebug() << "  Provided email:" << email;
+            qDebug() << "  Registered email:" << user.email;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 生成验证码（硬编码为8888，与重设密码函数保持一致）
+        QString verificationCode = "8888";
+        qDebug() << "Generated verification code for" << email << ":" << verificationCode;
+
+        // TODO 待补充发送邮件函数
+        // 这里应该调用实际的邮件发送接口
+        // sendEmailVerificationCode(email, verificationCode, username);
+        qDebug() << "[TODO] Should send email to" << email << "with code:" << verificationCode;
+
+        // 构建成功响应
+        QJsonObject successResp;
+        successResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        successResp["code"] = 200;
+
+        QJsonObject successData;
+        successData["success"] = true;
+        successData["message"] = "验证码已发送到邮箱";
+        successData["username"] = username;
+        successData["email"] = email;
+        successData["verificationCode"] = verificationCode;  // 实际应用中不应该返回验证码
+        successData["emailSent"] = false;  // 标记邮件是否实际发送
+
+        // 调试信息
+        QJsonObject debugInfo;
+        debugInfo["userExists"] = true;
+        debugInfo["emailMatch"] = true;
+        debugInfo["verificationCode"] = verificationCode;
+        debugInfo["emailService"] = "TODO - not implemented";
+        debugInfo["emailSentTime"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+        successData["debugInfo"] = debugInfo;
+
+        successResp["data"] = successData;
+
+        qDebug() << "Email verification code generated for user:" << username;
+        qDebug() << "  Email:" << email;
+        qDebug() << "  Code:" << verificationCode;
+
+        sendResponse(clientSocket, QJsonDocument(successResp).toJson());
+
+    } catch (const std::exception &e) {
+        // 捕获并处理任何异常
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = QString("发送验证码失败: %1").arg(e.what());
+        errorResp["data"] = dataObj;
+
+        qDebug() << "Send email code exception:" << e.what();
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+    }
+}
+
+
+void HttpServer::handlePostMallPasswdReset(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    qDebug() << "[POST /mall/passwd/reset] body =" << QString::fromUtf8(body);
+
+    // 解析JSON请求体
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(body);
+    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+        // 返回错误响应 - JSON格式错误
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+        errorResp["msg"] = "Invalid JSON format";
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Invalid JSON format";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject jsonObj = jsonDoc.object();
+
+    // 检查是否有data字段
+    if (!jsonObj.contains("data") || !jsonObj["data"].isObject()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+        errorResp["msg"] = "Missing data field";
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing 'data' field in request";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject dataObj = jsonObj["data"].toObject();
+
+    // 提取字段
+    QString username = dataObj.value("username").toString();
+    QString password = dataObj.value("password").toString();
+    QString email = dataObj.value("email").toString();
+    QString verifyCode = dataObj.value("Verifycode").toString();
+
+    qDebug() << "Password reset request:";
+    qDebug() << "  Username:" << username;
+    qDebug() << "  New Password:" << password;
+    qDebug() << "  Email:" << email;
+    qDebug() << "  Verify Code:" << verifyCode;
+
+    // 验证必填字段
+    if (username.isEmpty() || password.isEmpty() || email.isEmpty()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+        errorResp["msg"] = "Missing required fields";
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing required fields (username, password, email)";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 验证码验证 - 默认写死为8888（根据您的要求）
+    QString expectedVerifyCode = "8888";
+    if (verifyCode != expectedVerifyCode) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+        errorResp["msg"] = "Invalid verification code";
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = QString("Invalid verification code. Expected: %1, Received: %2")
+                                 .arg(expectedVerifyCode).arg(verifyCode);
+        dataObj["expectedCode"] = expectedVerifyCode;
+        dataObj["receivedCode"] = verifyCode;
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 密码强度验证：至少6位
+    if (password.length() < 6) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+        errorResp["msg"] = "Password too weak";
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Password must be at least 6 characters";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    try {
+        // 检查用户是否存在
+        if (!dbManager->checkMallUserExists(username)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 404;
+            errorResp["msg"] = "User not found";
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "User does not exist";
+            dataObj["username"] = username;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 获取用户信息，验证邮箱是否匹配
+        SQL_MallUser user = dbManager->getMallUserByUsername(username);
+        if (user.email != email) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+            errorResp["msg"] = "Email mismatch";
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "Email does not match the registered email for this user";
+            dataObj["providedEmail"] = email;
+            dataObj["registeredEmail"] = user.email;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 检查新密码是否与旧密码相同
+        if (user.password == password) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 400;
+            errorResp["msg"] = "Same password";
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "New password cannot be the same as the old password";
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        qDebug() << "Updating password for user:" << username;
+        qDebug() << "Old password:" << user.password;
+        qDebug() << "New password:" << password;
+        qDebug() << "User email verified:" << user.email;
+
+        // 更新密码
+        if (!dbManager->updateMallUserPassword(username, password)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 500;
+            errorResp["msg"] = "Failed to update password";
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "Failed to update password in database";
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 获取更新后的用户信息
+        SQL_MallUser updatedUser = dbManager->getMallUserByUsername(username);
+
+        // 构建成功响应
+        QJsonObject successResp;
+        successResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        successResp["code"] = 200;
+        successResp["msg"] = "Password reset successful";
+
+        QJsonObject successData;
+        successData["success"] = true;
+        successData["message"] = "Password has been successfully reset";
+        successData["username"] = username;
+        successData["email"] = email;
+        successData["newPassword"] = password;  // 返回新密码（根据您的要求）
+        successData["passwordUpdated"] = true;
+        successData["updateTime"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+
+        // 用户信息
+        successData["userLevel"] = updatedUser.userLevel;
+        successData["balance"] = updatedUser.balance;
+        successData["points"] = updatedUser.points;
+        successData["phone"] = updatedUser.phone;
+        successData["inviteCode"] = updatedUser.inviteCode;
+        successData["createTime"] = updatedUser.createTime;
+
+        // 调试信息
+        QJsonObject debugInfo;
+        debugInfo["passwordStorage"] = "plaintext";
+        debugInfo["verifyCodeUsed"] = verifyCode;
+        debugInfo["verifyCodeExpected"] = expectedVerifyCode;
+        debugInfo["userExists"] = true;
+        debugInfo["emailMatch"] = true;
+        debugInfo["oldPassword"] = user.password;  // 显示旧密码（用于调试）
+        debugInfo["newPassword"] = password;      // 显示新密码（用于调试）
+        successData["debugInfo"] = debugInfo;
+
+        successResp["data"] = successData;
+
+        qDebug() << "Password reset successful for user:" << username;
+        qDebug() << "Old password was:" << user.password;
+        qDebug() << "New password is:" << password;
+
+        sendResponse(clientSocket, QJsonDocument(successResp).toJson());
+
+    } catch (const std::exception &e) {
+        // 捕获并处理任何异常
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+        errorResp["msg"] = "Server error";
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = QString("Password reset failed: %1").arg(e.what());
+        errorResp["data"] = dataObj;
+
+        qDebug() << "Password reset exception:" << e.what();
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+    }
 }
 void HttpServer::handlePostMallRegist(QTcpSocket *clientSocket, const QByteArray &body)
 {

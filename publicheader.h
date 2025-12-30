@@ -282,6 +282,16 @@ struct SQL_MallUser {
         createTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
     }
 };
+struct SQL_WithdrawRecord {
+    QString withdrawId;      // 提现记录ID
+    QString username;        // 用户名
+    double amount;           // 提现金额
+    QString alipayAccount;   // 支付宝账号
+    QString status;          // 状态：pending, processing, completed, failed
+    QString createTime;      // 创建时间
+    QString updateTime;      // 更新时间
+    QString remark;          // 备注
+};
 
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）
 // QMap<QString, QString> productNameMap = {
