@@ -280,6 +280,63 @@ struct SQL_WithdrawRecord {
     QString remark;          // 备注
 };
 
+// 在头文件中定义
+struct SQL_AppealRecord {
+    int id;
+    QString username;
+    QString orderId;
+    QString appealType;  // text 或 picture
+    QString contentPath;
+    QString textContent;
+    QString appealTime;
+    QString status;      // 总体状态
+    QString operatorName;
+    QString result;
+    QString resultTime;
+    QString processingStatus;  // 处理状态
+    int appealLevel;     // 投诉级别
+    QString priority;    // 优先级
+
+    // // 从查询结果初始化
+    // void fromQuery(const QSqlQuery &query) {
+    //     id = query.value("id").toInt();
+    //     username = query.value("username").toString();
+    //     orderId = query.value("order_id").toString();
+    //     appealType = query.value("appeal_type").toString();
+    //     contentPath = query.value("content_path").toString();
+    //     textContent = query.value("text_content").toString();
+    //     appealTime = query.value("appeal_time").toString();
+    //     status = query.value("status").toString();
+    //     operatorName = query.value("operator").toString();
+    //     result = query.value("result").toString();
+    //     resultTime = query.value("result_time").toString();
+    //     processingStatus = query.value("processing_status").toString();
+    //     appealLevel = query.value("appeal_level").toInt();
+    //     priority = query.value("priority").toString();
+    // }
+
+    // 转换为JSON
+    QJsonObject toJson() const {
+        QJsonObject obj;
+        obj["id"] = id;
+        obj["username"] = username;
+        obj["orderId"] = orderId;
+        obj["appealType"] = appealType;
+        obj["contentPath"] = contentPath;
+        obj["appealTime"] = appealTime;
+        obj["status"] = status;
+        obj["processingStatus"] = processingStatus;
+        obj["appealLevel"] = appealLevel;
+        obj["priority"] = priority;
+
+        if (!operatorName.isEmpty()) obj["operator"] = operatorName;
+        if (!result.isEmpty()) obj["result"] = result;
+        if (!resultTime.isEmpty()) obj["resultTime"] = resultTime;
+
+        return obj;
+    }
+};
+
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）
 // QMap<QString, QString> productNameMap = {
 //     {"PROD001", "iPhone 15 Pro"}, {"PROD002", "MacBook Pro"},

@@ -446,6 +446,8 @@ void HttpServer::onReadyRead() {
                 handleGetAuthPromote(clientSocket, query);
             }else if (path == "/mall/auth/order/query") {
                 handleGetOrderQuery(clientSocket, query);
+            }else if (path == "/mall/auth/order/recheck-response") {
+                handleGetOrderAppeal(clientSocket, query);
             }else if (path == "/home" || path.contains(".css") /*|| path.contains(".jpg")*/ || path.contains("/login") \
                        || path.contains(".js") /*|| path.contains(".png")*/ || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
@@ -1588,6 +1590,107 @@ void HttpServer::handleGetAuthInfo(QTcpSocket *clientSocket, const QUrlQuery &qu
     }
 }
 
+void HttpServer::handleGetOrderAppeal(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    qDebug() << "Handling GET order appeal response request";
+
+    // 解析查询参数
+    QString username = query.queryItemValue("username");
+
+    if (username.isEmpty()) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Missing required parameter: username";
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+
+
+    // 获取用户的所有投诉记录
+    QList<SQL_AppealRecord> appeals;
+    try {
+        // 这里需要实现getAppealsByUser方法
+        appeals = dbManager->getAppealsByUser(username);
+
+        if (appeals.isEmpty()) {
+            qDebug() << "No appeals found for user:" << username;
+        }
+    } catch (const std::exception &e) {
+        qDebug() << "Database error:" << e.what();
+
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Database error";
+        errorResponse["message"] = QString(e.what());
+        errorResponse["code"] = 500;
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        return;
+    }
+
+    // 构建API响应
+    QJsonObject response;
+
+    // 设置时间戳
+    QDateTime currentTime = QDateTime::currentDateTimeUtc();
+    response["timestamp"] = currentTime.toString(Qt::ISODate);
+
+    // 构建数据数组
+    QJsonArray dataArray;
+
+    // 映射数据库状态到API的verificationResult
+    auto mapStatusToResult = [](const QString &dbStatus, const QString &processingStatus) -> QString {
+        // 如果有处理状态，优先使用处理状态
+        if (!processingStatus.isEmpty()) {
+            return processingStatus;
+        }
+
+        // 否则使用总体状态
+        if (dbStatus == "已完成") return "处理完成";
+        if (dbStatus == "已拒绝") return "投诉驳回";
+        if (dbStatus == "处理中") return "正在处理";
+        if (dbStatus == "复核中") return "复核中";
+        if (dbStatus == "待处理") return "等待处理";
+        if (dbStatus == "已取消") return "已取消";
+
+        // 如果数据库有result字段，使用result
+        return dbStatus.isEmpty() ? "等待处理" : dbStatus;
+    };
+
+    for (const SQL_AppealRecord &appeal : appeals) {
+        QJsonObject appealObj;
+
+        // 订单ID
+        appealObj["orderId"] = appeal.orderId;
+
+        // 验证结果
+        QString verificationResult = mapStatusToResult(appeal.status, appeal.processingStatus);
+
+        // 如果有具体的结果描述，使用结果描述
+        if (!appeal.result.isEmpty()) {
+            verificationResult = appeal.result;
+        }
+
+        appealObj["verificationResult"] = verificationResult;
+
+        // 可选：添加其他信息
+        // appealObj["appealTime"] = appeal.appealTime;
+        // appealObj["appealType"] = appeal.appealType;
+        // appealObj["status"] = appeal.status;
+        // appealObj["processingStatus"] = appeal.processingStatus;
+        // appealObj["priority"] = appeal.priority;
+
+        dataArray.append(appealObj);
+    }
+
+    response["data"] = dataArray;
+
+    // 发送响应
+    sendJsonResponse(clientSocket, 200, response);
+
+    qDebug() << "Order appeal response sent for user:" << username
+             << "total appeals:" << appeals.size();
+}
+
 void HttpServer::handleGetOrderQuery(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     qDebug() << "Handling GET order query request";
@@ -2376,7 +2479,7 @@ void HttpServer::handlePostMallUserAppealPic(QTcpSocket *clientSocket, const QBy
     qDebug() << "Wrote" << bytesWritten << "bytes to file:" << filePath;
 
 
-    dbManager->insertUserAppeal(username, orderId, "picture", filePath);
+   dbManager->insertUserAppeal(username, orderId, "picture", filePath, "", "normal", 1);
 
     // 构建成功响应
     QJsonObject response;

@@ -8,7 +8,30 @@
 #include <QString>
 #include <QDebug>
 #include "publicheader.h"
+// 可以在头文件中定义这些状态常量
+namespace AppealStatus {
+// 总体状态
+const QString PENDING = "待处理";
+const QString PROCESSING = "处理中";
+const QString REVIEWING = "复核中";
+const QString COMPLETED = "已完成";
+const QString REJECTED = "已拒绝";
+const QString CANCELLED = "已取消";
 
+// 处理状态分类
+const QString NEED_FURTHER_INFO = "需要更多信息";
+const QString WAITING_FOR_RESPONSE = "等待用户回复";
+const QString TECHNICAL_ISSUE = "技术问题";
+const QString CUSTOMER_SERVICE = "客服处理中";
+const QString REFUND_PROCESSING = "退款处理中";
+const QString QUALITY_INSPECTION = "质量检查中";
+
+// 优先级
+const QString URGENT = "urgent";
+const QString HIGH = "high";
+const QString NORMAL = "normal";
+const QString LOW = "low";
+}
 
 class DatabaseManager : public QObject
 {
@@ -125,12 +148,21 @@ public:
     int getOrderCountByCommandId(const QString &commandId);
     QList<SQL_Order> getUserOrdersWithSnapshots(const QString &username);
     SQL_Order getOrderWithSnapshot(const QString &orderId);
-    bool insertUserAppeal(const QString &username, const QString &orderId,
+  /*  bool insertUserAppeal(const QString &username, const QString &orderId,
                           const QString &appealType, const QString &contentPath,
                           const QString &textContent);
 
     bool insertUserAppeal(const QString &username, const QString &orderId,
-                          const QString &appealType, const QString &contentPath);
+                          const QString &appealType, const QString &contentPath);*/
+    QList<SQL_AppealRecord> getAppealsByPriority(const QString &priority);
+    QList<SQL_AppealRecord> getAppealsByProcessingStatus(const QString &processingStatus);
+    bool updateAppealPriority(int appealId, const QString &priority);
+    bool updateAppealProcessingStatus(int appealId, const QString &processingStatus);
+    bool insertUserAppeal(const QString &username, const QString &orderId,
+                          const QString &appealType, const QString &contentPath,
+                          const QString &textContent,
+                          const QString &priority = "normal",
+                          int appealLevel = 1);QList<SQL_AppealRecord> getAppealsByUser(const QString &username);
 private:
     QSqlDatabase db;
 
@@ -148,6 +180,7 @@ private:
     double getInvitedUsersTotalConsumption(const QString &inviterUsername);
     int getInvitedUserCount(const QString &inviterUsername);
     bool createWithdrawTable();
+    SQL_AppealRecord extractAppealFromQuery(const QSqlQuery &query);
 };
 
 #endif // DATABASEMANAGER_H

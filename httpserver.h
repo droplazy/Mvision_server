@@ -128,6 +128,7 @@ private:
     void handlePostMallUserAppealPic(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
     void createAppealDirectoryIfNeeded();
     QByteArray parseMultipartData(const QByteArray &body, const QByteArray &boundary);
+    void handleGetOrderAppeal(QTcpSocket *clientSocket, const QUrlQuery &query);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

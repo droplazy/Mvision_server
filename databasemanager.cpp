@@ -1259,7 +1259,28 @@ SQL_Order DatabaseManager::extractOrderFromQuery(const QSqlQuery &query)
 
     return order;
 }
+// 从查询结果中提取投诉记录数据
+SQL_AppealRecord DatabaseManager::extractAppealFromQuery(const QSqlQuery &query)
+{
+    SQL_AppealRecord appeal;
 
+    appeal.id = query.value("id").toInt();
+    appeal.username = query.value("username").toString();
+    appeal.orderId = query.value("order_id").toString();
+    appeal.appealType = query.value("appeal_type").toString();
+    appeal.contentPath = query.value("content_path").toString();
+    appeal.textContent = query.value("text_content").toString();
+    appeal.appealTime = query.value("appeal_time").toString();
+    appeal.status = query.value("status").toString();
+    appeal.operatorName = query.value("operator").toString();
+    appeal.result = query.value("result").toString();
+    appeal.resultTime = query.value("result_time").toString();
+    appeal.processingStatus = query.value("processing_status").toString();
+    appeal.appealLevel = query.value("appeal_level").toInt();
+    appeal.priority = query.value("priority").toString();
+
+    return appeal;
+}
 // 新增：根据指令ID获取订单
 QList<SQL_Order> DatabaseManager::getOrdersByCommandId(const QString &commandId)
 {
@@ -2022,10 +2043,13 @@ bool DatabaseManager::createAppealTable()
             content_path TEXT,                -- 文本或图片的保存路径
             text_content TEXT,                -- 如果是文本投诉，保存原文
             appeal_time TEXT DEFAULT (datetime('now', 'localtime')),  -- 投诉时间
-            status TEXT DEFAULT 'pending',    -- pending, processing, completed
+            status TEXT DEFAULT '待处理',     -- 修改：明确的状态值
             operator TEXT,                    -- 处理人员
             result TEXT,                      -- 处理结果
             result_time TEXT,
+            processing_status TEXT,           -- 新增：处理状态分类
+            appeal_level INTEGER DEFAULT 1,   -- 新增：投诉级别（1-5级）
+            priority TEXT DEFAULT 'normal',   -- 新增：优先级（urgent, high, normal, low）
             FOREIGN KEY (username) REFERENCES MallUsers(username) ON DELETE CASCADE,
             FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE CASCADE
         )
@@ -2041,8 +2065,11 @@ bool DatabaseManager::createAppealTable()
         "CREATE INDEX IF NOT EXISTS idx_appeal_user ON UserAppeals(username)",
         "CREATE INDEX IF NOT EXISTS idx_appeal_order ON UserAppeals(order_id)",
         "CREATE INDEX IF NOT EXISTS idx_appeal_time ON UserAppeals(appeal_time)",
-        "CREATE INDEX IF NOT EXISTS idx_appeal_status ON UserAppeals(status)",
-        "CREATE INDEX IF NOT EXISTS idx_appeal_type ON UserAppeals(appeal_type)"
+        "CREATE INDEX IF NOT EXISTS idx_appeal_status ON UserAppeals(status)",  // 原有状态
+        "CREATE INDEX IF NOT EXISTS idx_appeal_processing_status ON UserAppeals(processing_status)",  // 新增索引
+        "CREATE INDEX IF NOT EXISTS idx_appeal_type ON UserAppeals(appeal_type)",
+        "CREATE INDEX IF NOT EXISTS idx_appeal_priority ON UserAppeals(priority)",  // 新增索引
+        "CREATE INDEX IF NOT EXISTS idx_appeal_level ON UserAppeals(appeal_level)"   // 新增索引
     };
 
     for (const QString &indexQuery : indexQueries) {
@@ -2057,15 +2084,68 @@ bool DatabaseManager::createAppealTable()
 
 // 插入投诉记录
 // 在DatabaseManager.cpp中
+// DatabaseManager.cpp
+
+// 根据用户名获取投诉记录
+QList<SQL_AppealRecord> DatabaseManager::getAppealsByUser(const QString &username)
+{
+    QList<SQL_AppealRecord> appeals;
+
+    QSqlQuery query;
+    query.prepare(R"(
+        SELECT * FROM UserAppeals
+        WHERE username = :username
+        ORDER BY appeal_time DESC
+    )");
+
+    query.bindValue(":username", username);
+
+    if (!query.exec()) {
+        qDebug() << "Error fetching appeals by user:" << query.lastError().text();
+        return appeals;
+    }
+
+    qDebug() << "Query executed successfully for user:" << username;
+
+    int count = 0;
+    while (query.next()) {
+        SQL_AppealRecord appeal;
+        appeal.id = query.value("id").toInt();
+        appeal.username = query.value("username").toString();
+        appeal.orderId = query.value("order_id").toString();
+        appeal.appealType = query.value("appeal_type").toString();
+        appeal.contentPath = query.value("content_path").toString();
+        appeal.textContent = query.value("text_content").toString();
+        appeal.appealTime = query.value("appeal_time").toString();
+        appeal.status = query.value("status").toString();
+        appeal.operatorName = query.value("operator").toString();
+        appeal.result = query.value("result").toString();
+        appeal.resultTime = query.value("result_time").toString();
+        appeal.processingStatus = query.value("processing_status").toString();
+        appeal.appealLevel = query.value("appeal_level").toInt();
+        appeal.priority = query.value("priority").toString();
+
+        appeals.append(appeal);
+        count++;
+    }
+
+    qDebug() << "Retrieved" << count << "appeals for user:" << username;
+    return appeals;
+}
+
 bool DatabaseManager::insertUserAppeal(const QString &username, const QString &orderId,
                                        const QString &appealType, const QString &contentPath,
-                                       const QString &textContent)
+                                       const QString &textContent,
+                                       const QString &priority,  // 这里不要加 = "normal"
+                                       int appealLevel)          // 这里不要加 = 1
 {
     QSqlQuery query;
     query.prepare(R"(
         INSERT INTO UserAppeals
-        (username, order_id, appeal_type, content_path, text_content)
-        VALUES (:username, :order_id, :appeal_type, :content_path, :text_content)
+        (username, order_id, appeal_type, content_path, text_content,
+         status, processing_status, priority, appeal_level)
+        VALUES (:username, :order_id, :appeal_type, :content_path, :text_content,
+                :status, :processing_status, :priority, :appeal_level)
     )");
 
     query.bindValue(":username", username);
@@ -2073,6 +2153,10 @@ bool DatabaseManager::insertUserAppeal(const QString &username, const QString &o
     query.bindValue(":appeal_type", appealType);
     query.bindValue(":content_path", contentPath);
     query.bindValue(":text_content", textContent);
+    query.bindValue(":status", AppealStatus::PENDING);
+    query.bindValue(":processing_status", "");  // 初始为空
+    query.bindValue(":priority", priority);
+    query.bindValue(":appeal_level", appealLevel);
 
     if (!query.exec()) {
         qDebug() << "Error inserting user appeal: " << query.lastError().text();
@@ -2083,13 +2167,92 @@ bool DatabaseManager::insertUserAppeal(const QString &username, const QString &o
     return true;
 }
 
-// 重载版本，不带textContent参数
-bool DatabaseManager::insertUserAppeal(const QString &username, const QString &orderId,
-                                       const QString &appealType, const QString &contentPath)
+
+// 更新处理状态
+bool DatabaseManager::updateAppealProcessingStatus(int appealId, const QString &processingStatus)
 {
-    return insertUserAppeal(username, orderId, appealType, contentPath, "");
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE UserAppeals
+        SET processing_status = :processing_status,
+            update_time = datetime('now', 'localtime')
+        WHERE id = :id
+    )");
+
+    query.bindValue(":id", appealId);
+    query.bindValue(":processing_status", processingStatus);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating appeal processing status: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Appeal processing status updated. ID:" << appealId << "Status:" << processingStatus;
+    return true;
 }
 
+// 更新优先级
+bool DatabaseManager::updateAppealPriority(int appealId, const QString &priority)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE UserAppeals
+        SET priority = :priority,
+            update_time = datetime('now', 'localtime')
+        WHERE id = :id
+    )");
+
+    query.bindValue(":id", appealId);
+    query.bindValue(":priority", priority);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating appeal priority: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Appeal priority updated. ID:" << appealId << "Priority:" << priority;
+    return true;
+}
+
+// 获取特定处理状态的投诉列表
+QList<SQL_AppealRecord> DatabaseManager::getAppealsByProcessingStatus(const QString &processingStatus)
+{
+    QList<SQL_AppealRecord> appeals;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM UserAppeals WHERE processing_status = :processing_status ORDER BY appeal_time DESC");
+    query.bindValue(":processing_status", processingStatus);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_AppealRecord appeal = extractAppealFromQuery(query);
+            appeals.append(appeal);
+        }
+    } else {
+        qDebug() << "Error fetching appeals by processing status: " << query.lastError().text();
+    }
+
+    return appeals;
+}
+
+// 根据优先级获取投诉列表
+QList<SQL_AppealRecord> DatabaseManager::getAppealsByPriority(const QString &priority)
+{
+    QList<SQL_AppealRecord> appeals;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM UserAppeals WHERE priority = :priority ORDER BY appeal_time DESC");
+    query.bindValue(":priority", priority);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_AppealRecord appeal = extractAppealFromQuery(query);
+            appeals.append(appeal);
+        }
+    } else {
+        qDebug() << "Error fetching appeals by priority: " << query.lastError().text();
+    }
+
+    return appeals;
+}
 #if 0
 
 // 创建测试用户
