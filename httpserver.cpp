@@ -22,6 +22,10 @@ HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent)
     generateTextData();
     createDownloadDirectoryIfNeeded();
     createUploadDirectoryIfNeeded();
+    // 初始化订单超时定时器
+    initOrderTimer();
+
+    qDebug() << "HttpServer initialized with pending order container";
 }
 
 void HttpServer::createDownloadDirectoryIfNeeded()
@@ -427,8 +431,12 @@ void HttpServer::onReadyRead() {
                 handleGetOrderList(clientSocket, query);
             }else if (path == "/mall/auth/info") {
                 handleGetAuthInfo(clientSocket, query);
+            }else if (path == "/debug/orderPaid") {
+                handleGetpaidOK(clientSocket, query);
             }else if (path == "/mall/auth/promot") {
                 handleGetAuthPromote(clientSocket, query);
+            }else if (path == "/mall/auth/order/query") {
+                handleGetOrderQuery(clientSocket, query);
             }else if (path == "/home" || path.contains(".css") /*|| path.contains(".jpg")*/ || path.contains("/login") \
                        || path.contains(".js") /*|| path.contains(".png")*/ || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
@@ -511,6 +519,8 @@ void HttpServer::onReadyRead() {
                     handlePostMallSendMailCode(clientSocket, body);
                 }else if (path == "/mall/auth/promot/withdraw") {
                     handlePostMallSendwithdraw(clientSocket, body);
+                }else if (path == "/mall/product/order-checkout") {
+                    handlePostMallOrderCheckout(clientSocket, body);
                 }else {
                     qDebug() << path << "[POST /process/create] body =" << body;
                     sendNotFound(clientSocket);
@@ -1239,6 +1249,170 @@ void HttpServer::handleGetAuthPromote(QTcpSocket *clientSocket, const QUrlQuery 
     }
 }
 
+void HttpServer::handleGetpaidOK(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    qDebug() << "[GET /debug/orderPaid] query =" << query.toString();
+
+    // 获取orderId参数
+    QString orderId = query.queryItemValue("orderId");
+
+    qDebug() << "Order payment test for order ID:" << orderId;
+
+    // 验证必填字段
+    if (orderId.isEmpty()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing required parameter: orderId";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    try {
+        // 检查订单是否在待支付容器中
+        if (!pendingOrders.contains(orderId)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 404;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "订单不存在或已过期";
+            dataObj["orderId"] = orderId;
+            dataObj["pendingOrdersCount"] = static_cast<int>(pendingOrders.size());
+
+            // 列出当前所有待支付订单ID
+            QJsonArray pendingOrderIds;
+            for (auto it = pendingOrders.begin(); it != pendingOrders.end(); ++it) {
+                pendingOrderIds.append(it.key());
+            }
+            dataObj["allPendingOrderIds"] = pendingOrderIds;
+
+            errorResp["data"] = dataObj;
+
+            qDebug() << "Order not found in pending orders:" << orderId;
+            qDebug() << "Current pending orders:" << pendingOrderIds;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 获取订单信息
+        SQL_Order order = pendingOrders.value(orderId);
+
+        qDebug() << "Processing payment for order:";
+        qDebug() << "  Order ID:" << order.orderId;
+        qDebug() << "  User:" << order.user;
+        qDebug() << "  Product:" << order.productId;
+        qDebug() << "  Amount:" << order.totalPrice;
+        qDebug() << "  Status:" << order.status;
+        qDebug() << "  Created:" << order.createTime;
+
+        // 模拟支付成功，将订单保存到数据库
+        if (!dbManager) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 500;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "Database manager not available";
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 更新订单状态为已支付
+        order.status = "paid";
+        order.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+
+        // 将订单保存到数据库
+        if (!dbManager->insertOrder(order)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 500;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "Failed to save order to database";
+            dataObj["orderId"] = orderId;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 从待支付容器中移除
+        pendingOrders.remove(orderId);
+
+        // 构建成功响应
+        QJsonObject successResp;
+        successResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        successResp["code"] = 200;
+
+        QJsonObject successData;
+        successData["success"] = true;
+        successData["message"] = "订单支付成功，已保存到数据库";
+        successData["orderId"] = orderId;
+        successData["paymentStatus"] = "paid";
+        successData["savedToDatabase"] = true;
+        successData["paymentTime"] = order.updateTime;
+
+        // 订单详情
+        QJsonObject orderDetails;
+        orderDetails["productId"] = order.productId;
+        orderDetails["unitPrice"] = order.unitPrice;
+        orderDetails["quantity"] = order.quantity;
+        orderDetails["totalPrice"] = order.totalPrice;
+        orderDetails["note"] = order.note;
+        orderDetails["user"] = order.user;
+        orderDetails["contactInfo"] = order.contactInfo;
+        orderDetails["createTime"] = order.createTime;
+        successData["orderDetails"] = orderDetails;
+
+        // 调试信息
+        QJsonObject debugInfo;
+        debugInfo["orderFoundInPending"] = true;
+        debugInfo["databaseSaved"] = true;
+        debugInfo["pendingOrdersBefore"] = static_cast<int>(pendingOrders.size()) + 1; // +1 因为已经移除了
+        debugInfo["pendingOrdersAfter"] = static_cast<int>(pendingOrders.size());
+        debugInfo["paymentMethod"] = "debug_test";
+        debugInfo["testUrl"] = "This is a test payment via /debug/orderPaid endpoint";
+        successData["debugInfo"] = debugInfo;
+
+        successResp["data"] = successData;
+
+        qDebug() << "Order payment test successful:";
+        qDebug() << "  Order ID:" << orderId;
+        qDebug() << "  User:" << order.user;
+        qDebug() << "  Amount:" << order.totalPrice;
+        qDebug() << "  Saved to database: yes";
+        qDebug() << "  Remaining pending orders:" << pendingOrders.size();
+
+        sendResponse(clientSocket, QJsonDocument(successResp).toJson());
+
+    } catch (const std::exception &e) {
+        // 捕获并处理任何异常
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = QString("订单支付测试失败: %1").arg(e.what());
+        errorResp["data"] = dataObj;
+
+        qDebug() << "Order payment test exception:" << e.what();
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+    }
+}
+
 void HttpServer::handleGetAuthInfo(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     qDebug() << "[GET /mall/auth/info] query =" << query.toString();
@@ -1373,8 +1547,205 @@ void HttpServer::handleGetAuthInfo(QTcpSocket *clientSocket, const QUrlQuery &qu
     }
 }
 
-void HttpServer::handleGetOrderList(QTcpSocket *clientSocket,
-                                    const QUrlQuery &query) {
+void HttpServer::handleGetOrderQuery(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    qDebug() << "Handling GET order query request";
+
+    // 1. 解析查询参数
+    QString username = query.queryItemValue("username");
+    QString orderStatus = query.queryItemValue("status"); // 可选参数：按状态筛选
+    QString pageStr = query.queryItemValue("page");      // 可选参数：分页
+    QString limitStr = query.queryItemValue("limit");    // 可选参数：每页数量
+
+    if (username.isEmpty()) {
+        // 返回错误响应
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Missing required parameter: username";
+        errorResponse["code"] = 400;
+
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+
+    // 3. 查询数据库获取用户订单
+    QList<SQL_Order> orders;
+
+    if (orderStatus.isEmpty()) {
+        // 查询所有订单
+        orders = dbManager->getUserOrdersWithSnapshots(username);
+    } else {
+        // 按状态筛选
+        orders = dbManager->getOrdersByUser(username);
+        // 过滤指定状态的订单
+        QList<SQL_Order> filteredOrders;
+        for (const SQL_Order &order : orders) {
+            QString apiStatus = mapOrderStatusToApi(order.status);
+            if (apiStatus == orderStatus) {
+                filteredOrders.append(order);
+            }
+        }
+
+        // 为过滤后的订单获取截图信息
+        for (int i = 0; i < filteredOrders.size(); ++i) {
+            SQL_Order &order = filteredOrders[i];
+
+            if (!order.commandId.isEmpty()) {
+                SQL_CommandHistory command = dbManager->getCommandById(order.commandId);
+                if (!command.completed_url.isEmpty()) {
+                    order.snapshot = command.completed_url;
+                }
+            }
+
+            // 如果商品名称为空，使用默认名称
+            if (order.productName.isEmpty() && !order.productId.isEmpty()) {
+                order.productName = QString("商品%1").arg(order.productId);
+            }
+        }
+        orders = filteredOrders;
+    }
+
+    // 4. 分页处理
+    int page = pageStr.toInt();
+    int limit = limitStr.toInt();
+    if (page <= 0) page = 1;
+    if (limit <= 0) limit = 20; // 默认每页20条
+
+    int total = orders.size();
+    int startIndex = (page - 1) * limit;
+    int endIndex = qMin(startIndex + limit, total);
+
+    // 5. 构建API响应
+    QJsonObject response;
+
+    // 设置时间戳为当前时间
+    QDateTime currentTime = QDateTime::currentDateTimeUtc();
+    response["timestamp"] = currentTime.toString(Qt::ISODate);
+
+    // 构建订单数据数组
+    QJsonArray orderArray;
+
+    for (int i = startIndex; i < endIndex && i < orders.size(); ++i) {
+        const SQL_Order &order = orders[i];
+
+        QJsonObject orderObj;
+
+        // 格式化订单时间
+        QString orderTime = formatOrderTime(order.createTime);
+        orderObj["orderTime"] = orderTime;
+
+        // 商品名称
+        orderObj["productName"] = order.productName;
+
+        // 数量
+        orderObj["quantity"] = order.quantity;
+
+        // 订单状态（映射到API状态）
+        QString apiStatus = mapOrderStatusToApi(order.status);
+        orderObj["orderStatus"] = apiStatus;
+
+        // 订单ID
+        orderObj["orderId"] = order.orderId;
+
+        // 截图URL（从关联的指令表中获取）
+        orderObj["snapshot"] = order.snapshot.isEmpty() ? "" : order.snapshot;
+
+        // 可选：添加其他字段
+        // orderObj["totalPrice"] = order.totalPrice;
+        // orderObj["unitPrice"] = order.unitPrice;
+
+        orderArray.append(orderObj);
+    }
+
+    response["data"] = orderArray;
+
+    // 可选：添加分页信息
+    QJsonObject pagination;
+    pagination["page"] = page;
+    pagination["limit"] = limit;
+    pagination["total"] = total;
+    pagination["totalPages"] = (total + limit - 1) / limit;
+    response["pagination"] = pagination;
+
+    // 6. 发送响应
+    sendJsonResponse(clientSocket, 200, response);
+
+    qDebug() << "Order query completed for user:" << username
+             << "total orders:" << total
+             << "returned:" << orderArray.size();
+}
+
+// 辅助函数：映射订单状态到API状态
+QString HttpServer::mapOrderStatusToApi(const QString &dbStatus)
+{
+    static QMap<QString, QString> statusMap = {
+        {"pending", "未完成"},
+        {"processing", "未完成"},
+        {"reviewing", "复核中"},
+        {"completed", "结束"},
+        {"finished", "结束"}, // 兼容不同的完成状态
+        {"failed", "失败"},
+        {"cancelled", "已取消"}
+    };
+
+    if (statusMap.contains(dbStatus)) {
+        return statusMap[dbStatus];
+    }
+
+    return dbStatus; // 如果不在映射表中，返回原始状态
+}
+
+// 辅助函数：格式化订单时间
+QString HttpServer::formatOrderTime(const QString &dbTime)
+{
+    // 尝试多种时间格式
+    QDateTime dt;
+
+    // 尝试标准SQL格式
+    dt = QDateTime::fromString(dbTime, "yyyy-MM-dd HH:mm:ss");
+
+    // 如果无效，尝试ISO格式
+    if (!dt.isValid()) {
+        dt = QDateTime::fromString(dbTime, Qt::ISODate);
+    }
+
+    // 如果无效，尝试其他常见格式
+    if (!dt.isValid()) {
+        dt = QDateTime::fromString(dbTime, "yyyy/MM/dd HH:mm:ss");
+    }
+
+    // 如果仍然无效，使用当前时间
+    if (!dt.isValid()) {
+        dt = QDateTime::currentDateTime();
+    }
+
+    // 格式化为 "yyyy.MM.dd HH:mm:ss"
+    return dt.toString("yyyy.MM.dd HH:mm:ss");
+}
+
+// 辅助函数：发送JSON响应
+void HttpServer::sendJsonResponse(QTcpSocket *clientSocket, int statusCode, const QJsonObject &json)
+{
+    QJsonDocument doc(json);
+    QByteArray responseData = doc.toJson(QJsonDocument::Indented);
+
+    QString response = QString("HTTP/1.1 %1 OK\r\n")
+                           .arg(statusCode);
+    response += "Content-Type: application/json; charset=utf-8\r\n";
+    response += QString("Content-Length: %1\r\n")
+                    .arg(responseData.size());
+    response += "Connection: close\r\n";
+    response += "Access-Control-Allow-Origin: *\r\n";
+    response += "\r\n";
+    response += QString::fromUtf8(responseData);
+
+    clientSocket->write(response.toUtf8());
+    clientSocket->flush();
+    clientSocket->close();
+}
+
+void HttpServer::handleGetOrderList(QTcpSocket *clientSocket,const QUrlQuery &query) {
+
     // 打开数据库
 
     // 解析查询参数
@@ -1675,6 +2046,382 @@ void HttpServer::handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &que
 }
 
 
+void HttpServer::handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    qDebug() << "[POST /mall/product/order-checkout] body =" << QString::fromUtf8(body);
+
+    // 解析JSON请求体
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(body);
+    if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+        // 返回错误响应 - JSON格式错误
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Invalid JSON format";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject jsonObj = jsonDoc.object();
+
+    // 检查是否有data字段
+    if (!jsonObj.contains("data") || !jsonObj["data"].isObject()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing 'data' field in request";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    QJsonObject dataObj = jsonObj["data"].toObject();
+
+    // 提取字段
+    QString productId = dataObj.value("productId").toString();
+    double unitPrice = dataObj.value("unitPrice").toDouble();
+    int quantity = dataObj.value("quantity").toInt();
+    double totalPrice = dataObj.value("totalPrice").toDouble();
+    QString note = dataObj.value("note").toString();
+    QString user = dataObj.value("user").toString();
+    QString contactInfo = dataObj.value("contactInfo").toString();
+
+    qDebug() << "Order checkout request:";
+    qDebug() << "  Product ID:" << productId;
+    qDebug() << "  Unit Price:" << unitPrice;
+    qDebug() << "  Quantity:" << quantity;
+    qDebug() << "  Total Price:" << totalPrice;
+    qDebug() << "  User:" << user;
+    qDebug() << "  Contact Info:" << contactInfo;
+
+    // 验证必填字段
+    if (productId.isEmpty() || user.isEmpty() || contactInfo.isEmpty()) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Missing required fields (productId, user, contactInfo)";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 验证价格和数量
+    if (unitPrice <= 0 || quantity <= 0 || totalPrice <= 0) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Invalid price or quantity (must be greater than 0)";
+        dataObj["unitPrice"] = unitPrice;
+        dataObj["quantity"] = quantity;
+        dataObj["totalPrice"] = totalPrice;
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 验证总价计算是否正确
+    double calculatedTotal = unitPrice * quantity;
+    double tolerance = 0.01; // 允许1分钱的误差
+    if (abs(calculatedTotal - totalPrice) > tolerance) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 400;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Total price calculation error";
+        dataObj["calculatedTotal"] = calculatedTotal;
+        dataObj["providedTotal"] = totalPrice;
+        dataObj["unitPrice"] = unitPrice;
+        dataObj["quantity"] = quantity;
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    // 检查dbManager是否已初始化
+    if (!dbManager) {
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = "Database error";
+        errorResp["data"] = dataObj;
+
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+        return;
+    }
+
+    try {
+        // 检查用户是否存在
+        if (!dbManager->checkMallUserExists(user)) {
+            QJsonObject errorResp;
+            errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            errorResp["code"] = 404;
+
+            QJsonObject dataObj;
+            dataObj["success"] = false;
+            dataObj["message"] = "用户不存在";
+            dataObj["username"] = user;
+            errorResp["data"] = dataObj;
+
+            sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+            return;
+        }
+
+        // 生成订单ID和支付码
+        QString orderId = generateOrderId();
+        QString paymentCode = generatePaymentCode();
+        QString createTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+        QString expireTime = QDateTime::currentDateTime().addSecs(ORDER_EXPIRY_SECONDS).toString("yyyy-MM-dd HH:mm:ss");
+
+        // 创建订单对象
+        SQL_Order order;
+        order.orderId = orderId;
+        order.productId = productId;
+        order.unitPrice = unitPrice;
+        order.quantity = quantity;
+        order.totalPrice = totalPrice;
+        order.note = note;
+        order.user = user;
+        order.contactInfo = contactInfo;
+        order.status = "pending_payment";  // 待支付状态
+        order.createTime = createTime;
+        order.updateTime = createTime;
+
+        // 将订单添加到待支付容器中
+        pendingOrders.insert(orderId, order);
+
+        qDebug() << "Pending order created (not saved to database):";
+        qDebug() << "  Order ID:" << orderId;
+        qDebug() << "  User:" << user;
+        qDebug() << "  Product:" << productId;
+        qDebug() << "  Total:" << totalPrice;
+        qDebug() << "  Status: pending_payment";
+        qDebug() << "  Pending orders count:" << pendingOrders.size();
+
+        // 生成支付链接（模拟）
+        QString mockPaymentUrl = QString("https://pay.example.com/pay?order_id=%1&amount=%2&code=%3")
+                                     .arg(orderId)
+                                     .arg(QString::number(totalPrice, 'f', 2))
+                                     .arg(paymentCode);
+
+        // 构建成功响应
+        QJsonObject successResp;
+        successResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        successResp["code"] = 200;
+
+        QJsonObject successData;
+        successData["success"] = true;
+        successData["message"] = "订单已创建，请完成支付";
+        successData["orderId"] = orderId;
+        successData["paymentCode"] = paymentCode;  // 返回付款链接码
+        successData["paymentUrl"] = mockPaymentUrl;
+        successData["totalAmount"] = totalPrice;
+        successData["currency"] = "CNY";
+        successData["createTime"] = createTime;
+        successData["expireTime"] = expireTime;
+        successData["orderStatus"] = "pending_payment";
+
+        // 订单详情
+        QJsonObject orderDetails;
+        orderDetails["productId"] = productId;
+        orderDetails["unitPrice"] = unitPrice;
+        orderDetails["quantity"] = quantity;
+        orderDetails["note"] = note;
+        orderDetails["user"] = user;
+        orderDetails["contactInfo"] = contactInfo;
+        successData["orderDetails"] = orderDetails;
+
+        // 调试信息
+        QJsonObject debugInfo;
+        debugInfo["orderCreated"] = true;
+        debugInfo["inMemory"] = true;  // 标记为内存存储
+        debugInfo["pendingOrdersCount"] = static_cast<int>(pendingOrders.size());
+        debugInfo["orderExpirySeconds"] = ORDER_EXPIRY_SECONDS;
+        successData["debugInfo"] = debugInfo;
+
+        successResp["data"] = successData;
+
+        qDebug() << "Order created in memory (pending payment):";
+        qDebug() << "  Order ID:" << orderId;
+        qDebug() << "  Payment Code:" << paymentCode;
+        qDebug() << "  Total Amount:" << totalPrice;
+        qDebug() << "  Expire Time:" << expireTime;
+
+        sendResponse(clientSocket, QJsonDocument(successResp).toJson());
+
+    } catch (const std::exception &e) {
+        // 捕获并处理任何异常
+        QJsonObject errorResp;
+        errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorResp["code"] = 500;
+
+        QJsonObject dataObj;
+        dataObj["success"] = false;
+        dataObj["message"] = QString("订单创建失败: %1").arg(e.what());
+        errorResp["data"] = dataObj;
+
+        qDebug() << "Order checkout exception:" << e.what();
+        sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
+    }
+}
+
+// 生成订单ID的辅助函数
+QString HttpServer::generateOrderId()
+{
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMddHHmmss");
+    QString random = QString::number(QRandomGenerator::global()->bounded(1000, 9999));
+    return "ORD_" + timestamp + "_" + random;
+}
+
+// 生成支付码的辅助函数
+QString HttpServer::generatePaymentCode()
+{
+    const QString chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    QString paymentCode;
+    QRandomGenerator *generator = QRandomGenerator::global();
+
+    // 生成12位支付码
+    for (int i = 0; i < 12; i++) {
+        int index = generator->bounded(chars.length());
+        paymentCode.append(chars.at(index));
+        // 每4位加一个横杠，便于阅读
+        if ((i + 1) % 4 == 0 && i < 11) {
+            paymentCode.append("-");
+        }
+    }
+
+    return paymentCode;
+}
+// 初始化订单超时定时器
+void HttpServer::initOrderTimer()
+{
+    orderTimeoutTimer = new QTimer(this);
+    connect(orderTimeoutTimer, &QTimer::timeout, this, &HttpServer::cleanupExpiredOrders);
+    // 每5分钟检查一次过期订单
+    orderTimeoutTimer->start(5 * 60 * 1000);
+    qDebug() << "Order timeout timer initialized";
+}
+
+// 清理过期订单
+void HttpServer::cleanupExpiredOrders()
+{
+    QDateTime currentTime = QDateTime::currentDateTime();
+    QStringList expiredOrders;
+
+    // 查找过期订单
+    for (auto it = pendingOrders.begin(); it != pendingOrders.end(); ++it) {
+        const QString &orderId = it.key();
+        const SQL_Order &order = it.value();
+
+        QDateTime createTime = QDateTime::fromString(order.createTime, "yyyy-MM-dd HH:mm:ss");
+        if (createTime.addSecs(ORDER_EXPIRY_SECONDS) < currentTime) {
+            expiredOrders.append(orderId);
+            qDebug() << "Order expired:" << orderId << "Created:" << order.createTime;
+        }
+    }
+
+    // 删除过期订单
+    for (const QString &orderId : expiredOrders) {
+        pendingOrders.remove(orderId);
+    }
+
+    if (!expiredOrders.isEmpty()) {
+        qDebug() << "Cleaned up" << expiredOrders.size() << "expired orders";
+        qDebug() << "Remaining pending orders:" << pendingOrders.size();
+    }
+}
+
+// 根据订单ID获取待支付订单
+SQL_Order HttpServer::getPendingOrder(const QString &orderId)
+{
+    if (pendingOrders.contains(orderId)) {
+        return pendingOrders.value(orderId);
+    }
+    return SQL_Order(); // 返回空订单
+}
+
+// 移除待支付订单（支付成功后调用）
+bool HttpServer::removePendingOrder(const QString &orderId)
+{
+    if (pendingOrders.contains(orderId)) {
+        pendingOrders.remove(orderId);
+        qDebug() << "Pending order removed:" << orderId;
+        qDebug() << "Remaining pending orders:" << pendingOrders.size();
+        return true;
+    }
+    return false;
+}
+
+// 获取用户的待支付订单列表
+QList<SQL_Order> HttpServer::getUserPendingOrders(const QString &username)
+{
+    QList<SQL_Order> userOrders;
+
+    for (auto it = pendingOrders.begin(); it != pendingOrders.end(); ++it) {
+        const SQL_Order &order = it.value();
+        if (order.user == username) {
+            userOrders.append(order);
+        }
+    }
+
+    qDebug() << "Found" << userOrders.size() << "pending orders for user:" << username;
+    return userOrders;
+}
+
+// 支付成功后处理订单（将待支付订单保存到数据库）
+bool HttpServer::completeOrderPayment(const QString &orderId)
+{
+    if (!pendingOrders.contains(orderId)) {
+        qDebug() << "Order not found in pending orders:" << orderId;
+        return false;
+    }
+
+    SQL_Order order = pendingOrders.value(orderId);
+
+    // 更新订单状态为已支付
+    order.status = "paid";
+    order.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+
+    // 将订单保存到数据库
+    if (!dbManager || !dbManager->insertOrder(order)) {
+        qDebug() << "Failed to save order to database:" << orderId;
+        return false;
+    }
+
+    // 从待支付容器中移除
+    pendingOrders.remove(orderId);
+
+    qDebug() << "Order payment completed:";
+    qDebug() << "  Order ID:" << orderId;
+    qDebug() << "  User:" << order.user;
+    qDebug() << "  Amount:" << order.totalPrice;
+    qDebug() << "  Saved to database: yes";
+    qDebug() << "  Remaining pending orders:" << pendingOrders.size();
+
+    return true;
+}
 void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByteArray &body)
 {
     qDebug() << "[POST /mall/auth/promot/withdraw] body =" << QString::fromUtf8(body);

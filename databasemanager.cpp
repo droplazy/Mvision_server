@@ -548,21 +548,24 @@ bool DatabaseManager::createTable5()
 {
     QSqlQuery query;
 
-    // 创建订单表
+    // 创建订单表 - 添加必要的字段
     QString createTableQuery = R"(
         CREATE TABLE IF NOT EXISTS Orders (
             order_id TEXT PRIMARY KEY,
+            command_id TEXT,                    -- 关联指令表的指令ID
             product_id TEXT NOT NULL,
+            product_name TEXT,                  -- 新增：商品名称
             unit_price REAL NOT NULL,
             quantity INTEGER NOT NULL,
             total_price REAL NOT NULL,
             note TEXT,
             user TEXT NOT NULL,
             contact_info TEXT,
+            snapshot TEXT,                      -- 新增：截图URL（可从指令表获取）
             status TEXT DEFAULT 'pending',
             create_time TEXT DEFAULT (datetime('now', 'localtime')),
             update_time TEXT DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (product_id) REFERENCES Products(product_id) ON DELETE SET NULL
+            FOREIGN KEY (command_id) REFERENCES CommandHistory(command_id) ON DELETE SET NULL
         )
     )";
 
@@ -570,63 +573,76 @@ bool DatabaseManager::createTable5()
         qDebug() << "Error creating table Orders: " << query.lastError().text();
         return false;
     }
-    qDebug() << "Table Orders created successfully.";
 
-    // 创建索引
-    QStringList indexQueries = {
-        "CREATE INDEX IF NOT EXISTS idx_order_status ON Orders(status)",
-        "CREATE INDEX IF NOT EXISTS idx_order_user ON Orders(user)",
-        "CREATE INDEX IF NOT EXISTS idx_order_product ON Orders(product_id)",
-        "CREATE INDEX IF NOT EXISTS idx_order_create_time ON Orders(create_time)"
-    };
-
-    for (const QString &indexQuery : indexQueries) {
-        if (!query.exec(indexQuery)) {
-            qDebug() << "Error creating index: " << query.lastError().text();
-        }
-    }
-
+    // 更新插入订单函数，支持新字段
     return true;
 }
-// 插入订单
+
 bool DatabaseManager::insertOrder(const SQL_Order &order)
 {
     QSqlQuery query;
-    query.prepare(R"(
-        INSERT INTO Orders
-        (order_id, product_id, unit_price, quantity, total_price,
-         note, user, contact_info, status)
-        VALUES (:order_id, :product_id, :unit_price, :quantity, :total_price,
-                :note, :user, :contact_info, :status)
-    )");
 
+    // 调试输出查看字段值
+    qDebug() << "Inserting order with values:";
+    qDebug() << "  order_id:" << order.orderId;
+    qDebug() << "  command_id:" << order.commandId;
+    qDebug() << "  product_id:" << order.productId;
+    qDebug() << "  product_name:" << order.productName;
+    qDebug() << "  unit_price:" << order.unitPrice;
+    qDebug() << "  quantity:" << order.quantity;
+    qDebug() << "  total_price:" << order.totalPrice;
+    qDebug() << "  note:" << order.note;
+    qDebug() << "  user:" << order.user;
+    qDebug() << "  contact_info:" << order.contactInfo;
+    qDebug() << "  snapshot:" << order.snapshot;
+    qDebug() << "  status:" << order.status;
+
+    // 使用更简洁的SQL语句，明确指定所有字段
+    QString sql = R"(
+        INSERT INTO Orders
+        (order_id, command_id, product_id, product_name, unit_price,
+         quantity, total_price, note, user, contact_info, snapshot, status)
+        VALUES
+        (:order_id, :command_id, :product_id, :product_name, :unit_price,
+         :quantity, :total_price, :note, :user, :contact_info, :snapshot, :status)
+    )";
+
+    query.prepare(sql);
+
+    // 绑定所有参数
     query.bindValue(":order_id", order.orderId);
+    query.bindValue(":command_id", order.commandId);
     query.bindValue(":product_id", order.productId);
+    query.bindValue(":product_name", order.productName);
     query.bindValue(":unit_price", order.unitPrice);
     query.bindValue(":quantity", order.quantity);
     query.bindValue(":total_price", order.totalPrice);
     query.bindValue(":note", order.note);
     query.bindValue(":user", order.user);
     query.bindValue(":contact_info", order.contactInfo);
+    query.bindValue(":snapshot", order.snapshot);
     query.bindValue(":status", order.status.isEmpty() ? "pending" : order.status);
 
     if (!query.exec()) {
         qDebug() << "Error inserting order: " << query.lastError().text();
+        qDebug() << "SQL error:" << query.lastError().databaseText();
+        qDebug() << "SQL driver error:" << query.lastError().driverText();
         qDebug() << "Last query:" << query.lastQuery();
+        qDebug() << "Bound values:" << query.boundValues();
         return false;
     }
 
     qDebug() << "Order inserted successfully. ID:" << order.orderId;
     return true;
 }
-
 // 更新订单
 bool DatabaseManager::updateOrder(const SQL_Order &order)
 {
     QSqlQuery query;
     query.prepare(R"(
         UPDATE Orders
-        SET product_id = :product_id,
+        SET command_id = :command_id,           -- 新增
+            product_id = :product_id,
             unit_price = :unit_price,
             quantity = :quantity,
             total_price = :total_price,
@@ -639,6 +655,7 @@ bool DatabaseManager::updateOrder(const SQL_Order &order)
     )");
 
     query.bindValue(":order_id", order.orderId);
+    query.bindValue(":command_id", order.commandId);  // 新增绑定
     query.bindValue(":product_id", order.productId);
     query.bindValue(":unit_price", order.unitPrice);
     query.bindValue(":quantity", order.quantity);
@@ -1223,11 +1240,12 @@ bool DatabaseManager::batchUpdateOrders(const QList<SQL_Order> &orders)
     qDebug() << "Batch updated" << orders.size() << "orders successfully";
     return true;
 }
-// 从查询结果中提取订单数据
+// 修改从查询结果中提取订单数据的函数
 SQL_Order DatabaseManager::extractOrderFromQuery(const QSqlQuery &query)
 {
     SQL_Order order;
     order.orderId = query.value("order_id").toString();
+    order.commandId = query.value("command_id").toString();  // 新增
     order.productId = query.value("product_id").toString();
     order.unitPrice = query.value("unit_price").toDouble();
     order.quantity = query.value("quantity").toInt();
@@ -1242,7 +1260,69 @@ SQL_Order DatabaseManager::extractOrderFromQuery(const QSqlQuery &query)
     return order;
 }
 
+// 新增：根据指令ID获取订单
+QList<SQL_Order> DatabaseManager::getOrdersByCommandId(const QString &commandId)
+{
+    QList<SQL_Order> orders;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Orders WHERE command_id = :command_id ORDER BY create_time DESC");
+    query.bindValue(":command_id", commandId);
 
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Order order = extractOrderFromQuery(query);
+            orders.append(order);
+        }
+    } else {
+        qDebug() << "Error fetching orders by command ID:" << query.lastError().text();
+    }
+
+    return orders;
+}
+// 新增：根据指令ID获取第一个订单（如果有多个订单）
+SQL_Order DatabaseManager::getFirstOrderByCommandId(const QString &commandId)
+{
+    SQL_Order order;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Orders WHERE command_id = :command_id ORDER BY create_time LIMIT 1");
+    query.bindValue(":command_id", commandId);
+
+    if (query.exec() && query.next()) {
+        order = extractOrderFromQuery(query);
+    } else {
+        qDebug() << "Error fetching first order by command ID:" << commandId;
+    }
+
+    return order;
+}
+
+// 新增：检查指令是否已有关联订单
+bool DatabaseManager::hasOrdersForCommand(const QString &commandId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM Orders WHERE command_id = :command_id");
+    query.bindValue(":command_id", commandId);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+
+    return false;
+}
+
+// 新增：获取订单数量统计（包含command_id统计）
+int DatabaseManager::getOrderCountByCommandId(const QString &commandId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM Orders WHERE command_id = :command_id");
+    query.bindValue(":command_id", commandId);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
+}
 bool DatabaseManager::createTable6()
 {
     QSqlQuery query;
@@ -1884,6 +1964,48 @@ QList<SQL_WithdrawRecord> DatabaseManager::getWithdrawRecordsByUsername(const QS
     }
 
     return records;
+}
+// 在 DatabaseManager 类中添加以下方法：
+
+// 获取订单详情（包含截图信息）
+SQL_Order DatabaseManager::getOrderWithSnapshot(const QString &orderId)
+{
+    SQL_Order order = getOrderById(orderId);
+
+    if (!order.commandId.isEmpty()) {
+        // 如果订单有关联的指令ID，查询指令的completed_url作为snapshot
+        SQL_CommandHistory command = getCommandById(order.commandId);
+        if (!command.completed_url.isEmpty()) {
+            order.snapshot = command.completed_url;
+        }
+    }
+
+    return order;
+}
+
+// 获取用户订单列表（包含截图信息）
+QList<SQL_Order> DatabaseManager::getUserOrdersWithSnapshots(const QString &username)
+{
+    QList<SQL_Order> orders = getOrdersByUser(username);
+
+    // 为每个订单获取截图信息
+    for (int i = 0; i < orders.size(); ++i) {
+        SQL_Order &order = orders[i];
+
+        if (!order.commandId.isEmpty()) {
+            SQL_CommandHistory command = getCommandById(order.commandId);
+            if (!command.completed_url.isEmpty()) {
+                order.snapshot = command.completed_url;
+            }
+        }
+
+        // 如果商品名称为空，使用默认名称
+        if (order.productName.isEmpty() && !order.productId.isEmpty()) {
+            order.productName = QString("商品%1").arg(order.productId);
+        }
+    }
+
+    return orders;
 }
 #if 0
 

@@ -219,34 +219,21 @@ struct SQL_CommandHistory {
 
 // SQL_Order.h 或直接在 DatabaseManager.h 中添加
 struct SQL_Order {
-    QString orderId;           // 订单ID（主键）
-    QString productId;         // 产品ID
-    double unitPrice;          // 单价
-    int quantity;              // 数量
-    double totalPrice;         // 总价
-    QString note;              // 备注
-    QString user;              // 用户
-    QString contactInfo;       // 联系方式
-    QString status;            // 订单状态（pending, paid, shipped, completed, cancelled）
-    QString createTime;        // 创建时间
-    QString updateTime;        // 更新时间
-
-    // 构造函数
-    SQL_Order()
-        : unitPrice(0.0)
-        , quantity(0)
-        , totalPrice(0.0)
-    {}
-
-    SQL_Order(const QString& oid, const QString& pid, double uprice, int qty,
-              double tprice, const QString& n, const QString& u,
-              const QString& contact, const QString& stat = "pending")
-        : orderId(oid), productId(pid), unitPrice(uprice), quantity(qty),
-        totalPrice(tprice), note(n), user(u), contactInfo(contact),
-        status(stat)
-    {}
-
-    // 计算总价
+    QString orderId;
+    QString commandId;      // 新增：关联的指令ID
+    QString productId;
+    double unitPrice;
+    int quantity;
+    double totalPrice;
+    QString note;
+    QString user;
+    QString contactInfo;
+    QString status;
+    QString createTime;
+    QString updateTime;
+ QString snapshot;
+       QString productName;
+    // 计算总价的方法
     void calculateTotal() {
         totalPrice = unitPrice * quantity;
     }

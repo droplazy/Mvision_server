@@ -11,7 +11,7 @@
 #include <QJsonValue>
 #include "publicheader.h"
 #include "databasemanager.h"
-
+#include <QTimer>
 
 
 class HttpServer : public QTcpServer
@@ -33,6 +33,7 @@ public slots:
     void onDeviceUpdata(DeviceStatus updatedDevice);
 
 private:
+    void handleGetOrderQuery(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handlePostDeviceProcess(QTcpSocket *clientSocket, const QByteArray &body);
     void handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &query);
@@ -100,6 +101,29 @@ private:
     void handleGetAuthPromote(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByteArray &body);
     QString generateWithdrawId();
+    void handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QByteArray &body);
+    QString generatePaymentCode();
+    QString generateOrderId();
+
+
+    // 待支付订单容器（订单ID -> 订单对象）
+    QMap<QString, SQL_Order> pendingOrders;
+
+    // 订单超时定时器
+    QTimer *orderTimeoutTimer;
+
+    // 订单过期时间（秒）
+    static const int ORDER_EXPIRY_SECONDS = 60; // 30分钟
+    bool completeOrderPayment(const QString &orderId);
+    QList<SQL_Order> getUserPendingOrders(const QString &username);
+    bool removePendingOrder(const QString &orderId);
+    SQL_Order getPendingOrder(const QString &orderId);
+    void cleanupExpiredOrders();
+    void initOrderTimer();
+    void handleGetpaidOK(QTcpSocket *clientSocket, const QUrlQuery &query);
+    QString mapOrderStatusToApi(const QString &dbStatus);
+    QString formatOrderTime(const QString &dbTime);
+    void sendJsonResponse(QTcpSocket *clientSocket, int statusCode, const QJsonObject &json);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

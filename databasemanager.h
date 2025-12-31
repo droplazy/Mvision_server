@@ -119,14 +119,20 @@ public:
     bool batchUpdateMallUsers(const QList<SQL_MallUser> &users);
     bool createWithdrawRecord(const QString &withdrawId, const QString &username, double amount, const QString &alipayAccount, const QString &remark = "");
     QList<SQL_WithdrawRecord> getWithdrawRecordsByUsername(const QString &username);
+    QList<SQL_Order> getOrdersByCommandId(const QString &commandId);
+    SQL_Order getFirstOrderByCommandId(const QString &commandId);
+    bool hasOrdersForCommand(const QString &commandId);
+    int getOrderCountByCommandId(const QString &commandId);
+    QList<SQL_Order> getUserOrdersWithSnapshots(const QString &username);
+    SQL_Order getOrderWithSnapshot(const QString &orderId);
 private:
     QSqlDatabase db;
 
-    bool createTable1();
-    bool createTable2();
-    bool createTable3();
-    bool createTable4();
-    bool createTable5();
+    bool createTable1(); //设备表
+    bool createTable2(); //后台用户表
+    bool createTable3(); //流程表
+    bool createTable4(); //指令表
+    bool createTable5(); //订单表
     bool createTable6();  // 商城用户表
 
     SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query);
