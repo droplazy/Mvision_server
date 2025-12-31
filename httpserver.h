@@ -124,6 +124,10 @@ private:
     QString mapOrderStatusToApi(const QString &dbStatus);
     QString formatOrderTime(const QString &dbTime);
     void sendJsonResponse(QTcpSocket *clientSocket, int statusCode, const QJsonObject &json);
+    void handlePostMallUserAppealtext(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
+    void handlePostMallUserAppealPic(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
+    void createAppealDirectoryIfNeeded();
+    QByteArray parseMultipartData(const QByteArray &body, const QByteArray &boundary);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

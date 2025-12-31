@@ -125,6 +125,12 @@ public:
     int getOrderCountByCommandId(const QString &commandId);
     QList<SQL_Order> getUserOrdersWithSnapshots(const QString &username);
     SQL_Order getOrderWithSnapshot(const QString &orderId);
+    bool insertUserAppeal(const QString &username, const QString &orderId,
+                          const QString &appealType, const QString &contentPath,
+                          const QString &textContent);
+
+    bool insertUserAppeal(const QString &username, const QString &orderId,
+                          const QString &appealType, const QString &contentPath);
 private:
     QSqlDatabase db;
 
@@ -134,6 +140,7 @@ private:
     bool createTable4(); //指令表
     bool createTable5(); //订单表
     bool createTable6();  // 商城用户表
+    bool createAppealTable();
 
     SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query);
     SQL_Order extractOrderFromQuery(const QSqlQuery &query);

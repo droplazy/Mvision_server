@@ -22,6 +22,7 @@ HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent)
     generateTextData();
     createDownloadDirectoryIfNeeded();
     createUploadDirectoryIfNeeded();
+    createAppealDirectoryIfNeeded();
     // 初始化订单超时定时器
     initOrderTimer();
 
@@ -43,6 +44,14 @@ void HttpServer::createUploadDirectoryIfNeeded()
     QString downloadPath = currentDir.filePath("Upload");
     if (!QDir(downloadPath).exists()) {
         QDir().mkdir(downloadPath);
+    }
+}
+void HttpServer::createAppealDirectoryIfNeeded()
+{
+    QDir currentDir(QDir::currentPath());
+    QString UserApealPath = currentDir.filePath("UserAppeal");
+    if (!QDir(UserApealPath).exists()) {
+        QDir().mkdir(UserApealPath);
     }
 }
 
@@ -505,8 +514,6 @@ void HttpServer::onReadyRead() {
                     handlePostWarningIgnore(clientSocket, body);
                 } else if (path == "/auth/login") {
                     handlePostAuthLogin(clientSocket, body);
-                }else if (path == "/auth/login") {
-                    handlePostAuthLogin(clientSocket, body);
                 }else if (path == "/process/todev") {
                     handlePostDeviceProcess(clientSocket, body);
                 }else if (path == "/mall/login/info") {
@@ -521,6 +528,40 @@ void HttpServer::onReadyRead() {
                     handlePostMallSendwithdraw(clientSocket, body);
                 }else if (path == "/mall/product/order-checkout") {
                     handlePostMallOrderCheckout(clientSocket, body);
+                }else if (path == "/mall/auth/order/appeal/text") {
+                    handlePostMallUserAppealtext(clientSocket, body, query);
+                }else if (path == "/mall/auth/order/appeal/picture") {
+                    // 如果已经接收的body不完整，继续读取
+                    if (contentLength > 0 && body.size() < contentLength) {
+                        qDebug() << "Need to read more data. Current:" << body.size()
+                        << "Expected:" << contentLength;
+
+                        // 设置读取超时
+                        int timeout = 5000; // 5秒
+                        qint64 remaining = contentLength - body.size();
+
+                        while (remaining > 0 && clientSocket->waitForReadyRead(timeout)) {
+                            QByteArray moreData = clientSocket->readAll();
+                            if (!moreData.isEmpty()) {
+                                body.append(moreData);
+                                remaining = contentLength - body.size();
+                                // qDebug() << "Read additional" << moreData.size() << "bytes. Total:"
+                                //          << body.size() << "Remaining:" << remaining;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        if (body.size() != contentLength) {
+                            qDebug() << "Warning: Body incomplete! Expected:" << contentLength
+                                     << "Actual:" << body.size();
+                        }
+                    }
+
+                    qDebug() << "Before calling handlePostMallUserAppealPic, body size:" << body.size();
+
+                    handlePostMallUserAppealPic(clientSocket, body, query);
+                                        qDebug() << "After handlePostFileUpload";
                 }else {
                     qDebug() << path << "[POST /process/create] body =" << body;
                     sendNotFound(clientSocket);
@@ -2045,6 +2086,368 @@ void HttpServer::handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &que
     sendResponse(clientSocket, jsonData);
 }
 
+void HttpServer::handlePostMallUserAppealtext(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
+{
+    qDebug() << "Handling POST user appeal text request";
+
+
+    QString orderId = query.queryItemValue("orderId");
+    QString username = query.queryItemValue("username");
+
+    if (orderId.isEmpty() || username.isEmpty()) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Missing required parameters: orderId and username";
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    // 解析JSON body
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
+
+    if (parseError.error != QJsonParseError::NoError) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Invalid JSON format";
+        errorResponse["message"] = parseError.errorString();
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    QJsonObject json = doc.object();
+    QJsonObject dataObj = json.value("data").toObject();
+    QString text = dataObj.value("text").toString();
+
+    if (text.isEmpty()) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Text content is empty";
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    // 创建目录结构
+    QString baseDir = QDir::currentPath() + "/UserAppeal";
+    QString orderDir = baseDir + "/" + orderId;
+
+    QDir dir;
+    if (!dir.exists(baseDir)) {
+        if (!dir.mkpath(baseDir)) {
+            QJsonObject errorResponse;
+            errorResponse["error"] = "Failed to create base directory";
+            errorResponse["code"] = 500;
+            sendJsonResponse(clientSocket, 500, errorResponse);
+            return;
+        }
+    }
+
+    if (!dir.exists(orderDir)) {
+        if (!dir.mkpath(orderDir)) {
+            QJsonObject errorResponse;
+            errorResponse["error"] = "Failed to create order directory";
+            errorResponse["code"] = 500;
+            sendJsonResponse(clientSocket, 500, errorResponse);
+            return;
+        }
+    }
+
+    // 保存文本文件
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    QString filename = QString("appeal_%1_%2.txt").arg(username).arg(timestamp);
+    QString filePath = orderDir + "/" + filename;
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Failed to create text file";
+        errorResponse["code"] = 500;
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream.setEncoding(QStringConverter::Utf8); // Qt 6
+    stream << "投诉时间: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << "\n";
+    stream << "投诉用户: " << username << "\n";
+    stream << "订单编号: " << orderId << "\n";
+    stream << "投诉内容: \n" << text << "\n";
+    file.close();
+
+    // 保存到数据库
+
+    dbManager->insertUserAppeal(username, orderId, "text", filePath, text);
+
+    // 构建成功响应
+    QJsonObject response;
+    response["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    response["code"] = 200;
+
+    QJsonObject data;
+    data["success"] = true;
+    data["message"] = "投诉文本已保存，已交由人工处理";
+    data["filePath"] = filePath;
+    response["data"] = data;
+
+    sendJsonResponse(clientSocket, 200, response);
+
+    qDebug() << "User appeal text saved successfully. Order:" << orderId
+             << "User:" << username << "File:" << filePath;
+}
+
+void HttpServer::handlePostMallUserAppealPic(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
+{
+    qDebug() << "Handling POST user appeal picture request";
+
+    QString orderId = query.queryItemValue("orderId");
+    QString username = query.queryItemValue("username");
+
+    if (orderId.isEmpty() || username.isEmpty()) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Missing required parameters: orderId and username";
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    qDebug() << "Body size:" << body.size() << "bytes";
+
+    // 1. 查找空行分隔符（HTTP头部的结束）
+    QByteArray imageData;
+    QString imageContentType = "image/jpeg"; // 默认值
+
+    // 查找空行分隔符 \r\n\r\n
+    int emptyLinePos = body.indexOf("\r\n\r\n");
+
+    if (emptyLinePos != -1) {
+        // 找到空行，之后的数据就是图片内容
+        imageData = body.mid(emptyLinePos + 4); // 跳过 \r\n\r\n
+
+        // 从头部提取Content-Type
+        QByteArray headers = body.left(emptyLinePos);
+
+        // 查找Content-Type行
+        int contentTypeStart = headers.indexOf("Content-Type:");
+        if (contentTypeStart != -1) {
+            int lineEnd = headers.indexOf("\r\n", contentTypeStart);
+            if (lineEnd != -1) {
+                QByteArray contentTypeLine = headers.mid(contentTypeStart, lineEnd - contentTypeStart);
+                QList<QByteArray> parts = contentTypeLine.split(':');
+                if (parts.size() >= 2) {
+                    imageContentType = parts[1].trimmed();
+                    qDebug() << "Extracted Content-Type from headers:" << imageContentType;
+                }
+            }
+        }
+
+        qDebug() << "Found empty line at position:" << emptyLinePos;
+        qDebug() << "Extracted image data size:" << imageData.size() << "bytes";
+
+        // 检查提取的数据是否以常见的图片格式开头
+        if (imageData.size() >= 4) {
+            // 检查JPEG (FF D8 FF)
+            if (imageData[0] == '\xFF' && imageData[1] == '\xD8' && imageData[2] == '\xFF') {
+                qDebug() << "Data starts with JPEG signature";
+            }
+            // 检查PNG (\x89PNG)
+            else if (imageData[0] == '\x89' && imageData[1] == 'P' && imageData[2] == 'N' && imageData[3] == 'G') {
+                qDebug() << "Data starts with PNG signature";
+            }
+            // 检查其他格式...
+        }
+    } else {
+        // 没有找到空行，可能整个body就是图片数据，或者格式有问题
+        // 检查body是否以图片签名开头
+        if (body.size() >= 4) {
+            // 检查JPEG
+            if (body[0] == '\xFF' && body[1] == '\xD8' && body[2] == '\xFF') {
+                imageData = body;
+                qDebug() << "Body starts with JPEG signature, using entire body as image data";
+            }
+            // 检查PNG
+            else if (body[0] == '\x89' && body[1] == 'P' && body[2] == 'N' && body[3] == 'G') {
+                imageData = body;
+                qDebug() << "Body starts with PNG signature, using entire body as image data";
+            } else {
+                // 尝试查找常见图片格式的起始位置
+                // JPEG的起始标记
+                int jpegStart = body.indexOf("\xFF\xD8\xFF");
+                if (jpegStart != -1) {
+                    imageData = body.mid(jpegStart);
+                    qDebug() << "Found JPEG start at position:" << jpegStart;
+                } else {
+                    // PNG的起始标记
+                    int pngStart = body.indexOf("\x89PNG\r\n\x1a\n");
+                    if (pngStart != -1) {
+                        imageData = body.mid(pngStart);
+                        qDebug() << "Found PNG start at position:" << pngStart;
+                    } else {
+                        // 如果没有找到图片签名，返回错误
+                        QJsonObject errorResponse;
+                        errorResponse["error"] = "Invalid image format or missing image data";
+                        errorResponse["code"] = 400;
+                        sendJsonResponse(clientSocket, 400, errorResponse);
+                        return;
+                    }
+                }
+            }
+        } else {
+            // Body太小，不可能是有效的图片
+            QJsonObject errorResponse;
+            errorResponse["error"] = "Invalid image data (too small)";
+            errorResponse["code"] = 400;
+            sendJsonResponse(clientSocket, 400, errorResponse);
+            return;
+        }
+    }
+
+    if (imageData.isEmpty()) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "No image data found in request";
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    // 检查图片大小（限制为5MB）
+    if (imageData.size() > 5 * 1024 * 1024) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Image file too large, maximum size is 5MB";
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    // 创建目录结构
+    QString baseDir = QDir::currentPath() + "/UserAppeal";
+    QString orderDir = baseDir + "/" + orderId;
+
+    QDir dir;
+    if (!dir.exists(baseDir)) {
+        if (!dir.mkpath(baseDir)) {
+            QJsonObject errorResponse;
+            errorResponse["error"] = "Failed to create base directory";
+            errorResponse["code"] = 500;
+            sendJsonResponse(clientSocket, 500, errorResponse);
+            return;
+        }
+    }
+
+    if (!dir.exists(orderDir)) {
+        if (!dir.mkpath(orderDir)) {
+            QJsonObject errorResponse;
+            errorResponse["error"] = "Failed to create order directory";
+            errorResponse["code"] = 500;
+            sendJsonResponse(clientSocket, 500, errorResponse);
+            return;
+        }
+    }
+
+    // 确定图片扩展名
+    QString extension = "jpg";
+    if (imageContentType.contains("png")) {
+        extension = "png";
+    } else if (imageContentType.contains("gif")) {
+        extension = "gif";
+    } else if (imageContentType.contains("bmp")) {
+        extension = "bmp";
+    } else if (imageContentType.contains("jpeg")) {
+        extension = "jpg";
+    }
+
+    // 保存图片文件
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    QString filename = QString("appeal_%1_%2.%3").arg(username).arg(timestamp).arg(extension);
+    QString filePath = orderDir + "/" + filename;
+
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Failed to save image file";
+        errorResponse["code"] = 500;
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        return;
+    }
+
+    // 只写入提取的图片数据，不包含HTTP头部
+    qint64 bytesWritten = file.write(imageData);
+    file.close();
+
+    qDebug() << "Wrote" << bytesWritten << "bytes to file:" << filePath;
+
+
+    dbManager->insertUserAppeal(username, orderId, "picture", filePath);
+
+    // 构建成功响应
+    QJsonObject response;
+    response["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    response["code"] = 200;
+
+    QJsonObject data;
+    data["success"] = true;
+    data["message"] = "投诉图片已保存，已交由人工处理";
+    data["filePath"] = filePath;
+    data["fileSize"] = QString::number(imageData.size() / 1024) + "KB";
+    data["imageType"] = imageContentType;
+    response["data"] = data;
+
+    sendJsonResponse(clientSocket, 200, response);
+
+    qDebug() << "User appeal picture saved successfully. Order:" << orderId
+             << "User:" << username << "File:" << filePath
+             << "Size:" << imageData.size() << "bytes";
+}
+
+// 辅助函数：解析multipart数据
+QByteArray HttpServer::parseMultipartData(const QByteArray &body, const QByteArray &boundary)
+{
+    QByteArray boundaryWithPrefix = "--" + boundary;
+    QByteArray result;
+
+    // 查找boundary的位置
+    int boundaryStart = body.indexOf(boundaryWithPrefix);
+    if (boundaryStart == -1) return result;
+
+    // 移动到boundary之后
+    int dataStart = boundaryStart + boundaryWithPrefix.length();
+
+    // 跳过可能存在的空格和换行
+    while (dataStart < body.size() && (body[dataStart] == ' ' || body[dataStart] == '\r' || body[dataStart] == '\n')) {
+        dataStart++;
+    }
+
+    // 查找下一个boundary
+    int nextBoundaryPos = body.indexOf(boundaryWithPrefix, dataStart);
+    if (nextBoundaryPos == -1) {
+        // 尝试查找结束boundary
+        nextBoundaryPos = body.indexOf(boundaryWithPrefix + "--", dataStart);
+    }
+
+    if (nextBoundaryPos == -1) {
+        // 如果找不到下一个boundary，取到末尾
+        nextBoundaryPos = body.size();
+    }
+
+    // 提取数据
+    QByteArray partData = body.mid(dataStart, nextBoundaryPos - dataStart);
+
+    // 查找空行分隔符
+    int emptyLinePos = partData.indexOf("\r\n\r\n");
+    if (emptyLinePos != -1) {
+        // 空行之后才是真正的数据
+        result = partData.mid(emptyLinePos + 4);
+
+        // 移除末尾的换行符（如果下一个boundary前有换行）
+        if (result.endsWith("\r\n")) {
+            result = result.left(result.size() - 2);
+        }
+    } else {
+        // 如果没有找到空行，假设整个部分都是数据
+        result = partData;
+    }
+
+    return result;
+}
 
 void HttpServer::handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QByteArray &body)
 {

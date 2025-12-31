@@ -33,7 +33,7 @@ bool DatabaseManager::createDatabase(const QString &dbName)
 
 bool DatabaseManager::createTables()
 {
-    return createTable1() && createTable2() && createTable3() &&
+    return createTable1() && createTable2() && createTable3() && createAppealTable()&&
            createTable4() && createTable5() && createTable6() &&createWithdrawTable();
 }
 
@@ -2007,6 +2007,89 @@ QList<SQL_Order> DatabaseManager::getUserOrdersWithSnapshots(const QString &user
 
     return orders;
 }
+
+
+bool DatabaseManager::createAppealTable()
+{
+    QSqlQuery query;
+
+    QString createTableQuery = R"(
+        CREATE TABLE IF NOT EXISTS UserAppeals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,           -- 投诉用户
+            order_id TEXT NOT NULL,           -- 投诉订单
+            appeal_type TEXT NOT NULL,        -- text 或 picture
+            content_path TEXT,                -- 文本或图片的保存路径
+            text_content TEXT,                -- 如果是文本投诉，保存原文
+            appeal_time TEXT DEFAULT (datetime('now', 'localtime')),  -- 投诉时间
+            status TEXT DEFAULT 'pending',    -- pending, processing, completed
+            operator TEXT,                    -- 处理人员
+            result TEXT,                      -- 处理结果
+            result_time TEXT,
+            FOREIGN KEY (username) REFERENCES MallUsers(username) ON DELETE CASCADE,
+            FOREIGN KEY (order_id) REFERENCES Orders(order_id) ON DELETE CASCADE
+        )
+    )";
+
+    if (!query.exec(createTableQuery)) {
+        qDebug() << "Error creating UserAppeals table: " << query.lastError().text();
+        return false;
+    }
+
+    // 创建索引
+    QStringList indexQueries = {
+        "CREATE INDEX IF NOT EXISTS idx_appeal_user ON UserAppeals(username)",
+        "CREATE INDEX IF NOT EXISTS idx_appeal_order ON UserAppeals(order_id)",
+        "CREATE INDEX IF NOT EXISTS idx_appeal_time ON UserAppeals(appeal_time)",
+        "CREATE INDEX IF NOT EXISTS idx_appeal_status ON UserAppeals(status)",
+        "CREATE INDEX IF NOT EXISTS idx_appeal_type ON UserAppeals(appeal_type)"
+    };
+
+    for (const QString &indexQuery : indexQueries) {
+        if (!query.exec(indexQuery)) {
+            qDebug() << "Error creating index: " << query.lastError().text();
+        }
+    }
+
+    qDebug() << "UserAppeals table created successfully.";
+    return true;
+}
+
+// 插入投诉记录
+// 在DatabaseManager.cpp中
+bool DatabaseManager::insertUserAppeal(const QString &username, const QString &orderId,
+                                       const QString &appealType, const QString &contentPath,
+                                       const QString &textContent)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO UserAppeals
+        (username, order_id, appeal_type, content_path, text_content)
+        VALUES (:username, :order_id, :appeal_type, :content_path, :text_content)
+    )");
+
+    query.bindValue(":username", username);
+    query.bindValue(":order_id", orderId);
+    query.bindValue(":appeal_type", appealType);
+    query.bindValue(":content_path", contentPath);
+    query.bindValue(":text_content", textContent);
+
+    if (!query.exec()) {
+        qDebug() << "Error inserting user appeal: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "User appeal inserted successfully. User:" << username << "Order:" << orderId;
+    return true;
+}
+
+// 重载版本，不带textContent参数
+bool DatabaseManager::insertUserAppeal(const QString &username, const QString &orderId,
+                                       const QString &appealType, const QString &contentPath)
+{
+    return insertUserAppeal(username, orderId, appealType, contentPath, "");
+}
+
 #if 0
 
 // 创建测试用户
