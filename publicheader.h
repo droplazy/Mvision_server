@@ -337,6 +337,33 @@ struct SQL_AppealRecord {
     }
 };
 
+// 商品结构体
+struct SQL_Product {
+    QString productId;           // 商品ID
+    QString productName;         // 商品名称
+    QString categoryId;          // 分类ID
+    QString categoryName;        // 分类名称（可选）
+    double unitPrice;           // 单价
+    int stock;                 // 库存
+    int minOrder;              // 最小起订量
+    int maxOrder;              // 最大订购量
+    QString status;            // 状态（例如："active", "inactive", "out_of_stock"）
+    QString action;            // 主要动作/操作
+    QString subaction;         // 子动作/详细操作
+    QString description;       // 商品描述
+    QString imageUrl;         // 商品图片URL
+    QString createTime;       // 创建时间
+    QString updateTime;       // 更新时间
+    QString tags;             // 商品标签（逗号分隔）
+    QString specifications;   // 规格参数（JSON格式）
+    int salesCount;          // 销量
+    double rating;           // 评分
+    int ratingCount;         // 评分人数
+
+    SQL_Product() : unitPrice(0.0), stock(0), minOrder(1), maxOrder(9999),
+        salesCount(0), rating(0.0), ratingCount(0) {}
+};
+
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）
 // QMap<QString, QString> productNameMap = {
 //     {"PROD001", "iPhone 15 Pro"}, {"PROD002", "MacBook Pro"},

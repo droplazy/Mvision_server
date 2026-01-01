@@ -34,7 +34,471 @@ bool DatabaseManager::createDatabase(const QString &dbName)
 bool DatabaseManager::createTables()
 {
     return createTable1() && createTable2() && createTable3() && createAppealTable()&&
-           createTable4() && createTable5() && createTable6() &&createWithdrawTable();
+           createTable4() && createTable5() && createTable6() && createTable7() &&  // 添加商品表
+           createWithdrawTable();
+}
+bool DatabaseManager::createTable7()
+{
+    QSqlQuery query;
+
+    QString createTableQuery = R"(
+        CREATE TABLE IF NOT EXISTS Products (
+            product_id TEXT PRIMARY KEY,
+            product_name TEXT NOT NULL,
+            category_id TEXT NOT NULL,
+            category_name TEXT,
+            unit_price REAL NOT NULL DEFAULT 0.0,
+            stock INTEGER NOT NULL DEFAULT 0,
+            min_order INTEGER NOT NULL DEFAULT 1,
+            max_order INTEGER NOT NULL DEFAULT 9999,
+            status TEXT NOT NULL DEFAULT 'active',
+            action TEXT,
+            subaction TEXT,
+            description TEXT,
+            image_url TEXT,
+            tags TEXT,
+            specifications TEXT,
+            sales_count INTEGER DEFAULT 0,
+            rating REAL DEFAULT 0.0,
+            rating_count INTEGER DEFAULT 0,
+            create_time TEXT DEFAULT (datetime('now', 'localtime')),
+            update_time TEXT DEFAULT (datetime('now', 'localtime')),
+
+            -- 添加外键约束（如果存在Categories表）
+            -- FOREIGN KEY (category_id) REFERENCES Categories(category_id)
+
+            -- 添加检查约束
+            CHECK (unit_price >= 0),
+            CHECK (stock >= 0),
+            CHECK (min_order >= 1),
+            CHECK (max_order >= min_order)
+        )
+    )";
+
+    if (!query.exec(createTableQuery)) {
+        qDebug() << "Error creating table Products: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Table Products created successfully.";
+
+    // 创建索引以提高查询性能
+    QStringList indexQueries = {
+        "CREATE INDEX IF NOT EXISTS idx_product_category ON Products(category_id)",
+        "CREATE INDEX IF NOT EXISTS idx_product_status ON Products(status)",
+        "CREATE INDEX IF NOT EXISTS idx_product_price ON Products(unit_price)",
+        "CREATE INDEX IF NOT EXISTS idx_product_stock ON Products(stock)",
+        "CREATE INDEX IF NOT EXISTS idx_product_create_time ON Products(create_time)",
+        "CREATE INDEX IF NOT EXISTS idx_product_sales ON Products(sales_count)",
+        "CREATE INDEX IF NOT EXISTS idx_product_rating ON Products(rating)"
+    };
+
+    for (const QString &indexQuery : indexQueries) {
+        if (!query.exec(indexQuery)) {
+            qDebug() << "Error creating index: " << query.lastError().text();
+        }
+    }
+
+    return true;
+}
+
+bool DatabaseManager::insertProduct(const SQL_Product &product)
+{
+    QSqlQuery query;
+
+    query.prepare(R"(
+        INSERT INTO Products
+        (product_id, product_name, category_id, category_name, unit_price,
+         stock, min_order, max_order, status, action, subaction, description,
+         image_url, tags, specifications, sales_count, rating, rating_count)
+        VALUES
+        (:product_id, :product_name, :category_id, :category_name, :unit_price,
+         :stock, :min_order, :max_order, :status, :action, :subaction, :description,
+         :image_url, :tags, :specifications, :sales_count, :rating, :rating_count)
+    )");
+
+    query.bindValue(":product_id", product.productId);
+    query.bindValue(":product_name", product.productName);
+    query.bindValue(":category_id", product.categoryId);
+    query.bindValue(":category_name", product.categoryName);
+    query.bindValue(":unit_price", product.unitPrice);
+    query.bindValue(":stock", product.stock);
+    query.bindValue(":min_order", product.minOrder);
+    query.bindValue(":max_order", product.maxOrder);
+    query.bindValue(":status", product.status.isEmpty() ? "active" : product.status);
+    query.bindValue(":action", product.action);
+    query.bindValue(":subaction", product.subaction);
+    query.bindValue(":description", product.description);
+    query.bindValue(":image_url", product.imageUrl);
+    query.bindValue(":tags", product.tags);
+    query.bindValue(":specifications", product.specifications);
+    query.bindValue(":sales_count", product.salesCount);
+    query.bindValue(":rating", product.rating);
+    query.bindValue(":rating_count", product.ratingCount);
+
+    if (!query.exec()) {
+        qDebug() << "Error inserting product: " << query.lastError().text();
+        qDebug() << "Last query:" << query.lastQuery();
+        qDebug() << "Bound values:" << query.boundValues();
+        return false;
+    }
+
+    qDebug() << "Product inserted successfully. ID:" << product.productId;
+    return true;
+}
+
+bool DatabaseManager::updateProduct(const SQL_Product &product)
+{
+    QSqlQuery query;
+
+    query.prepare(R"(
+        UPDATE Products
+        SET product_name = :product_name,
+            category_id = :category_id,
+            category_name = :category_name,
+            unit_price = :unit_price,
+            stock = :stock,
+            min_order = :min_order,
+            max_order = :max_order,
+            status = :status,
+            action = :action,
+            subaction = :subaction,
+            description = :description,
+            image_url = :image_url,
+            tags = :tags,
+            specifications = :specifications,
+            update_time = datetime('now', 'localtime')
+        WHERE product_id = :product_id
+    )");
+
+    query.bindValue(":product_id", product.productId);
+    query.bindValue(":product_name", product.productName);
+    query.bindValue(":category_id", product.categoryId);
+    query.bindValue(":category_name", product.categoryName);
+    query.bindValue(":unit_price", product.unitPrice);
+    query.bindValue(":stock", product.stock);
+    query.bindValue(":min_order", product.minOrder);
+    query.bindValue(":max_order", product.maxOrder);
+    query.bindValue(":status", product.status);
+    query.bindValue(":action", product.action);
+    query.bindValue(":subaction", product.subaction);
+    query.bindValue(":description", product.description);
+    query.bindValue(":image_url", product.imageUrl);
+    query.bindValue(":tags", product.tags);
+    query.bindValue(":specifications", product.specifications);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating product: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No product found with ID:" << product.productId;
+        return false;
+    }
+
+    qDebug() << "Product updated successfully. ID:" << product.productId;
+    return true;
+}
+
+bool DatabaseManager::deleteProduct(const QString &productId)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM Products WHERE product_id = :product_id");
+    query.bindValue(":product_id", productId);
+
+    if (!query.exec()) {
+        qDebug() << "Error deleting product: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Product deleted successfully. ID:" << productId;
+    return true;
+}
+
+SQL_Product DatabaseManager::getProductById(const QString &productId)
+{
+    SQL_Product product;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Products WHERE product_id = :product_id");
+    query.bindValue(":product_id", productId);
+
+    if (query.exec() && query.next()) {
+        product = extractProductFromQuery(query);
+    } else {
+        qDebug() << "Error fetching product by ID:" << productId
+                 << "Error:" << query.lastError().text();
+    }
+
+    return product;
+}
+
+QList<SQL_Product> DatabaseManager::getAllProducts()
+{
+    QList<SQL_Product> products;
+    QSqlQuery query("SELECT * FROM Products ORDER BY create_time DESC");
+
+    while (query.next()) {
+        SQL_Product product = extractProductFromQuery(query);
+        products.append(product);
+    }
+
+    qDebug() << "Retrieved" << products.size() << "products";
+    return products;
+}
+QList<SQL_Product> DatabaseManager::getProductsByCategory(const QString &categoryId)
+{
+    QList<SQL_Product> products;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Products WHERE category_id = :category_id ORDER BY create_time DESC");
+    query.bindValue(":category_id", categoryId);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Product product = extractProductFromQuery(query);
+            products.append(product);
+        }
+    } else {
+        qDebug() << "Error fetching products by category:" << query.lastError().text();
+    }
+
+    return products;
+}
+
+QList<SQL_Product> DatabaseManager::searchProducts(const QString &keyword)
+{
+    QList<SQL_Product> products;
+    QSqlQuery query;
+    query.prepare(R"(
+        SELECT * FROM Products
+        WHERE product_name LIKE :keyword
+           OR description LIKE :keyword
+           OR tags LIKE :keyword
+        ORDER BY create_time DESC
+    )");
+    query.bindValue(":keyword", "%" + keyword + "%");
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Product product = extractProductFromQuery(query);
+            products.append(product);
+        }
+    } else {
+        qDebug() << "Error searching products:" << query.lastError().text();
+    }
+
+    return products;
+}
+
+
+bool DatabaseManager::updateProductStock(const QString &productId, int quantity, bool increment = true)
+{
+    QSqlQuery query;
+
+    if (increment) {
+        query.prepare("UPDATE Products SET stock = stock + :quantity, update_time = datetime('now', 'localtime') WHERE product_id = :product_id");
+    } else {
+        query.prepare("UPDATE Products SET stock = stock - :quantity, update_time = datetime('now', 'localtime') WHERE product_id = :product_id");
+    }
+
+    query.bindValue(":product_id", productId);
+    query.bindValue(":quantity", quantity);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating product stock: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No product found with ID:" << productId;
+        return false;
+    }
+
+    qDebug() << "Product stock updated. ID:" << productId << "Quantity:" << quantity;
+    return true;
+}
+
+bool DatabaseManager::updateProductSales(const QString &productId, int quantity)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE Products
+        SET sales_count = sales_count + :quantity,
+            stock = stock - :quantity,
+            update_time = datetime('now', 'localtime')
+        WHERE product_id = :product_id
+    )");
+
+    query.bindValue(":product_id", productId);
+    query.bindValue(":quantity", quantity);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating product sales: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Product sales updated. ID:" << productId << "Quantity:" << quantity;
+    return true;
+}
+
+
+
+bool DatabaseManager::updateProductRating(const QString &productId, double newRating)
+{
+    // 先获取当前评分信息
+    SQL_Product product = getProductById(productId);
+    if (product.productId.isEmpty()) {
+        return false;
+    }
+
+    // 计算新的平均评分
+    double totalRating = product.rating * product.ratingCount + newRating;
+    int newRatingCount = product.ratingCount + 1;
+    double newAverageRating = totalRating / newRatingCount;
+
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE Products
+        SET rating = :rating,
+            rating_count = :rating_count,
+            update_time = datetime('now', 'localtime')
+        WHERE product_id = :product_id
+    )");
+
+    query.bindValue(":product_id", productId);
+    query.bindValue(":rating", newAverageRating);
+    query.bindValue(":rating_count", newRatingCount);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating product rating: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Product rating updated. ID:" << productId << "New rating:" << newAverageRating;
+    return true;
+}
+
+bool DatabaseManager::batchInsertProducts(const QList<SQL_Product> &products)
+{
+    if (products.isEmpty()) {
+        return true;
+    }
+
+    db.transaction();  // 开始事务
+
+    for (const SQL_Product &product : products) {
+        if (!insertProduct(product)) {
+            db.rollback();  // 回滚事务
+            return false;
+        }
+    }
+
+    db.commit();  // 提交事务
+    qDebug() << "Batch inserted" << products.size() << "products successfully";
+    return true;
+}
+
+bool DatabaseManager::batchUpdateProducts(const QList<SQL_Product> &products)
+{
+    if (products.isEmpty()) {
+        return true;
+    }
+
+    db.transaction();  // 开始事务
+
+    for (const SQL_Product &product : products) {
+        if (!updateProduct(product)) {
+            db.rollback();  // 回滚事务
+            return false;
+        }
+    }
+
+    db.commit();  // 提交事务
+    qDebug() << "Batch updated" << products.size() << "products successfully";
+    return true;
+}
+
+QList<SQL_Product> DatabaseManager::getNewProducts(int limit)
+{
+    QList<SQL_Product> products;
+    QSqlQuery query;
+    query.prepare(QString("SELECT * FROM Products ORDER BY create_time DESC LIMIT %1").arg(limit));
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Product product = extractProductFromQuery(query);
+            products.append(product);
+        }
+    } else {
+        qDebug() << "Error fetching new products:" << query.lastError().text();
+    }
+
+    return products;
+}
+
+SQL_Product DatabaseManager::extractProductFromQuery(const QSqlQuery &query)
+{
+    SQL_Product product;
+
+    product.productId = query.value("product_id").toString();
+    product.productName = query.value("product_name").toString();
+    product.categoryId = query.value("category_id").toString();
+    product.categoryName = query.value("category_name").toString();
+    product.unitPrice = query.value("unit_price").toDouble();
+    product.stock = query.value("stock").toInt();
+    product.minOrder = query.value("min_order").toInt();
+    product.maxOrder = query.value("max_order").toInt();
+    product.status = query.value("status").toString();
+    product.action = query.value("action").toString();
+    product.subaction = query.value("subaction").toString();
+    product.description = query.value("description").toString();
+    product.imageUrl = query.value("image_url").toString();
+    product.createTime = query.value("create_time").toString();
+    product.updateTime = query.value("update_time").toString();
+    product.tags = query.value("tags").toString();
+    product.specifications = query.value("specifications").toString();
+    product.salesCount = query.value("sales_count").toInt();
+    product.rating = query.value("rating").toDouble();
+    product.ratingCount = query.value("rating_count").toInt();
+
+    return product;
+}
+
+QList<SQL_Product> DatabaseManager::getHotProducts(int limit)
+{
+    QList<SQL_Product> products;
+    QSqlQuery query;
+    query.prepare(QString("SELECT * FROM Products ORDER BY sales_count DESC LIMIT %1").arg(limit));
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Product product = extractProductFromQuery(query);
+            products.append(product);
+        }
+    } else {
+        qDebug() << "Error fetching hot products:" << query.lastError().text();
+    }
+
+    return products;
+}
+
+QList<SQL_Product> DatabaseManager::getProductsByStatus(const QString &status)
+{
+    QList<SQL_Product> products;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Products WHERE status = :status ORDER BY create_time DESC");
+    query.bindValue(":status", status);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Product product = extractProductFromQuery(query);
+            products.append(product);
+        }
+    } else {
+        qDebug() << "Error fetching products by status:" << query.lastError().text();
+    }
+
+    return products;
 }
 
 bool DatabaseManager::createTable1()
@@ -2253,6 +2717,12 @@ QList<SQL_AppealRecord> DatabaseManager::getAppealsByPriority(const QString &pri
 
     return appeals;
 }
+
+
+
+
+
+
 #if 0
 
 // 创建测试用户
@@ -2417,4 +2887,39 @@ Device device = dbManager.getDeviceBySerialNumber("12345");
 
 // 删除设备
 dbManager.deleteDevice("12345");
+
+// 创建商品
+SQL_Product product;
+product.productId = "PROD001";
+product.productName = "iPhone 15 Pro";
+product.categoryId = "PHONE";
+product.categoryName = "智能手机";
+product.unitPrice = 8999.00;
+product.stock = 100;
+product.minOrder = 1;
+product.maxOrder = 10;
+product.status = "active";
+product.action = "sale";
+product.subaction = "discount";
+product.description = "最新款苹果手机";
+product.imageUrl = "https://example.com/iphone15.jpg";
+product.tags = "手机,苹果,iPhone,旗舰";
+product.specifications = "{\"color\":\"黑色\",\"storage\":\"256GB\"}";
+
+// 插入商品
+databaseManager.insertProduct(product);
+
+// 查询商品
+SQL_Product retrieved = databaseManager.getProductById("PROD001");
+
+// 更新库存
+databaseManager.updateProductStock("PROD001", 10, false); // 减少10个库存
+
+// 搜索商品
+QList<SQL_Product> searchResults = databaseManager.searchProducts("苹果");
+
+// 获取热门商品
+QList<SQL_Product> hotProducts = databaseManager.getHotProducts(5);
+
+
 #endif

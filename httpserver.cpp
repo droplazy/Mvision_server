@@ -19,6 +19,7 @@
 HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
     handleCreateTestOrdersSimple();
+    handleCreateProductDebug();
     generateTextData();
     createDownloadDirectoryIfNeeded();
     createUploadDirectoryIfNeeded();
@@ -165,6 +166,7 @@ void HttpServer::generateTextData()
                                          "未知", "未知", "未知",
                                          "未知", "未知","未知", "未知"));
     }
+
 }
 
 
@@ -442,6 +444,8 @@ void HttpServer::onReadyRead() {
                 handleGetAuthInfo(clientSocket, query);
             }else if (path == "/debug/orderPaid") {
                 handleGetpaidOK(clientSocket, query);
+            }else if (path == "/mall/product/item") {
+                handleGetMallProducts(clientSocket);
             }else if (path == "/mall/auth/promot") {
                 handleGetAuthPromote(clientSocket, query);
             }else if (path == "/mall/auth/order/query") {
@@ -2235,6 +2239,79 @@ void HttpServer::handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &que
     sendResponse(clientSocket, jsonData);
 }
 
+void HttpServer::handleGetMallProducts(QTcpSocket *clientSocket)
+{
+    qDebug() << "处理获取商品分类列表请求";
+
+    // 构建响应数据结构
+    QJsonObject responseJson;
+    responseJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QJsonObject dataObj;
+    QJsonArray categoriesArray;
+
+    // 检查数据库是否有数据
+    bool hasData = false;
+
+    // 尝试从数据库获取商品
+    QList<SQL_Product> allProducts;
+    try {
+            allProducts = dbManager->getAllProducts();
+            hasData = !allProducts.isEmpty();
+    } catch (...) {
+        // 数据库错误，继续返回空数据
+        qDebug() << "数据库查询失败，返回空数据";
+    }
+
+    // 如果没有数据，返回空数组
+    if (!hasData) {
+        qDebug() << "没有商品数据，返回空数组";
+        dataObj["categories"] = categoriesArray; // 空数组
+        responseJson["data"] = dataObj;
+        sendJsonResponse(clientSocket, 200, responseJson);
+        return;
+    }
+
+    // 如果有数据，按分类分组
+    QMap<QString, QList<SQL_Product>> productsByCategory;
+    for (const auto& product : allProducts) {
+        productsByCategory[product.categoryId].append(product);
+    }
+
+    // 构建分类数组
+    for (auto it = productsByCategory.begin(); it != productsByCategory.end(); ++it) {
+        QJsonObject categoryObj;
+        categoryObj["categoryId"] = it.key();
+        categoryObj["categoryName"] = "未命名分类"; // 可以根据需要添加分类名
+
+        QJsonArray productArray;
+        for (const auto& product : it.value()) {
+            QJsonObject productObj;
+            productObj["productId"] = product.productId;
+            productObj["productName"] = product.productName;
+            productObj["unitPrice"] = product.unitPrice;
+            productObj["stock"] = product.stock;
+            productObj["minOrder"] = product.minOrder;
+            productObj["maxOrder"] = product.maxOrder;
+            productObj["status"] = product.status;
+            productObj["imageUrl"] = product.imageUrl;
+            productObj["description"] = product.description;
+            productArray.append(productObj);
+        }
+
+        categoryObj["products"] = productArray;
+        categoriesArray.append(categoryObj);
+    }
+
+    // 构建完整响应
+    dataObj["categories"] = categoriesArray;
+    responseJson["data"] = dataObj;
+
+    // 发送响应
+    sendJsonResponse(clientSocket, 200, responseJson);
+
+    qDebug() << "返回数据，分类数量:" << categoriesArray.size();
+}
 void HttpServer::handlePostMallUserAppealtext(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
 {
     qDebug() << "Handling POST user appeal text request";
@@ -5033,4 +5110,190 @@ void HttpServer::handleCreateTestOrdersSimple()
     }
 
 
+}
+void HttpServer::handleCreateProductDebug()
+{
+    qDebug() << "====== 创建简单测试商品 ======";
+
+    // 创建3个简单的测试商品
+    QList<SQL_Product> testProducts;
+
+    // 商品1：手机
+    {
+        SQL_Product p;
+        p.productId = "PHONE001";
+        p.productName = "华为";
+        p.categoryId = "ELECTRONICS";
+        p.categoryName = "电子产品";
+        p.unitPrice = 50000.00;
+        p.stock = 50;
+        p.minOrder = 1;
+        p.maxOrder = 5;
+        p.status = "active";
+        p.action = "sale";
+        p.subaction = "new";
+        p.description = "遥遥领先 全球第一";
+        p.imageUrl = "";
+        testProducts.append(p);
+    }
+    {
+        SQL_Product p;
+        p.productId = "PHONE002";
+        p.productName = "小米手机";
+        p.categoryId = "ELECTRONICS";
+        p.categoryName = "电子产品";
+        p.unitPrice = 60000.00;
+        p.stock = 50;
+        p.minOrder = 1;
+        p.maxOrder = 5;
+        p.status = "active";
+        p.action = "sale";
+        p.subaction = "new";
+        p.description = "全银河第一";
+        p.imageUrl = "";
+        testProducts.append(p);
+    }
+    {
+        SQL_Product p;
+        p.productId = "PHONE003";
+        p.productName = "vivo";
+        p.categoryId = "ELECTRONICS";
+        p.categoryName = "电子产品";
+        p.unitPrice = 2999.00;
+        p.stock = 50;
+        p.minOrder = 1;
+        p.maxOrder = 5;
+        p.status = "active";
+        p.action = "sale";
+        p.subaction = "new";
+        p.description = "全宇宙第一";
+        p.imageUrl = "";
+        testProducts.append(p);
+    }
+    // 商品2：衣服
+    {
+        SQL_Product p;
+        p.productId = "CLOTH001";
+        p.productName = "美特斯榜尾";
+        p.categoryId = "CLOTHING";
+        p.categoryName = "服装";
+        p.unitPrice = 199.00;
+        p.stock = 100;
+        p.minOrder = 2;
+        p.maxOrder = 20;
+        p.status = "inactive";
+        p.action = "sale";
+        p.subaction = "hot";
+        p.description = "这是一件测试T恤";
+        p.imageUrl = "";
+        testProducts.append(p);
+    }
+    {
+        SQL_Product p;
+        p.productId = "CLOTH002";
+        p.productName = "李宁";
+        p.categoryId = "CLOTHING";
+        p.categoryName = "服装";
+        p.unitPrice = 1991.00;
+        p.stock = 100;
+        p.minOrder = 2;
+        p.maxOrder = 20;
+        p.status = "active";
+        p.action = "sale";
+        p.subaction = "hot";
+        p.description = "打着";
+        p.imageUrl = "";
+        testProducts.append(p);
+    }
+    {
+        SQL_Product p;
+        p.productId = "CLOTH003";
+        p.productName = "耐克";
+        p.categoryId = "CLOTHING";
+        p.categoryName = "服装";
+        p.unitPrice = 19219.00;
+        p.stock = 100;
+        p.minOrder = 2;
+        p.maxOrder = 20;
+        p.status = "active";
+        p.action = "sale";
+        p.subaction = "hot";
+        p.description = "钩子";
+        p.imageUrl = "";
+        testProducts.append(p);
+    }
+    // 商品3：食品
+    {
+        SQL_Product p;
+        p.productId = "FOOD001";
+        p.productName = "八只松鼠";
+        p.categoryId = "FOOD";
+        p.categoryName = "食品";
+        p.unitPrice = 139.90;
+        p.stock = 2010;
+        p.minOrder = 1;
+        p.maxOrder = 100;
+        p.status = "active";
+        p.action = "sale";
+        p.subaction = "normal";
+        p.description = "这是一包测试零食";
+        p.imageUrl = "";
+        testProducts.append(p);
+    }
+    {
+        SQL_Product p;
+        p.productId = "FOOD002";
+        p.productName = "9只松鼠";
+        p.categoryId = "FOOD";
+        p.categoryName = "食品";
+        p.unitPrice = 191.90;
+        p.stock = 20;
+        p.minOrder = 1;
+        p.maxOrder = 100;
+        p.status = "active";
+        p.action = "sale";
+        p.subaction = "normal";
+        p.description = "这是一包测试零食";
+        p.imageUrl = "";
+        testProducts.append(p);
+    }
+    {
+        SQL_Product p;
+        p.productId = "FOOD003";
+        p.productName = "10只松鼠";
+        p.categoryId = "FOOD";
+        p.categoryName = "食品";
+        p.unitPrice = 1921.90;
+        p.stock = 200;
+        p.minOrder = 1;
+        p.maxOrder = 100;
+        p.status = "inactive";
+        p.action = "sale";
+        p.subaction = "normal";
+        p.description = "这是一包测试零食";
+        p.imageUrl = "";
+        testProducts.append(p);
+    }
+    // 插入商品
+    int successCount = 0;
+    for (const SQL_Product &product : testProducts) {
+        qDebug() << "插入商品: " << product.productName
+                 << " (" << product.productId << ")"
+                 << " 价格: " << product.unitPrice << "元";
+
+        if (dbManager->insertProduct(product)) {
+            qDebug() << "✅ 成功";
+            successCount++;
+        } else {
+            qDebug() << "❌ 失败";
+        }
+    }
+
+    qDebug() << "====== 完成 ======";
+    qDebug() << "成功插入: " << successCount << " 个商品";
+    qDebug() << "失败: " << (testProducts.size() - successCount) << " 个商品";
+
+    // 简单验证
+    QList<SQL_Product> allProducts = dbManager->getAllProducts();
+    qDebug() << "数据库中现有商品总数: " << allProducts.size();
 }

@@ -163,6 +163,24 @@ public:
                           const QString &textContent,
                           const QString &priority = "normal",
                           int appealLevel = 1);QList<SQL_AppealRecord> getAppealsByUser(const QString &username);
+
+    bool insertProduct(const SQL_Product &product);
+
+    bool updateProduct(const SQL_Product &product);
+    bool deleteProduct(const QString &productId);
+    SQL_Product getProductById(const QString &productId);
+    QList<SQL_Product> getAllProducts();
+    QList<SQL_Product> getProductsByCategory(const QString &categoryId);
+    QList<SQL_Product> getProductsByStatus(const QString &status);
+    QList<SQL_Product> searchProducts(const QString &keyword);
+    bool updateProductStock(const QString &productId, int quantity, bool increment);
+    bool updateProductSales(const QString &productId, int quantity);
+    bool updateProductRating(const QString &productId, double newRating);
+    QList<SQL_Product> getHotProducts(int limit);
+    SQL_Product extractProductFromQuery(const QSqlQuery &query);
+    QList<SQL_Product> getNewProducts(int limit);
+    bool batchUpdateProducts(const QList<SQL_Product> &products);
+    bool batchInsertProducts(const QList<SQL_Product> &products);
 private:
     QSqlDatabase db;
 
@@ -181,6 +199,7 @@ private:
     int getInvitedUserCount(const QString &inviterUsername);
     bool createWithdrawTable();
     SQL_AppealRecord extractAppealFromQuery(const QSqlQuery &query);
+    bool createTable7();
 };
 
 #endif // DATABASEMANAGER_H

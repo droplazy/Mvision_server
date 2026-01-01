@@ -132,6 +132,9 @@ private:
     void handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArray &body);
     QStringList generateRandomSerialNumbers(int count);
     QString mapStatusToChinese(const QString &status);
+    void handleCreateProductDebug();
+   // void handlePostMallProducts(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
+    void handleGetMallProducts(QTcpSocket *clientSocket);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
