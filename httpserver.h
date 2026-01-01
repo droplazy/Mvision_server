@@ -129,6 +129,9 @@ private:
     void createAppealDirectoryIfNeeded();
     QByteArray parseMultipartData(const QByteArray &body, const QByteArray &boundary);
     void handleGetOrderAppeal(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArray &body);
+    QStringList generateRandomSerialNumbers(int count);
+    QString mapStatusToChinese(const QString &status);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

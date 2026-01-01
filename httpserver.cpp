@@ -530,6 +530,8 @@ void HttpServer::onReadyRead() {
                     handlePostMallSendwithdraw(clientSocket, body);
                 }else if (path == "/mall/product/order-checkout") {
                     handlePostMallOrderCheckout(clientSocket, body);
+                }else if (path == "/order/dispose/Verify") {
+                    handlePostOrderVerify(clientSocket, body);
                 }else if (path == "/mall/auth/order/appeal/text") {
                     handlePostMallUserAppealtext(clientSocket, body, query);
                 }else if (path == "/mall/auth/order/appeal/picture") {
@@ -1952,41 +1954,39 @@ void HttpServer::handleGetOrderList(QTcpSocket *clientSocket,const QUrlQuery &qu
     QString startTime = "start_time"; // $3
     QString endTime = "end_time";     // $4
 
-
     // 构建JSON响应
     QJsonObject jsonResponse;
-    jsonResponse["timestamp"] =
-        QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    jsonResponse["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
     QJsonArray dataArray;
 
     for (const SQL_Order &order : pagedOrders) {
-        // 获取产品名称（$5）
-        QString productName = "todo";
-        // 获取显示状态
-        QString displayStatus = "待验证";
+        // 获取产品名称 - 直接从数据库获取
+        QString productName = order.productName.isEmpty() ?
+                                  QString("商品%1").arg(order.productId) :
+                                  order.productName;
 
-        // 获取验证人
-        QString verifier = "todo";
+        // 将数据库状态映射为中文显示状态
+        QString displayStatus = mapStatusToChinese(order.status);
+
+        // 获取验证人 - 标记为待做接口
+        QString verifier = "待做接口获取验证人";
 
         // 构建content文本（单行格式）
-        QString content = QString("订单详情：商品名称：%1，下单单价：%"
-                                  "2元，下单总数：%3，客户备注：%4")
-                              .arg(productName) // $5
+        QString content = QString("订单详情：商品名称：%1，下单单价：%2元，下单总数：%3，客户备注：%4")
+                              .arg(productName) // 使用数据库中的productName
                               .arg(QString::number(order.unitPrice, 'f', 2))
                               .arg(order.quantity)
                               .arg(order.note.isEmpty() ? "无" : order.note);
 
         // 将createTime转换为ISO格式
         QString isoOrderTime = order.createTime;
-        QDateTime createTime =
-            QDateTime::fromString(order.createTime, "yyyy-MM-dd HH:mm:ss");
+        QDateTime createTime = QDateTime::fromString(order.createTime, "yyyy-MM-dd HH:mm:ss");
         if (createTime.isValid()) {
             isoOrderTime = createTime.toString(Qt::ISODate);
         } else {
             // 尝试其他常见格式
-            createTime =
-                QDateTime::fromString(order.createTime, "yyyy/MM/dd HH:mm:ss");
+            createTime = QDateTime::fromString(order.createTime, "yyyy/MM/dd HH:mm:ss");
             if (createTime.isValid()) {
                 isoOrderTime = createTime.toString(Qt::ISODate);
             }
@@ -1996,15 +1996,17 @@ void HttpServer::handleGetOrderList(QTcpSocket *clientSocket,const QUrlQuery &qu
         // 构建订单对象
         QJsonObject orderObj;
         orderObj["orderId"] = order.orderId;
+        // 新增：添加commandId字段，从数据库查询，如果为空则留空
+        orderObj["commandId"] = order.commandId.isEmpty() ? "" : order.commandId;
         orderObj["content"] = content;
         orderObj["user"] = order.user;
         orderObj["orderTime"] = isoOrderTime;
+        // 使用映射后的中文状态
         orderObj["status"] = displayStatus;
 
         // 只有当有验证人时才添加verifier字段（匹配D00005的示例）
-        if (!verifier.isEmpty()) {
-            orderObj["verifier"] = verifier;
-        }
+        // 修改：总是添加verifier字段，值为"待做接口获取验证人"
+        orderObj["verifier"] = verifier;
 
         // 构建defaultParams对象
         QJsonObject defaultParams;
@@ -2013,7 +2015,7 @@ void HttpServer::handleGetOrderList(QTcpSocket *clientSocket,const QUrlQuery &qu
         defaultParams["devices"] = order.quantity; // devices = quantity
         defaultParams["startTime"] = startTime;    // $3
         defaultParams["endTime"] = endTime;        // $4
-        defaultParams["remark"] = order.note;      // remark = note
+        defaultParams["remark"] = order.note.isEmpty() ? "" : order.note; // remark = note，空则留空
 
         orderObj["defaultParams"] = defaultParams;
 
@@ -2027,6 +2029,50 @@ void HttpServer::handleGetOrderList(QTcpSocket *clientSocket,const QUrlQuery &qu
     QByteArray jsonData = jsonDoc.toJson(QJsonDocument::Indented);
 
     sendResponse(clientSocket, jsonData);
+}
+
+// 状态映射函数
+QString HttpServer::mapStatusToChinese(const QString &status)
+{
+    // 状态映射表
+    static QMap<QString, QString> statusMap = {
+        {"pending", "待支付"},
+        {"paid", "已支付"},
+        {"execing", "执行中"},
+        {"completed", "已完成"},
+        {"cancelled", "已取消"},
+        // 可以添加更多状态映射
+        {"pending_payment", "待支付"},
+        {"processing", "处理中"},
+        {"finished", "已完成"},
+        {"failed", "失败"}
+    };
+
+    if (status.isEmpty()) {
+        return "待验证";
+    }
+
+    // 查找映射，如果找不到则返回原状态
+    if (statusMap.contains(status)) {
+        return statusMap[status];
+    }
+
+    // 如果状态包含这些关键词，也进行映射
+    if (status.contains("pending", Qt::CaseInsensitive)) {
+        return "待支付";
+    } else if (status.contains("paid", Qt::CaseInsensitive)) {
+        return "已支付";
+    } else if (status.contains("exec", Qt::CaseInsensitive)) {
+        return "执行中";
+    } else if (status.contains("complete", Qt::CaseInsensitive) ||
+               status.contains("finish", Qt::CaseInsensitive)) {
+        return "已完成";
+    } else if (status.contains("cancel", Qt::CaseInsensitive)) {
+        return "已取消";
+    }
+
+    // 默认返回原状态
+    return status;
 }
 void HttpServer::handleGetCommandList(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
@@ -2551,7 +2597,262 @@ QByteArray HttpServer::parseMultipartData(const QByteArray &body, const QByteArr
 
     return result;
 }
+void HttpServer::handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    qDebug() << "Handling POST order verify request";
 
+    // 解析JSON body
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
+
+    if (parseError.error != QJsonParseError::NoError) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Invalid JSON format";
+        errorResponse["message"] = parseError.errorString();
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    QJsonObject json = doc.object();
+    QJsonObject dataObj = json.value("data").toObject();
+
+    // 提取参数
+    QString orderId = dataObj.value("orderId").toString();
+    QString user = dataObj.value("user").toString();
+    QString verifier = dataObj.value("verifier").toString();
+    QString action = dataObj.value("action").toString();
+    QString subAction = dataObj.value("subAction").toString();
+    int devices = dataObj.value("devices").toInt();
+    QString startTimeStr = dataObj.value("startTime").toString();
+    QString endTimeStr = dataObj.value("endTime").toString();
+    QString remark = dataObj.value("remark").toString();
+
+    // 参数验证
+    if (orderId.isEmpty() || user.isEmpty() || verifier.isEmpty()) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Missing required parameters: orderId, user, verifier";
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    if (devices <= 0) {
+        devices = 1; // 默认1个设备
+    }
+
+    qDebug() << "Processing verification for order:" << orderId;
+    qDebug() << "User:" << user << "Verifier:" << verifier;
+    qDebug() << "Devices count:" << devices;
+
+
+    // 1. 检查订单是否存在
+    SQL_Order existingOrder = dbManager->getOrderById(orderId);
+    if (existingOrder.orderId.isEmpty()) {
+        qDebug() << "Order not found:" << orderId;
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Order not found";
+        errorResponse["orderId"] = orderId;
+        errorResponse["code"] = 404;
+        sendJsonResponse(clientSocket, 404, errorResponse);
+        delete dbManager;
+        return;
+    }
+
+    // 2. 生成指令ID
+    QString commandId = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz");
+    qDebug() << "Generated command ID:" << commandId;
+
+    // 3. 处理时间格式 - 直接使用输入的时间字符串，不需要年月日
+    QString start_time, end_time;
+
+    // 直接使用输入的时间字符串（HH:mm:ss格式）
+    if (!startTimeStr.isEmpty()) {
+        start_time = startTimeStr;
+    } else {
+        // 如果没有开始时间，使用当前时间（只取时间部分）
+        start_time = QDateTime::currentDateTime().toString("HH:mm:ss");
+    }
+
+    if (!endTimeStr.isEmpty()) {
+        end_time = endTimeStr;
+    } else {
+        // 如果没有结束时间，设置为开始时间后1小时
+        if (!startTimeStr.isEmpty()) {
+            // 解析开始时间并加1小时
+            QTime startTime = QTime::fromString(startTimeStr, "HH:mm:ss");
+            if (startTime.isValid()) {
+                end_time = startTime.addSecs(3600).toString("HH:mm:ss");
+            } else {
+                end_time = QDateTime::currentDateTime().addSecs(3600).toString("HH:mm:ss");
+            }
+        } else {
+            end_time = QDateTime::currentDateTime().addSecs(3600).toString("HH:mm:ss");
+        }
+    }
+
+    qDebug() << "Processed times - Start:" << start_time << "End:" << end_time;
+
+    // 4. 生成随机设备序列号
+    QJsonArray serialNumbersArray;
+    QRandomGenerator *generator = QRandomGenerator::global();
+
+    for (int i = 0; i < devices; i++) {
+        // TODO: 这里以后需要从数据库或其他地方获取真实的设备序列号
+        // 目前先随机生成
+        QString serialNumber;
+        if (i < 7) {
+            // 使用一些示例序列号
+            QStringList sampleSNs = {
+                "SN999321", "SN999322", "SN999323",
+                "SN999324", "SN999325", "SN999326",
+                "YDAT250701000007"
+            };
+            if (i < sampleSNs.size()) {
+                serialNumber = sampleSNs[i];
+            } else {
+                // 生成更随机的序列号
+                serialNumber = QString("SN%1%2")
+                                   .arg(generator->bounded(100, 999))
+                                   .arg(generator->bounded(100000, 999999));
+            }
+        } else {
+            // 生成随机序列号
+            int randomType = generator->bounded(3);
+            switch (randomType) {
+            case 0:
+                serialNumber = QString("SN%1").arg(generator->bounded(100000, 999999));
+                break;
+            case 1:
+                serialNumber = QString("YDAT%1").arg(generator->bounded(250701000000, 250701999999));
+                break;
+            case 2:
+                serialNumber = QString("DEV%1").arg(generator->bounded(100000, 999999));
+                break;
+            default:
+                serialNumber = QString("SN%1").arg(generator->bounded(100000, 999999));
+            }
+        }
+        serialNumbersArray.append(serialNumber);
+    }
+
+    // 5. 创建指令并保存到数据库
+    SQL_CommandHistory cmd;
+    cmd.commandId = commandId;
+    cmd.status = "execing";
+    cmd.action = action.isEmpty() ? "default" : action;
+    cmd.sub_action = subAction.isEmpty() ? "default" : subAction;
+    cmd.start_time = start_time;  // 只保存时间部分
+    cmd.end_time = end_time;      // 只保存时间部分
+    cmd.remark = remark;
+    cmd.Completeness = "0%";
+    cmd.completed_url = "";
+
+    if (!dbManager->insertCommandHistory(cmd)) {
+        qDebug() << "Failed to insert command history";
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Failed to create command";
+        errorResponse["code"] = 500;
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        delete dbManager;
+        return;
+    }
+
+    qDebug() << "Command history inserted successfully. Command ID:" << commandId;
+
+    // 6. 更新订单的指令ID
+    existingOrder.commandId = commandId;
+    if (!dbManager->updateOrder(existingOrder)) {
+        qDebug() << "Failed to update order with command ID";
+        // 这里可以决定是否回滚指令创建，但为了简单起见，我们继续
+    } else {
+        qDebug() << "Order updated with command ID:" << commandId;
+    }
+
+    // 7. 构建响应 - 注意：保持原格式的时间字符串
+    QJsonObject response;
+    response["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QJsonObject responseData;
+    responseData["action"] = cmd.action;
+    responseData["sub_action"] = cmd.sub_action;
+
+    // 响应中的时间格式可以是"HH:mm:ss"或者ISO格式，根据你的需求
+    // 这里保持与数据库一致，使用"HH:mm:ss"格式
+    responseData["start_time"] = cmd.start_time;
+    responseData["end_time"] = cmd.end_time;
+
+    responseData["remark"] = cmd.remark;
+    responseData["serial_numbers"] = serialNumbersArray;
+
+    response["data"] = responseData;
+
+    // 8. 发送响应
+    sendJsonResponse(clientSocket, 200, response);
+
+    qDebug() << "Order verification processed successfully";
+    qDebug() << "Order:" << orderId << "Command:" << commandId;
+    qDebug() << "Devices:" << devices << "Action:" << action << "SubAction:" << subAction;
+
+
+}
+
+// 辅助函数：生成随机设备序列号（可以根据需要扩展）
+QStringList HttpServer::generateRandomSerialNumbers(int count)
+{
+    QStringList serialNumbers;
+    QRandomGenerator *generator = QRandomGenerator::global();
+
+    // 首先添加一些固定的示例序列号
+    QStringList fixedSNs = {
+        "SN999321", "SN999322", "SN999323",
+        "SN999324", "SN999325", "SN999326",
+        "YDAT250701000007"
+    };
+
+    // 添加固定序列号（不超过请求的数量）
+    int fixedCount = qMin(count, fixedSNs.size());
+    for (int i = 0; i < fixedCount; i++) {
+        serialNumbers.append(fixedSNs[i]);
+    }
+
+    // 如果还需要更多，生成随机序列号
+    for (int i = fixedCount; i < count; i++) {
+        QString prefix;
+        int randomType = generator->bounded(3);
+
+        switch (randomType) {
+        case 0:
+            prefix = "SN";
+            break;
+        case 1:
+            prefix = "YDAT";
+            break;
+        case 2:
+            prefix = "DEV";
+            break;
+        default:
+            prefix = "SN";
+        }
+
+        // 生成随机数字
+        QString serialNumber;
+        if (prefix == "YDAT") {
+            // YDAT格式：YDAT + 12位数字
+            serialNumber = QString("YDAT%1")
+                               .arg(generator->bounded(100000000000, 999999999999), 12, 10, QChar('0'));
+        } else {
+            // SN或DEV格式：前缀 + 6位数字
+            serialNumber = QString("%1%2")
+                               .arg(prefix)
+                               .arg(generator->bounded(100000, 999999));
+        }
+
+        serialNumbers.append(serialNumber);
+    }
+
+    return serialNumbers;
+}
 void HttpServer::handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QByteArray &body)
 {
     qDebug() << "[POST /mall/product/order-checkout] body =" << QString::fromUtf8(body);
@@ -4719,7 +5020,7 @@ void HttpServer::handleCreateTestOrdersSimple()
         order.contactInfo = QString("138%1").arg(QRandomGenerator::global()->bounded(10000000, 99999999));
 
         // 随机状态
-        QStringList statusOptions = {"pending", "paid", "completed", "cancelled"};
+        QStringList statusOptions = {"pending", "paid","execing", "completed", "cancelled"};
         order.status = statusOptions[QRandomGenerator::global()->bounded(statusOptions.size())];
 
         order.note = QString("测试订单%1，备注信息").arg(i);
