@@ -181,6 +181,9 @@ public:
     QList<SQL_Product> getNewProducts(int limit);
     bool batchUpdateProducts(const QList<SQL_Product> &products);
     bool batchInsertProducts(const QList<SQL_Product> &products);
+    int getInvitedUserCount(const QString &inviterUsername);
+    double getInvitedUsersTotalConsumption(const QString &inviterUsername);
+
 private:
     QSqlDatabase db;
 
@@ -195,8 +198,6 @@ private:
     SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query);
     SQL_Order extractOrderFromQuery(const QSqlQuery &query);
     SQL_MallUser extractMallUserFromQuery(const QSqlQuery &query);
-    double getInvitedUsersTotalConsumption(const QString &inviterUsername);
-    int getInvitedUserCount(const QString &inviterUsername);
     bool createWithdrawTable();
     SQL_AppealRecord extractAppealFromQuery(const QSqlQuery &query);
     bool createTable7();

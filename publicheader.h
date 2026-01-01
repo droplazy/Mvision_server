@@ -371,7 +371,7 @@ struct SQL_Product {
 //     {"PROD005", "AirPods Pro"},   {"PROD006", "iMac"},
 //     {"PROD007", "Mac mini"} // 在这里添加更多产品映射...
 // };
-#define LOGIN_BACKGROUND_PIC    "192.168.10.103:/images/login-bg.jpg"
+#define LOGIN_BACKGROUND_PIC    "192.168.10.103:8080/images?filename=login-bg.jpg"
 #define LOGIN_GUIDE_TEXT        "欢迎登录设备管理系统"
 #define LOGIN_SLOGAN1           "安全可靠，智能管理"
 #define LOGIN_SLOGAN2           "让设备管理更简单"
