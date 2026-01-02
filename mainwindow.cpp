@@ -9,6 +9,7 @@
 #include "mallusermanager.h"  // 添加头文件
 #include "mallproducts.h"
 #include "orderlist.h"
+#include "userappeal.h"
 /*************************/
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -237,5 +238,24 @@ void MainWindow::on_pushButton_order_clicked()
     // 设置模态或非模态显示
     orderWindow->setAttribute(Qt::WA_DeleteOnClose);
     orderWindow->exec();  // 模态显示
+}
+
+
+void MainWindow::on_pushButton_appeal_clicked()
+{
+    // 创建投诉处理窗口
+    userappeal *appealWindow = new userappeal(this);
+
+    // 如果需要设置当前用户（从登录信息获取）
+    // QString currentUser = getCurrentUser(); // 假设有这个函数
+    // appealWindow->setCurrentUser(currentUser);
+
+    // 设置窗口属性
+    appealWindow->setAttribute(Qt::WA_DeleteOnClose);
+    appealWindow->setWindowModality(Qt::ApplicationModal);
+
+    // 显示窗口
+    appealWindow->show();
+
 }
 

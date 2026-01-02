@@ -24,7 +24,8 @@ SOURCES += \
     mallusermanager.cpp \
     mqtt_server.cpp \
     mqttclient.cpp \
-    orderlist.cpp
+    orderlist.cpp \
+    userappeal.cpp
 
 HEADERS += \
     addproduct.h \
@@ -42,7 +43,8 @@ HEADERS += \
     mqtt_server.h \
     mqttclient.h \
     orderlist.h \
-    publicheader.h
+    publicheader.h \
+    userappeal.h
 
 FORMS += \
     addproduct.ui \
@@ -53,7 +55,8 @@ FORMS += \
     mainwindow.ui \
     mallproducts.ui \
     mallusermanager.ui \
-    orderlist.ui
+    orderlist.ui \
+    userappeal.ui
 
 TRANSLATIONS += \
     MuiltiControlSer_zh_CN.ts
