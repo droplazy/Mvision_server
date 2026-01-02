@@ -10,6 +10,7 @@ CONFIG += c++17
 
 SOURCES += \
     databasemanager.cpp \
+    emailsender.cpp \
     httpserver.cpp \
     main.cpp \
     mainwindow.cpp \
@@ -18,6 +19,7 @@ SOURCES += \
 
 HEADERS += \
     databasemanager.h \
+    emailsender.h \
     httpserver.h \
     mainwindow.h \
     mqtt_server.h \
