@@ -35,6 +35,8 @@ private slots:
 
     void on_pushButton_products_clicked();
 
+    void on_pushButton_order_clicked();
+
 private:
     Ui::MainWindow *ui;
 

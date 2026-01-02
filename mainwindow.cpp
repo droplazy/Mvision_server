@@ -2,12 +2,14 @@
 #include "ui_mainwindow.h"
 #include "loghandler.h"
 #include <QMessageBox>
+/****************************子窗口控件*/
 #include "devicelistdialog.h"
 #include "commandlsit.h"
 #include "firmware.h"
 #include "mallusermanager.h"  // 添加头文件
 #include "mallproducts.h"
-
+#include "orderlist.h"
+/*************************/
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -223,5 +225,17 @@ void MainWindow::on_pushButton_products_clicked()
 
     // 对话框关闭后自动删除
     productsDialog->deleteLater();
+}
+
+
+void MainWindow::on_pushButton_order_clicked()
+{
+    // 创建订单查询窗口
+    orderlist *orderWindow = new orderlist(this);
+    orderWindow->setDatabaseManager(p_db);
+
+    // 设置模态或非模态显示
+    orderWindow->setAttribute(Qt::WA_DeleteOnClose);
+    orderWindow->exec();  // 模态显示
 }
 
