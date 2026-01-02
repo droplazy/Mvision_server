@@ -27,6 +27,12 @@ public slots:
 private slots:
     void on_pushButton_devlist_clicked();
 
+    void on_pushButton_cmdquery_clicked();
+
+    void on_pushButton_firmware_clicked();
+
+    void on_pushButton_malluser_clicked();
+
 private:
     Ui::MainWindow *ui;
 

@@ -9,7 +9,8 @@ insertdev::insertdev(QWidget *parent)
 
     // 设置窗口标题
     setWindowTitle("添加设备");
-
+    // 禁止窗口拉伸
+    setFixedSize(this->size());
     // 设置输入框占位符提示
     ui->lineEdit_serialnum->setPlaceholderText("请输入设备序列号");
     ui->lineEdit_checksum->setPlaceholderText("请输入校验码");

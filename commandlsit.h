@@ -1,0 +1,33 @@
+#ifndef COMMANDLSIT_H
+#define COMMANDLSIT_H
+
+#include <QDialog>
+#include "DatabaseManager.h"
+
+namespace Ui {
+class commandlsit;
+}
+
+class commandlsit : public QDialog
+{
+    Q_OBJECT
+
+public:
+    explicit commandlsit(DatabaseManager* dbManager, QWidget *parent = nullptr);
+    ~commandlsit();
+
+private slots:
+    void on_pushButton_clicked();
+    void onDeleteButtonClicked(const QString &commandId);
+
+private:
+    Ui::commandlsit *ui;
+    DatabaseManager* m_dbManager;
+
+    void loadCommandList();
+    void setupTableWidget();
+    void addDeleteButtonToRow(int row, const QString &commandId);
+    void filterCommands(const QString &keyword);
+};
+
+#endif // COMMANDLSIT_H

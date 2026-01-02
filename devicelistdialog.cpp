@@ -17,7 +17,7 @@ devicelistdialog::devicelistdialog(DatabaseManager* dbManager, QWidget *parent)
 
     // 设置窗口标题
     setWindowTitle("设备列表");
-
+    setFixedSize(this->size());
     // 设置表格
     setupTableView();
 

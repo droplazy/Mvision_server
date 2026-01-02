@@ -66,8 +66,8 @@
    <widget class="QPushButton" name="pushButton_close">
     <property name="geometry">
      <rect>
-      <x>120</x>
-      <y>520</y>
+      <x>110</x>
+      <y>570</y>
       <width>101</width>
       <height>31</height>
      </rect>
@@ -130,8 +130,8 @@
    <widget class="QPushButton" name="pushButton_firmware">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>480</y>
+      <x>230</x>
+      <y>360</y>
       <width>101</width>
       <height>31</height>
      </rect>
@@ -162,7 +162,7 @@
    <widget class="QPushButton" name="pushButton_cmdquery">
     <property name="geometry">
      <rect>
-      <x>230</x>
+      <x>120</x>
       <y>360</y>
       <width>101</width>
       <height>31</height>
@@ -175,26 +175,10 @@
      <string>指令查询</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="pushButton_cmd">
-    <property name="geometry">
-     <rect>
-      <x>120</x>
-      <y>360</y>
-      <width>101</width>
-      <height>31</height>
-     </rect>
-    </property>
-    <property name="styleSheet">
-     <string notr="true"/>
-    </property>
-    <property name="text">
-     <string>指令下发</string>
-    </property>
-   </widget>
    <widget class="QPushButton" name="pushButton_webUI">
     <property name="geometry">
      <rect>
-      <x>120</x>
+      <x>10</x>
       <y>480</y>
       <width>101</width>
       <height>31</height>
@@ -308,8 +292,8 @@
    <widget class="QPushButton" name="pushButton_mqtt">
     <property name="geometry">
      <rect>
-      <x>10</x>
-      <y>520</y>
+      <x>120</x>
+      <y>480</y>
       <width>101</width>
       <height>31</height>
      </rect>

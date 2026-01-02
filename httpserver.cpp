@@ -567,11 +567,11 @@ void HttpServer::handleGetDownload(QTcpSocket *clientSocket, const QUrlQuery &qu
 
     // 4. 构建完整的文件路径
     QDir downloadDir(QDir::current().filePath("Download"));
+    qDebug() <<"Download path  = " << downloadDir;
 
     // 确保Download目录存在
     if (!downloadDir.exists()) {
         sendHttpResponse(clientSocket, 404, "Not Found", "Download directory not found");
-        qDebug() <<"Download path  = " << downloadDir;
         return;
     }
 
@@ -1278,8 +1278,7 @@ void HttpServer::handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &qu
     }
 
     // 在当前应用程序目录的images子目录中查找文件
-    // QString appDir = QCoreApplication::applicationDirPath();
-    // QString imagePath = appDir + "/images/" + fileName;
+
     QDir currentDir(QDir::currentPath());
     QString imagePath = currentDir.filePath("images/"+fileName);
     qDebug() << "Looking for image at:" << imagePath;

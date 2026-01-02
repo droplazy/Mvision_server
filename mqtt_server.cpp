@@ -35,17 +35,29 @@ MQTT_server::MQTT_server(DatabaseManager *db):  dbManager(db)
 
 bool MQTT_server::startServer()
 {
-    // 获取当前应用程序目录
-    QString currentDir = QCoreApplication::applicationDirPath()+"/mosquitto/";
+    // 获取当前工作目录
+    QDir currentDir = QDir::current();
 
-    // 构建可执行文件和配置文件的完整路径
-    QString exePath = QDir(currentDir).filePath("mosquitto.exe");
-    QString configPath = QDir(currentDir).filePath("mosquitto.conf");
-    QString logPath = QDir(currentDir).filePath("mosquitto.log");
+    // 构建 mosquitto 目录路径
+    QString mosquittoDirPath = currentDir.filePath("mosquitto");
+
+    // 检查 mosquitto 目录是否存在
+    QDir mosquittoDir(mosquittoDirPath);
+    if (!mosquittoDir.exists()) {
+        qCritical() << "✗ mosquitto directory not found:" << mosquittoDirPath;
+        qCritical() << "Please create mosquitto directory and put mosquitto.exe in it";
+        return false;
+    }
+
+    // 构建可执行文件和配置文件的完整路径（在 mosquitto 子目录下）
+    QString exePath = mosquittoDir.filePath("mosquitto.exe");
+    QString configPath = mosquittoDir.filePath("mosquitto.conf");
+    QString logPath = mosquittoDir.filePath("mosquitto.log");
 
     qDebug() << "========================================";
     qDebug() << "Starting MQTT Server...";
-    qDebug() << "Current directory:" << currentDir;
+    qDebug() << "Current directory:" << currentDir.absolutePath();
+    qDebug() << "Mosquitto directory:" << mosquittoDirPath;
     qDebug() << "mosquitto.exe path:" << exePath;
     qDebug() << "Configuration path:" << configPath;
     qDebug() << "Log file path:" << logPath;
@@ -53,11 +65,11 @@ bool MQTT_server::startServer()
 
     // 1. 检查 mosquitto.exe 是否存在
     if (!QFile::exists(exePath)) {
-        qCritical() << "✗ mosquitto.exe not found in:" << currentDir;
-        qCritical() << "Please ensure mosquitto.exe is in the application directory";
+        qCritical() << "✗ mosquitto.exe not found in:" << mosquittoDirPath;
+        qCritical() << "Please ensure mosquitto.exe is in the mosquitto directory";
         return false;
     } else {
-        qDebug() << "✓ mosquitto.exe found";
+        qDebug() << "✓ mosquitto.exe found in mosquitto directory";
     }
 
     // 2. 检查并处理配置文件

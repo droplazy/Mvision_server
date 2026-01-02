@@ -1,17 +1,20 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include "loghandler.h"  // <=== 新增这行
+#include "loghandler.h"
 #include <QMessageBox>
 #include "devicelistdialog.h"
-
-
+#include "commandlsit.h"
+#include "firmware.h"
+#include "mallusermanager.h"  // 添加头文件
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
 
-
+    // 禁止窗口拉伸
+    setWindowTitle("后台控制系统");
+    setFixedSize(this->size());
     // 设置日志输出到 textEdit_console
     if (ui->textEdit_console) {
         LogHandler::instance()->setOutputWidget(ui->textEdit_console);
@@ -38,7 +41,9 @@ MainWindow::MainWindow(QWidget *parent)
    // return ;
 
     // 获取当前目录
-    QString currentDir = QCoreApplication::applicationDirPath();
+    // 修改后 - 使用与 HttpServer 相同的基础路径
+    QDir currentDir = QDir::current();  // 获取当前工作目录
+   // QString currentDir = QCoreApplication::applicationDirPath();
 
     // 设置数据库文件名，确保数据库文件创建在当前目录
     QString dbName = QDir(currentDir).filePath("system.db");
@@ -154,5 +159,51 @@ void MainWindow::on_pushButton_devlist_clicked()
     dialog->exec();
 
     qDebug() << "设备列表对话框已关闭";
+}
+
+
+void MainWindow::on_pushButton_cmdquery_clicked()
+{
+    if (!p_db) {
+        QMessageBox::warning(this, "错误", "数据库未初始化");
+        return;
+    }
+
+    commandlsit *dialog = new commandlsit(p_db, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->exec();
+}
+
+
+void MainWindow::on_pushButton_firmware_clicked()
+{
+    // 创建固件上传对话框
+    firmware *dialog = new firmware(this);
+
+    // 设置关闭时自动删除
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+
+    // 模态显示对话框
+    dialog->exec();
+
+    // 可以添加一些后续处理，比如刷新固件列表等
+    qDebug() << "固件上传对话框已关闭";
+}
+
+void MainWindow::on_pushButton_malluser_clicked()
+{
+    qDebug() << "打开商城用户管理界面";
+
+    // 创建商城用户管理对话框，传入数据库指针
+    mallusermanager *managerDialog = new mallusermanager(p_db, this);
+
+    // 设置模态对话框
+    managerDialog->setModal(true);
+
+    // 显示对话框
+    managerDialog->exec();  // 使用exec()确保模态对话框
+
+    // 对话框关闭后自动删除
+    managerDialog->deleteLater();
 }
 

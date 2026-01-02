@@ -9,33 +9,42 @@ RC_ICONS = rainbow.ico
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    commandlsit.cpp \
     databasemanager.cpp \
     devicelistdialog.cpp \
     emailsender.cpp \
+    firmware.cpp \
     httpserver.cpp \
     insertdev.cpp \
     loghandler.cpp \
     main.cpp \
     mainwindow.cpp \
+    mallusermanager.cpp \
     mqtt_server.cpp \
     mqttclient.cpp
 
 HEADERS += \
+    commandlsit.h \
     databasemanager.h \
     devicelistdialog.h \
     emailsender.h \
+    firmware.h \
     httpserver.h \
     insertdev.h \
     loghandler.h \
     mainwindow.h \
+    mallusermanager.h \
     mqtt_server.h \
     mqttclient.h \
     publicheader.h
 
 FORMS += \
+    commandlsit.ui \
     devicelistdialog.ui \
+    firmware.ui \
     insertdev.ui \
-    mainwindow.ui
+    mainwindow.ui \
+    mallusermanager.ui
 
 TRANSLATIONS += \
     MuiltiControlSer_zh_CN.ts
