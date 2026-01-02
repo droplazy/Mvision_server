@@ -30,5 +30,6 @@ private:
     class DatabaseManager *p_db;
     class EmailSender *p_email;
 
+    void updateSystemTime();
 };
 #endif // MAINWINDOW_H

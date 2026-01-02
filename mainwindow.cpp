@@ -8,6 +8,18 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    // 创建定时器用于显示系统时间
+    QTimer *timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &MainWindow::updateSystemTime);
+
+    // 每秒更新一次时间
+    timer->start(1000);
+
+    // 立即更新一次时间
+    updateSystemTime();
+
+
+
     p_db = new DatabaseManager();
     p_mqttt_ser = new MQTT_server(p_db);
     p_mqttt_ser->startServer();
@@ -52,6 +64,18 @@ MainWindow::MainWindow(QWidget *parent)
 
 }
 
+// 更新系统时间的槽函数
+void MainWindow::updateSystemTime()
+{
+    // 获取当前系统时间
+    QDateTime currentDateTime = QDateTime::currentDateTime();
+
+    // 格式化为"2026年1月2日 17:57:00"格式
+    QString timeStr = currentDateTime.toString("yyyy年M月d日 hh:mm:ss");
+
+    // 在label_edit_systime中显示（假设UI中有一个名为label_edit_systime的QLabel）
+    ui->label_edit_systime->setText(timeStr);
+}
 MainWindow::~MainWindow()
 {
     delete ui;
