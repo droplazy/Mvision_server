@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -10,6 +11,8 @@ MainWindow::MainWindow(QWidget *parent)
     p_db = new DatabaseManager();
     p_mqttt_ser = new MQTT_server(p_db);
     p_mqttt_ser->startServer();
+    p_email =new EmailSender();
+
    // return ;
 
     // 获取当前目录
@@ -26,13 +29,17 @@ MainWindow::MainWindow(QWidget *parent)
     }
     p_http = new HttpServer(p_db);
     p_mqtt_cli = new mqttclient(p_db);
-
-   // p_mqtt_ser
-    connect(p_http, &HttpServer::devCommadSend, p_mqtt_cli, &mqttclient::CommandMuiltSend);  // 连接状态变化信号onDeviceUpdata
-    connect(p_http, &HttpServer::devProcessSend, p_mqtt_cli, &mqttclient::ProcessDevtSend);  // 连接状态变化信号onDeviceUpdata
-
-    connect(p_http, &HttpServer::NewDeviceCall, p_mqtt_cli, &mqttclient::ADDsubscribeTopic);  // 连接状态变化信号onDeviceUpdata
-    connect(p_mqtt_cli, &mqttclient::updateDeviceInfo, p_http, &HttpServer::onDeviceUpdata);  // 连接状态变化信号 void devCommadSend(QJsonObject);
+    p_email->setSmtpServer("smtp.yeah.net", 465);
+    // 登录
+    if (p_email->login("zwdz668@yeah.net", "XFaYuyxRWqQXJp7w"))
+    {
+        qDebug() << "登录成功";
+    }
+    connect(p_http, &HttpServer::devCommadSend, p_mqtt_cli, &mqttclient::CommandMuiltSend);  // 下发设备命令信号
+    connect(p_http, &HttpServer::devProcessSend, p_mqtt_cli, &mqttclient::ProcessDevtSend);  // 下发流程命令
+    connect(p_http, &HttpServer::sendemail, p_email, &EmailSender::onSendEmailRequested);  // 发送邮箱信号
+    connect(p_http, &HttpServer::NewDeviceCall, p_mqtt_cli, &mqttclient::ADDsubscribeTopic);  // 新设备接入
+    connect(p_mqtt_cli, &mqttclient::updateDeviceInfo, p_http, &HttpServer::onDeviceUpdata);  // 更新设备信息
 
 
 

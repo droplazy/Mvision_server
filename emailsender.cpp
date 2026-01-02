@@ -46,72 +46,11 @@ bool EmailSender::login(const QString &email, const QString &authCode)
     return true;
 }
 
+// 原来的sendEmail方法（保持兼容）
 bool EmailSender::sendEmail(const QString &toEmail, const QString &message)
 {
-    m_errorString.clear();
-
-    // 检查登录状态
-    if (!m_isLoggedIn) {
-        m_errorString = "请先登录邮箱";
-        qDebug() << "✗" << m_errorString;
-        return false;
-    }
-
-    // 验证收件人邮箱
-    if (!toEmail.contains("@") || !toEmail.contains(".")) {
-        m_errorString = "收件人邮箱格式不正确";
-        qDebug() << "✗" << m_errorString;
-        return false;
-    }
-
-    qDebug() << "开始发送邮件到:" << toEmail;
-
-    // 1. 连接到SMTP服务器
-    if (!connectToSmtp()) {
-        qDebug() << "✗ 连接SMTP服务器失败:" << m_errorString;
-        return false;
-    }
-    qDebug() << "✓ 连接成功";
-
-    // 2. 读取欢迎消息
-    QString welcome = waitForResponse(5000);
-    if (welcome.isEmpty() || !welcome.startsWith("220")) {
-        m_errorString = "服务器欢迎消息异常: " + welcome;
-        qDebug() << "✗" << m_errorString;
-        disconnectSmtp();
-        return false;
-    }
-    qDebug() << "✓ 服务器欢迎消息正常";
-
-    // 3. 发送EHLO（根据邮箱域名）
-    QString domain = m_email.mid(m_email.indexOf('@') + 1);
-    QString ehloCommand = "EHLO " + domain;
-
-    if (!sendCommand(ehloCommand, "250")) {
-        qDebug() << "✗ EHLO失败:" << m_errorString;
-        disconnectSmtp();
-        return false;
-    }
-    qDebug() << "✓ EHLO成功";
-
-    // 4. 进行认证
-    if (!sendAuth()) {
-        qDebug() << "✗ 认证失败:" << m_errorString;
-        disconnectSmtp();
-        return false;
-    }
-    qDebug() << "✓ 认证成功";
-
-    // 5. 发送邮件
-    if (!sendMailData(toEmail, message)) {
-        qDebug() << "✗ 发送邮件失败:" << m_errorString;
-        disconnectSmtp();
-        return false;
-    }
-
-    disconnectSmtp();
-    qDebug() << "✓ 邮件发送成功到:" << toEmail;
-    return true;
+    EmailInfo info(toEmail, message);
+    return sendEmailInternal(info);
 }
 
 void EmailSender::setSmtpServer(const QString &server, int port)
@@ -208,45 +147,43 @@ bool EmailSender::sendAuth()
 
     return true;
 }
-
-bool EmailSender::sendMailData(const QString &toEmail, const QString &message)
+// 发送邮件数据（使用结构体）
+bool EmailSender::sendMailData(const EmailInfo &emailInfo)
 {
     // MAIL FROM
     if (!sendCommand(QString("MAIL FROM:<%1>").arg(m_email))) {
-        m_errorString = "发件人设置失败: " + m_errorString;
+        m_errorString = "发件人设置失败";
         return false;
     }
 
     // RCPT TO
-    if (!sendCommand(QString("RCPT TO:<%1>").arg(toEmail))) {
-        m_errorString = "收件人设置失败: " + m_errorString;
+    if (!sendCommand(QString("RCPT TO:<%1>").arg(emailInfo.toEmail))) {
+        m_errorString = "收件人设置失败";
         return false;
     }
 
     // DATA
     if (!sendCommand("DATA", "354")) {
-        m_errorString = "准备发送数据失败: " + m_errorString;
+        m_errorString = "准备发送数据失败";
         return false;
     }
 
-    // 邮件内容
+    // 邮件内容（使用结构体中的主题）
     QString emailData;
     emailData += QString("From: %1\r\n").arg(m_email);
-    emailData += QString("To: %1\r\n").arg(toEmail);
-    emailData += "Subject: 验证码通知\r\n";
+    emailData += QString("To: %1\r\n").arg(emailInfo.toEmail);
+    emailData += QString("Subject: %1\r\n").arg(emailInfo.subject);
     emailData += "Content-Type: text/plain; charset=utf-8\r\n";
-    emailData += "\r\n"; // 空行分隔头部和正文
-    emailData += message + "\r\n";
-    emailData += ".\r\n"; // SMTP结束标记
+    emailData += "\r\n";
+    emailData += emailInfo.message + "\r\n";
+    emailData += ".\r\n";
 
     if (!sendCommand(emailData, "250")) {
-        m_errorString = "发送邮件内容失败: " + m_errorString;
+        m_errorString = "发送邮件内容失败";
         return false;
     }
 
-    // QUIT（可选）
     sendCommand("QUIT", "221");
-
     return true;
 }
 
@@ -279,7 +216,58 @@ QString EmailSender::waitForResponse(int timeout)
     m_errorString = "等待响应超时";
     return "";
 }
+// 内部发送邮件方法
+bool EmailSender::sendEmailInternal(const EmailInfo &emailInfo)
+{
+    m_errorString.clear();
 
+    if (!m_isLoggedIn) {
+        m_errorString = "请先登录邮箱";
+        return false;
+    }
+
+    if (!emailInfo.toEmail.contains("@") || !emailInfo.toEmail.contains(".")) {
+        m_errorString = "收件人邮箱格式不正确";
+        return false;
+    }
+
+    qDebug() << "开始发送邮件到:" << emailInfo.toEmail;
+
+    // 连接到SMTP服务器
+    if (!connectToSmtp()) {
+        return false;
+    }
+
+    // 读取欢迎消息
+    QString welcome = waitForResponse(5000);
+    if (welcome.isEmpty() || !welcome.startsWith("220")) {
+        m_errorString = "服务器欢迎消息异常: " + welcome;
+        disconnectSmtp();
+        return false;
+    }
+
+    // 发送EHLO
+    QString domain = m_email.mid(m_email.indexOf('@') + 1);
+    if (!sendCommand("EHLO " + domain, "250")) {
+        disconnectSmtp();
+        return false;
+    }
+
+    // 认证
+    if (!sendAuth()) {
+        disconnectSmtp();
+        return false;
+    }
+
+    // 发送邮件数据
+    if (!sendMailData(emailInfo)) {
+        disconnectSmtp();
+        return false;
+    }
+
+    disconnectSmtp();
+    return true;
+}
 void EmailSender::disconnectSmtp()
 {
     if (m_socket) {
@@ -296,4 +284,11 @@ void EmailSender::disconnectSmtp()
         m_socket->deleteLater();
         m_socket = nullptr;
     }
+}
+// 槽函数：接收邮件发送请求
+void EmailSender::onSendEmailRequested(const EmailInfo &emailInfo)
+{
+    bool success = sendEmailInternal(emailInfo);
+    QString resultMsg = success ? "邮件发送成功" : m_errorString;
+    emit emailSent(success, resultMsg);
 }

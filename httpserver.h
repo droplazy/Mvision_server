@@ -139,6 +139,7 @@ signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
     void devProcessSend(QJsonObject);
+    void sendemail(EmailInfo);
 
 };
 

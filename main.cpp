@@ -4,27 +4,6 @@
 #include <QLocale>
 #include <QTranslator>
 
-#include "emailsender.h"
-#include <QTcpSocket>
-#include <QDateTime>
-void testSmtpPorts()
-{
-    QString host = "smtp.126.com";
-    QVector<int> ports = {465, 587, 25};
-
-    for (int port : ports) {
-        QTcpSocket socket;
-        socket.connectToHost(host, port);
-
-        if (socket.waitForConnected(3000)) {
-            qDebug() << QString("端口 %1: ✓ 可用").arg(port);
-            socket.disconnectFromHost();
-        } else {
-            qDebug() << QString("端口 %1: ✗ 不可用 - %2")
-                            .arg(port).arg(socket.errorString());
-        }
-    }
-}
 
 int main(int argc, char *argv[])
 {

@@ -7,6 +7,18 @@
 #include <QJsonValue>
 #include <QDebug>
 #include <QVector>
+
+// 邮件信息结构体
+struct EmailInfo {
+    QString toEmail;      // 收件人邮箱
+    QString message;      // 邮件内容
+    QString subject;      // 邮件主题（可选）
+
+    EmailInfo() = default;
+    EmailInfo(const QString &to, const QString &msg, const QString &sub = "验证码通知")
+        : toEmail(to), message(msg), subject(sub) {}
+};
+
 struct DeviceStatus {
     QString serialNumber;          // 设备序列号
     QString checksum;

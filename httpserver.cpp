@@ -3703,28 +3703,41 @@ void HttpServer::handlePostMallSendMailCode(QTcpSocket *clientSocket, const QByt
             return;
         }
 
-        // 生成验证码（固定为8888）
-        QString verificationCode = "8888";
+        // 生成4位随机验证码（1000-9999）
+        QString verificationCode = QString::number(QRandomGenerator::global()->bounded(1000, 10000));
         qDebug() << "生成的验证码:" << verificationCode;
-        qDebug() << "发送到邮箱:" << email;
 
-        // 模拟发送邮件
-        qDebug() << "[模拟] 发送验证码邮件到" << email;
-        qDebug() << "[模拟] 邮件内容: 您的验证码是 " << verificationCode;
-        qDebug() << "[模拟] 验证码有效期为5分钟";
+        // 创建邮件信息结构体
+        EmailInfo emailInfo;
+        emailInfo.toEmail = email;
+        emailInfo.subject = "验证码通知";
+        emailInfo.message = QString(
+                                "尊敬的 %1：\n\n"
+                                "您的验证码是：%2\n\n"
+                                "验证码有效期为5分钟，请尽快使用。\n\n"
+                                "如非本人操作，请忽略此邮件。\n"
+                                ).arg(username).arg(verificationCode);
 
-        // 打印完整信息
-        qDebug() << "=== 验证码发送详情 ===";
-        qDebug() << "用户名:" << username;
-        qDebug() << "邮箱:" << email;
+        // 存储验证码到数据库（如果需要）
+        // dbManager->saveVerificationCode(username, verificationCode);
+
+        // 发送邮件信号
+        qDebug() << "发送邮件信号...";
+        emit sendemail(emailInfo);
+
+        qDebug() << "邮件已发送到:" << email;
         qDebug() << "验证码:" << verificationCode;
         qDebug() << "生成时间:" << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-        qDebug() << "=========================";
 
         // 构建成功响应
         response["code"] = 200;
         response["success"] = true;
         response["message"] = "验证码已发送";
+
+// 可选：在响应中返回验证码（仅用于调试）
+#if 1
+        response["debug_verification_code"] = verificationCode;
+#endif
 
         sendJsonResponse(clientSocket, 200, response);
 

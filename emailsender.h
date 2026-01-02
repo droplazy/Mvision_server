@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QSslSocket>
+#include "publicheader.h"
 
 class EmailSender : public QObject
 {
@@ -14,7 +15,7 @@ public:
     // 接口1: 登录邮箱
     bool login(const QString &email, const QString &authCode);
 
-    // 接口2: 发送邮件
+    // 接口2: 直接发送邮件
     bool sendEmail(const QString &toEmail, const QString &message);
 
     // 获取错误信息
@@ -29,35 +30,36 @@ public:
     // 设置连接超时时间
     void setTimeout(int ms) { m_timeoutMs = ms; }
 
+public slots:
+    // 槽函数：接收邮件信息并发送
+    void onSendEmailRequested(const EmailInfo &emailInfo);
+
+signals:
+    // 信号：邮件发送结果
+    void emailSent(bool success, const QString &message);
+
 private:
-    // 私有成员1: 登录的邮箱地址
+    // 私有成员
     QString m_email;
-
-    // 私有成员2: 登录邮箱的授权码
     QString m_authCode;
-
-    // SMTP服务器配置
     QString m_smtpServer;
     int m_smtpPort;
     int m_timeoutMs;
-
-    // 状态和错误
     bool m_isLoggedIn;
     QString m_errorString;
-
-    // 网络相关
     QSslSocket *m_socket;
-
-    // 响应缓冲区
     QString m_responseBuffer;
 
     // 内部方法
     bool connectToSmtp();
     bool sendCommand(const QString &command, const QString &expectedResponse = "250");
     bool sendAuth();
-    bool sendMailData(const QString &toEmail, const QString &message);
+    bool sendMailData(const EmailInfo &emailInfo);
     QString waitForResponse(int timeout = 10000);
     void disconnectSmtp();
+
+    // 实际发送邮件（内部使用）
+    bool sendEmailInternal(const EmailInfo &emailInfo);
 };
 
 #endif // EMAILSENDER_H

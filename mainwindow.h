@@ -1,12 +1,10 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
-#include  <QtSql>
 #include <QMainWindow>
 #include "mqttclient.h"
 #include "httpserver.h"
 #include "mqtt_server.h"
-
-
+#include "emailsender.h"
 
 
 QT_BEGIN_NAMESPACE
@@ -30,5 +28,7 @@ private:
     class mqttclient *p_mqtt_cli;
     class MQTT_server *p_mqttt_ser;
     class DatabaseManager *p_db;
+    class EmailSender *p_email;
+
 };
 #endif // MAINWINDOW_H
