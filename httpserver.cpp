@@ -20,6 +20,7 @@ HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent)
 {
     handleCreateTestOrdersSimple();
     handleCreateProductDebug();
+    initVerificationSystem();//邮箱验证码生成
     generateTextData();
     createDownloadDirectoryIfNeeded();
     createUploadDirectoryIfNeeded();
@@ -38,6 +39,108 @@ void HttpServer::createDownloadDirectoryIfNeeded()
     if (!QDir(downloadPath).exists()) {
         QDir().mkdir(downloadPath);
     }
+}
+
+// 初始化验证码系统
+void HttpServer::initVerificationSystem()
+{
+    // 创建定时器，每分钟清理一次过期验证码
+    cleanupTimer = new QTimer(this);
+    cleanupTimer->setInterval(60000); // 1分钟
+
+    // 连接定时器信号
+    connect(cleanupTimer, &QTimer::timeout, this, &HttpServer::cleanupExpiredCodes);
+
+    // 启动定时器
+    cleanupTimer->start();
+
+    qDebug() << "验证码系统初始化完成，定时清理已启动";
+}
+
+// 清理过期验证码
+void HttpServer::cleanupExpiredCodes()
+{
+    QMutexLocker locker(&codeMutex);
+
+    int oldSize = verificationCodes.size();
+
+    // 移除过期验证码
+    verificationCodes.erase(
+        std::remove_if(verificationCodes.begin(), verificationCodes.end(),
+                       [](const VerificationCode &vc) {
+                           return vc.isExpired();
+                       }),
+        verificationCodes.end()
+        );
+
+    int newSize = verificationCodes.size();
+    int removed = oldSize - newSize;
+
+    if (removed > 0) {
+        qDebug() << "清理过期验证码:" << removed << "个，剩余:" << newSize;
+    }
+}
+
+// 添加验证码到容器
+void HttpServer::addVerificationCode(const QString &code, const QString &username, const QString &email)
+{
+    QMutexLocker locker(&codeMutex);
+
+    // 先清理用户旧的验证码
+    verificationCodes.erase(
+        std::remove_if(verificationCodes.begin(), verificationCodes.end(),
+                       [username](const VerificationCode &vc) {
+                           return vc.username == username;
+                       }),
+        verificationCodes.end()
+        );
+
+    // 添加新验证码
+    VerificationCode vc(code, username, email);
+    verificationCodes.append(vc);
+
+    qDebug() << "添加验证码: " << code
+             << " 用户: " << username
+             << " 邮箱: " << email
+             << " 过期时间: " << vc.expireTime.toString("HH:mm:ss");
+    qDebug() << "当前验证码数量:" << verificationCodes.size();
+}
+
+// 验证验证码
+bool HttpServer::verifyCode(const QString &username, const QString &code)
+{
+    QMutexLocker locker(&codeMutex);
+
+    for (auto &vc : verificationCodes) {
+        if (vc.username == username && vc.code == code && vc.isValid()) {
+            vc.verified = true;
+            qDebug() << "验证码验证成功:" << code << " 用户:" << username;
+            return true;
+        }
+    }
+
+    qDebug() << "验证码验证失败:" << code << " 用户:" << username;
+    return false;
+}
+
+// 获取用户最新的有效验证码
+QString HttpServer::getLatestCode(const QString &username)
+{
+    QMutexLocker locker(&codeMutex);
+
+    QString latestCode;
+    QDateTime latestTime;
+
+    for (const auto &vc : verificationCodes) {
+        if (vc.username == username && vc.isValid()) {
+            if (vc.createTime > latestTime) {
+                latestTime = vc.createTime;
+                latestCode = vc.code;
+            }
+        }
+    }
+
+    return latestCode;
 }
 void HttpServer::createUploadDirectoryIfNeeded()
 {
@@ -169,7 +272,6 @@ void HttpServer::generateTextData()
 
 }
 
-
 void HttpServer::incomingConnection(qintptr socketDescriptor) {
     QTcpSocket *clientSocket = new QTcpSocket();
     clientSocket->setSocketDescriptor(socketDescriptor);
@@ -177,6 +279,201 @@ void HttpServer::incomingConnection(qintptr socketDescriptor) {
     connect(clientSocket, &QTcpSocket::disconnected, clientSocket, &QTcpSocket::deleteLater);
 
 
+}
+void HttpServer::handlePostMallSendMailCode(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    qDebug() << "====== 处理发送邮箱验证码请求 ======";
+
+    QJsonObject response;
+    response["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    try {
+        // 解析JSON请求体
+        QJsonParseError parseError;
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(body, &parseError);
+        if (jsonDoc.isNull() || !jsonDoc.isObject()) {
+            qDebug() << "JSON解析失败:" << parseError.errorString();
+            response["code"] = 400;
+            response["success"] = false;
+            response["message"] = "无效的JSON格式";
+            sendJsonResponse(clientSocket, 400, response);
+            return;
+        }
+
+        QJsonObject jsonObj = jsonDoc.object();
+
+        // 检查是否有data字段
+        if (!jsonObj.contains("data") || !jsonObj["data"].isObject()) {
+            qDebug() << "请求缺少data字段";
+            response["code"] = 400;
+            response["success"] = false;
+            response["message"] = "请求缺少data字段";
+            sendJsonResponse(clientSocket, 400, response);
+            return;
+        }
+
+        QJsonObject dataObj = jsonObj["data"].toObject();
+
+        // 提取字段
+        QString username = dataObj.value("username").toString();
+        QString email = dataObj.value("email").toString();
+
+        qDebug() << "请求发送验证码:";
+        qDebug() << "  用户名:" << username;
+        qDebug() << "  邮箱:" << email;
+
+        // 验证必填字段
+        if (username.isEmpty() || email.isEmpty()) {
+            qDebug() << "用户名或邮箱为空";
+            response["code"] = 400;
+            response["success"] = false;
+            response["message"] = "用户名和邮箱不能为空";
+            sendJsonResponse(clientSocket, 400, response);
+            return;
+        }
+
+        // 检查用户是否存在
+        if (!dbManager->checkMallUserExists(username)) {
+            qDebug() << "用户不存在:" << username;
+            response["code"] = 404;
+            response["success"] = false;
+            response["message"] = "用户不存在";
+            sendJsonResponse(clientSocket, 404, response);
+            return;
+        }
+
+        // 获取用户信息，验证邮箱是否匹配
+        SQL_MallUser user = dbManager->getMallUserByUsername(username);
+
+        if (user.email.isEmpty()) {
+            qDebug() << "用户未绑定邮箱:" << username;
+            response["code"] = 400;
+            response["success"] = false;
+            response["message"] = "用户未绑定邮箱";
+            sendJsonResponse(clientSocket, 400, response);
+            return;
+        }
+
+        if (user.email != email) {
+            qDebug() << "邮箱不匹配:";
+            qDebug() << "  提供的邮箱:" << email;
+            qDebug() << "  注册的邮箱:" << user.email;
+            response["code"] = 400;
+            response["success"] = false;
+            response["message"] = "邮箱和账号不匹配";
+            sendJsonResponse(clientSocket, 400, response);
+            return;
+        }
+
+        // 检查是否有未过期的验证码，且生成时间在30秒内
+        QString existingCode;
+        QDateTime existingCreateTime;
+        bool hasRecentCode = false;
+
+        {
+            QMutexLocker locker(&codeMutex);
+
+            for (const auto &vc : verificationCodes) {
+                if (vc.username == username && vc.email == email && !vc.verified && !vc.isExpired()) {
+                    qint64 secondsSinceCreated = vc.createTime.secsTo(QDateTime::currentDateTime());
+                    qDebug() << "找到现有验证码:" << vc.code << "创建于" << secondsSinceCreated << "秒前";
+
+                    if (secondsSinceCreated < 60*5) {
+                        existingCode = vc.code;
+                        existingCreateTime = vc.createTime;
+                        hasRecentCode = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        QString verificationCode;
+        bool isNewCode = false;
+
+        if (hasRecentCode) {
+            // 30秒内已发送过验证码，直接使用现有的
+            verificationCode = existingCode;
+            qint64 secondsSinceCreated = existingCreateTime.secsTo(QDateTime::currentDateTime());
+            qDebug() << "验证码已存在且未超过30秒(" << secondsSinceCreated << "秒)，不再重新生成";
+            qDebug() << "使用现有验证码:" << verificationCode;
+        } else {
+            // 超过30秒或没有验证码，清理旧验证码并生成新验证码
+            {
+                QMutexLocker locker(&codeMutex);
+                // 清理该用户的所有验证码
+                verificationCodes.erase(
+                    std::remove_if(verificationCodes.begin(), verificationCodes.end(),
+                                   [username](const VerificationCode &vc) {
+                                       return vc.username == username;
+                                   }),
+                    verificationCodes.end()
+                    );
+                qDebug() << "已清理用户" << username << "的旧验证码";
+            }
+
+            // 生成新的4位随机验证码（1000-9999）
+            verificationCode = QString::number(QRandomGenerator::global()->bounded(1000, 10000));
+            isNewCode = true;
+            qDebug() << "生成新验证码:" << verificationCode;
+
+            // 保存验证码到容器
+            addVerificationCode(verificationCode, username, email);
+        }
+
+        // 创建邮件信息结构体
+        EmailInfo emailInfo;
+        emailInfo.toEmail = email;
+        emailInfo.subject = "验证码通知";
+        emailInfo.message = QString(
+                                "尊敬的 %1：\n\n"
+                                "您的验证码是：%2\n\n"
+                                "验证码有效期为5分钟，请尽快使用。\n\n"
+                                "如非本人操作，请忽略此邮件。\n"
+                                ).arg(username).arg(verificationCode);
+
+        // 发送邮件信号（如果是新验证码才发送邮件）
+        if (isNewCode) {
+            qDebug() << "发送邮件信号...";
+            emit sendemail(emailInfo);
+            qDebug() << "新验证码邮件已发送到:" << email;
+        } else {
+            qDebug() << "使用现有验证码，不再重复发送邮件";
+        }
+
+        qDebug() << "验证码:" << verificationCode;
+        qDebug() << "生成时间:" << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+        qDebug() << "过期时间:" << QDateTime::currentDateTime().addSecs(300).toString("yyyy-MM-dd HH:mm:ss");
+        qDebug() << "状态:" << (isNewCode ? "新生成的验证码" : "使用现有验证码");
+
+        // 构建成功响应
+        response["code"] = 200;
+        response["success"] = true;
+        response["message"] = "验证码已发送";
+
+// 调试模式下返回验证码
+#if 1
+        response["debug_verification_code"] = verificationCode;
+        response["debug_is_new_code"] = isNewCode;
+#endif
+
+        sendJsonResponse(clientSocket, 200, response);
+
+        qDebug() << "====== 验证码发送完成 ======";
+
+    } catch (const std::exception& e) {
+        qDebug() << "发送验证码异常:" << e.what();
+        response["code"] = 500;
+        response["success"] = false;
+        response["message"] = "服务器错误";
+        sendJsonResponse(clientSocket, 500, response);
+    } catch (...) {
+        qDebug() << "发送验证码未知异常";
+        response["code"] = 500;
+        response["success"] = false;
+        response["message"] = "未知服务器错误";
+        sendJsonResponse(clientSocket, 500, response);
+    }
 }
 
 
@@ -3618,146 +3915,6 @@ QString HttpServer::generateWithdrawId()
     return "WD_" + timestamp + "_" + random;
 }
 
-void HttpServer::handlePostMallSendMailCode(QTcpSocket *clientSocket, const QByteArray &body)
-{
-    qDebug() << "====== 处理发送邮箱验证码请求 ======";
-
-    QJsonObject response;
-    response["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-
-    try {
-        // 解析JSON请求体
-        QJsonParseError parseError;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(body, &parseError);
-        if (jsonDoc.isNull() || !jsonDoc.isObject()) {
-            qDebug() << "JSON解析失败:" << parseError.errorString();
-            response["code"] = 400;
-            response["success"] = false;
-            response["message"] = "无效的JSON格式";
-            sendJsonResponse(clientSocket, 400, response);
-            return;
-        }
-
-        QJsonObject jsonObj = jsonDoc.object();
-
-        // 检查是否有data字段
-        if (!jsonObj.contains("data") || !jsonObj["data"].isObject()) {
-            qDebug() << "请求缺少data字段";
-            response["code"] = 400;
-            response["success"] = false;
-            response["message"] = "请求缺少data字段";
-            sendJsonResponse(clientSocket, 400, response);
-            return;
-        }
-
-        QJsonObject dataObj = jsonObj["data"].toObject();
-
-        // 提取字段
-        QString username = dataObj.value("username").toString();
-        QString email = dataObj.value("email").toString();
-
-        qDebug() << "请求发送验证码:";
-        qDebug() << "  用户名:" << username;
-        qDebug() << "  邮箱:" << email;
-
-        // 验证必填字段
-        if (username.isEmpty() || email.isEmpty()) {
-            qDebug() << "用户名或邮箱为空";
-            response["code"] = 400;
-            response["success"] = false;
-            response["message"] = "用户名和邮箱不能为空";
-            sendJsonResponse(clientSocket, 400, response);
-            return;
-        }
-
-        // 检查用户是否存在
-        if (!dbManager->checkMallUserExists(username)) {
-            qDebug() << "用户不存在:" << username;
-            response["code"] = 404;
-            response["success"] = false;
-            response["message"] = "用户不存在";
-            sendJsonResponse(clientSocket, 404, response);
-            return;
-        }
-
-        // 获取用户信息，验证邮箱是否匹配
-        SQL_MallUser user = dbManager->getMallUserByUsername(username);
-
-        if (user.email.isEmpty()) {
-            qDebug() << "用户未绑定邮箱:" << username;
-            response["code"] = 400;
-            response["success"] = false;
-            response["message"] = "用户未绑定邮箱";
-            sendJsonResponse(clientSocket, 400, response);
-            return;
-        }
-
-        if (user.email != email) {
-            qDebug() << "邮箱不匹配:";
-            qDebug() << "  提供的邮箱:" << email;
-            qDebug() << "  注册的邮箱:" << user.email;
-            response["code"] = 400;
-            response["success"] = false;
-            response["message"] = "邮箱和账号不匹配";
-            sendJsonResponse(clientSocket, 400, response);
-            return;
-        }
-
-        // 生成4位随机验证码（1000-9999）
-        QString verificationCode = QString::number(QRandomGenerator::global()->bounded(1000, 10000));
-        qDebug() << "生成的验证码:" << verificationCode;
-
-        // 创建邮件信息结构体
-        EmailInfo emailInfo;
-        emailInfo.toEmail = email;
-        emailInfo.subject = "验证码通知";
-        emailInfo.message = QString(
-                                "尊敬的 %1：\n\n"
-                                "您的验证码是：%2\n\n"
-                                "验证码有效期为5分钟，请尽快使用。\n\n"
-                                "如非本人操作，请忽略此邮件。\n"
-                                ).arg(username).arg(verificationCode);
-
-        // 存储验证码到数据库（如果需要）
-        // dbManager->saveVerificationCode(username, verificationCode);
-
-        // 发送邮件信号
-        qDebug() << "发送邮件信号...";
-        emit sendemail(emailInfo);
-
-        qDebug() << "邮件已发送到:" << email;
-        qDebug() << "验证码:" << verificationCode;
-        qDebug() << "生成时间:" << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-
-        // 构建成功响应
-        response["code"] = 200;
-        response["success"] = true;
-        response["message"] = "验证码已发送";
-
-// 可选：在响应中返回验证码（仅用于调试）
-#if 1
-        response["debug_verification_code"] = verificationCode;
-#endif
-
-        sendJsonResponse(clientSocket, 200, response);
-
-        qDebug() << "====== 验证码发送完成 ======";
-
-    } catch (const std::exception& e) {
-        qDebug() << "发送验证码异常:" << e.what();
-        response["code"] = 500;
-        response["success"] = false;
-        response["message"] = "服务器错误";
-        sendJsonResponse(clientSocket, 500, response);
-    } catch (...) {
-        qDebug() << "发送验证码未知异常";
-        response["code"] = 500;
-        response["success"] = false;
-        response["message"] = "未知服务器错误";
-        sendJsonResponse(clientSocket, 500, response);
-    }
-}
-
 void HttpServer::handlePostMallPasswdReset(QTcpSocket *clientSocket, const QByteArray &body)
 {
     qDebug() << "====== 处理重置密码请求 ======";
@@ -3814,19 +3971,6 @@ void HttpServer::handlePostMallPasswdReset(QTcpSocket *clientSocket, const QByte
             return;
         }
 
-        // 验证码验证 - 固定为8888
-        QString expectedVerifyCode = "8888";
-        if (verifyCode != expectedVerifyCode) {
-            qDebug() << "验证码错误:";
-            qDebug() << "  期望的验证码:" << expectedVerifyCode;
-            qDebug() << "  收到的验证码:" << verifyCode;
-            response["code"] = 400;
-            response["success"] = false;
-            response["message"] = "验证码错误";
-            sendJsonResponse(clientSocket, 400, response);
-            return;
-        }
-
         // 密码强度验证：至少6位
         if (password.length() < 6) {
             qDebug() << "密码太短:" << password.length() << "位";
@@ -3857,6 +4001,70 @@ void HttpServer::handlePostMallPasswdReset(QTcpSocket *clientSocket, const QByte
             response["code"] = 400;
             response["success"] = false;
             response["message"] = "邮箱和账号不匹配";
+            sendJsonResponse(clientSocket, 400, response);
+            return;
+        }
+
+        // 打印当前容器内所有验证码（调试用）
+        qDebug() << "=== 当前容器内所有验证码 ===";
+        {
+            QMutexLocker locker(&codeMutex);
+            int count = 0;
+            for (const auto &vc : verificationCodes) {
+                qDebug() << QString("  [%1] 用户名: %2, 验证码: %3, 邮箱: %4, 有效: %5, 过期时间: %6")
+                    .arg(++count)
+                    .arg(vc.username)
+                    .arg(vc.code)
+                    .arg(vc.email)
+                    .arg(vc.isValid() ? "是" : "否")
+                    .arg(vc.expireTime.toString("HH:mm:ss"));
+            }
+            qDebug() << "=== 总共" << count << "个验证码 ===";
+        }
+
+        // 验证码验证 - 从容器中查找并验证
+        bool verifySuccess = false;
+        {
+            QMutexLocker locker(&codeMutex);
+
+            for (int i = 0; i < verificationCodes.size(); i++) {
+                VerificationCode &vc = verificationCodes[i];
+
+                if (vc.username == username && vc.code == verifyCode) {
+                    if (vc.isValid()) {
+                        qDebug() << "验证码验证成功:";
+                        qDebug() << "  用户名:" << vc.username;
+                        qDebug() << "  验证码:" << vc.code;
+                        qDebug() << "  邮箱:" << vc.email;
+                        qDebug() << "  创建时间:" << vc.createTime.toString("HH:mm:ss");
+                        qDebug() << "  过期时间:" << vc.expireTime.toString("HH:mm:ss");
+
+                        // 标记为已验证
+                        vc.verified = true;
+                        verifySuccess = true;
+
+                        // 清理该用户的验证码（可以移除或保留已验证状态）
+                        verificationCodes.remove(i);
+                        qDebug() << "已从容器中移除该验证码";
+
+                        break;
+                    } else {
+                        qDebug() << "验证码无效或已过期:";
+                        qDebug() << "  验证码:" << vc.code;
+                        qDebug() << "  是否已验证:" << vc.verified;
+                        qDebug() << "  是否过期:" << vc.isExpired();
+                    }
+                }
+            }
+        }
+
+        if (!verifySuccess) {
+            qDebug() << "验证码错误或不存在:";
+            qDebug() << "  用户名:" << username;
+            qDebug() << "  验证码:" << verifyCode;
+            response["code"] = 400;
+            response["success"] = false;
+            response["message"] = "验证码错误或已过期";
             sendJsonResponse(clientSocket, 400, response);
             return;
         }
@@ -3929,6 +4137,54 @@ void HttpServer::handlePostMallPasswdReset(QTcpSocket *clientSocket, const QByte
         response["message"] = "未知服务器错误";
         sendJsonResponse(clientSocket, 500, response);
     }
+}
+
+
+void HttpServer::printVerificationCodes()
+{
+    QMutexLocker locker(&codeMutex);
+
+    qDebug() << "=== 验证码容器状态 ===";
+    qDebug() << "总数量:" << verificationCodes.size();
+
+    if (verificationCodes.isEmpty()) {
+        qDebug() << "容器为空";
+        return;
+    }
+
+    int validCount = 0;
+    int expiredCount = 0;
+    int verifiedCount = 0;
+
+    for (int i = 0; i < verificationCodes.size(); i++) {
+        const VerificationCode &vc = verificationCodes[i];
+
+        QString status;
+        if (vc.verified) {
+            status = "已验证";
+            verifiedCount++;
+        } else if (vc.isExpired()) {
+            status = "已过期";
+            expiredCount++;
+        } else {
+            status = "有效";
+            validCount++;
+        }
+
+        qDebug() << QString("  [%1] 用户名: %2, 验证码: %3, 邮箱: %4, 状态: %5, 过期时间: %6")
+                        .arg(i + 1)
+                        .arg(vc.username)
+                        .arg(vc.code)
+                        .arg(vc.email)
+                        .arg(status)
+                        .arg(vc.expireTime.toString("HH:mm:ss"));
+    }
+
+    qDebug() << "=== 统计 ===";
+    qDebug() << "有效验证码:" << validCount;
+    qDebug() << "已验证验证码:" << verifiedCount;
+    qDebug() << "已过期验证码:" << expiredCount;
+    qDebug() << "==================";
 }
 void HttpServer::handlePostMallRegist(QTcpSocket *clientSocket, const QByteArray &body)
 {
@@ -4336,6 +4592,7 @@ void HttpServer::handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray 
         sendJsonResponse(clientSocket, 500, response);
     }
 }
+
 // 生成token的辅助函数
 QString HttpServer::generateToken(const QString &username)
 {

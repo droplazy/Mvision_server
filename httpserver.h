@@ -12,7 +12,7 @@
 #include "publicheader.h"
 #include "databasemanager.h"
 #include <QTimer>
-
+#include <QMutex>
 
 class HttpServer : public QTcpServer
 {
@@ -29,6 +29,7 @@ protected:
 
 private slots:
     void onReadyRead();
+    void cleanupExpiredCodes();                    // 清理过期验证码
 public slots:
     void onDeviceUpdata(DeviceStatus updatedDevice);
 
@@ -135,6 +136,18 @@ private:
     void handleCreateProductDebug();
    // void handlePostMallProducts(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
     void handleGetMallProducts(QTcpSocket *clientSocket);
+   // void handlePostVerifyCode(QTcpSocket *clientSocket, const QByteArray &body);
+
+
+    void initVerificationSystem();// 初始化验证码系统
+    void addVerificationCode(const QString &code, const QString &username, const QString &email); // 添加验证码到容器
+    bool verifyCode(const QString &username, const QString &code);// 验证验证码
+    QString getLatestCode(const QString &username); // 获取用户最新的有效验证码
+    QVector<VerificationCode> verificationCodes;  // 验证码容器
+    QTimer *cleanupTimer;                         // 清理定时器
+    QMutex codeMutex;                             // 线程安全锁
+    void printVerificationCodes();
+  //  bool checkVerificationCodeFrequency(const QString &username, const QString &email, int minIntervalSeconds);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

@@ -8,6 +8,37 @@
 #include <QDebug>
 #include <QVector>
 
+struct VerificationCode {
+    QString code;           // 验证码（4位数字）
+    QString username;       // 用户名
+    QString email;          // 邮箱
+    bool verified;          // 是否已验证
+    QDateTime createTime;   // 创建时间
+    QDateTime expireTime;   // 过期时间（5分钟后）
+
+    // 构造函数
+    VerificationCode()
+        : verified(false) {}
+
+    VerificationCode(const QString &c, const QString &u, const QString &e)
+        : code(c), username(u), email(e), verified(false)
+    {
+        createTime = QDateTime::currentDateTime();
+        expireTime = createTime.addSecs(300); // 5分钟 = 300秒
+    }
+
+    // 检查是否过期
+    bool isExpired() const {
+        return QDateTime::currentDateTime() > expireTime;
+    }
+
+    // 检查是否有效（未验证且未过期）
+    bool isValid() const {
+        return !verified && !isExpired();
+    }
+};
+
+
 // 邮件信息结构体
 struct EmailInfo {
     QString toEmail;      // 收件人邮箱
