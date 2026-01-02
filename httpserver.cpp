@@ -19,7 +19,7 @@
 HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
     //handleCreateTestOrdersSimple();
-    //handleCreateProductDebug();
+    handleCreateProductDebug();
     initVerificationSystem();//邮箱验证码生成
     generateTextData();
     createDownloadDirectoryIfNeeded();
@@ -5150,6 +5150,22 @@ void HttpServer::handleCreateProductDebug()
 {
     qDebug() << "====== 创建简单测试商品 ======";
 
+    // 获取当前工作目录
+    QDir currentDir = QDir::current();
+
+    // 创建Products目录
+    QString productsDirPath = currentDir.filePath("Products");
+    QDir productsDir(productsDirPath);
+
+    if (!productsDir.exists()) {
+        if (productsDir.mkpath(".")) {
+            qDebug() << "✅ 创建Products目录: " << productsDirPath;
+        } else {
+            qDebug() << "❌ 无法创建Products目录";
+            return;
+        }
+    }
+
     // 创建3个简单的测试商品
     QList<SQL_Product> testProducts;
 
@@ -5157,10 +5173,10 @@ void HttpServer::handleCreateProductDebug()
     {
         SQL_Product p;
         p.productId = "PHONE001";
-        p.productName = "华为";
+        p.productName = "华为手机";
         p.categoryId = "ELECTRONICS";
         p.categoryName = "电子产品";
-        p.unitPrice = 50000.00;
+        p.unitPrice = 5000.00;  // 修正价格
         p.stock = 50;
         p.minOrder = 1;
         p.maxOrder = 5;
@@ -5168,7 +5184,20 @@ void HttpServer::handleCreateProductDebug()
         p.action = "sale";
         p.subaction = "new";
         p.description = "遥遥领先 全球第一";
-        p.imageUrl = "";
+
+        // 创建商品目录并设置图片路径
+        QString categoryProductDir = QString("%1_%2").arg(p.categoryId).arg(p.productId);
+        QString productDirPath = productsDir.filePath(categoryProductDir);
+        QDir productDir(productDirPath);
+        if (productDir.mkpath(".")) {
+            // 保存相对路径到imageUrl
+            p.imageUrl = QString("Products/%1/").arg(categoryProductDir);
+            qDebug() << "✅ 创建商品目录: " << productDirPath;
+        } else {
+            p.imageUrl = "";
+            qDebug() << "❌ 无法创建商品目录: " << productDirPath;
+        }
+
         testProducts.append(p);
     }
     {
@@ -5177,7 +5206,7 @@ void HttpServer::handleCreateProductDebug()
         p.productName = "小米手机";
         p.categoryId = "ELECTRONICS";
         p.categoryName = "电子产品";
-        p.unitPrice = 60000.00;
+        p.unitPrice = 3000.00;  // 修正价格
         p.stock = 50;
         p.minOrder = 1;
         p.maxOrder = 5;
@@ -5185,13 +5214,24 @@ void HttpServer::handleCreateProductDebug()
         p.action = "sale";
         p.subaction = "new";
         p.description = "全银河第一";
-        p.imageUrl = "";
+
+        QString categoryProductDir = QString("%1_%2").arg(p.categoryId).arg(p.productId);
+        QString productDirPath = productsDir.filePath(categoryProductDir);
+        QDir productDir(productDirPath);
+        if (productDir.mkpath(".")) {
+            p.imageUrl = QString("Products/%1/").arg(categoryProductDir);
+            qDebug() << "✅ 创建商品目录: " << productDirPath;
+        } else {
+            p.imageUrl = "";
+            qDebug() << "❌ 无法创建商品目录: " << productDirPath;
+        }
+
         testProducts.append(p);
     }
     {
         SQL_Product p;
         p.productId = "PHONE003";
-        p.productName = "vivo";
+        p.productName = "vivo手机";
         p.categoryId = "ELECTRONICS";
         p.categoryName = "电子产品";
         p.unitPrice = 2999.00;
@@ -5202,119 +5242,198 @@ void HttpServer::handleCreateProductDebug()
         p.action = "sale";
         p.subaction = "new";
         p.description = "全宇宙第一";
-        p.imageUrl = "";
+
+        QString categoryProductDir = QString("%1_%2").arg(p.categoryId).arg(p.productId);
+        QString productDirPath = productsDir.filePath(categoryProductDir);
+        QDir productDir(productDirPath);
+        if (productDir.mkpath(".")) {
+            p.imageUrl = QString("Products/%1/").arg(categoryProductDir);
+            qDebug() << "✅ 创建商品目录: " << productDirPath;
+        } else {
+            p.imageUrl = "";
+            qDebug() << "❌ 无法创建商品目录: " << productDirPath;
+        }
+
         testProducts.append(p);
     }
     // 商品2：衣服
     {
         SQL_Product p;
         p.productId = "CLOTH001";
-        p.productName = "美特斯榜尾";
+        p.productName = "美特斯邦威T恤";
         p.categoryId = "CLOTHING";
         p.categoryName = "服装";
         p.unitPrice = 199.00;
         p.stock = 100;
         p.minOrder = 2;
         p.maxOrder = 20;
-        p.status = "inactive";
+        p.status = "active";
         p.action = "sale";
         p.subaction = "hot";
         p.description = "这是一件测试T恤";
-        p.imageUrl = "";
+
+        QString categoryProductDir = QString("%1_%2").arg(p.categoryId).arg(p.productId);
+        QString productDirPath = productsDir.filePath(categoryProductDir);
+        QDir productDir(productDirPath);
+        if (productDir.mkpath(".")) {
+            p.imageUrl = QString("Products/%1/").arg(categoryProductDir);
+            qDebug() << "✅ 创建商品目录: " << productDirPath;
+        } else {
+            p.imageUrl = "";
+            qDebug() << "❌ 无法创建商品目录: " << productDirPath;
+        }
+
         testProducts.append(p);
     }
     {
         SQL_Product p;
         p.productId = "CLOTH002";
-        p.productName = "李宁";
+        p.productName = "李宁运动服";
         p.categoryId = "CLOTHING";
         p.categoryName = "服装";
-        p.unitPrice = 1991.00;
+        p.unitPrice = 499.00;  // 修正价格
         p.stock = 100;
         p.minOrder = 2;
         p.maxOrder = 20;
         p.status = "active";
         p.action = "sale";
         p.subaction = "hot";
-        p.description = "打着";
-        p.imageUrl = "";
+        p.description = "国货之光运动服";
+
+        QString categoryProductDir = QString("%1_%2").arg(p.categoryId).arg(p.productId);
+        QString productDirPath = productsDir.filePath(categoryProductDir);
+        QDir productDir(productDirPath);
+        if (productDir.mkpath(".")) {
+            p.imageUrl = QString("Products/%1/").arg(categoryProductDir);
+            qDebug() << "✅ 创建商品目录: " << productDirPath;
+        } else {
+            p.imageUrl = "";
+            qDebug() << "❌ 无法创建商品目录: " << productDirPath;
+        }
+
         testProducts.append(p);
     }
     {
         SQL_Product p;
         p.productId = "CLOTH003";
-        p.productName = "耐克";
+        p.productName = "耐克运动鞋";
         p.categoryId = "CLOTHING";
         p.categoryName = "服装";
-        p.unitPrice = 19219.00;
+        p.unitPrice = 899.00;  // 修正价格
         p.stock = 100;
         p.minOrder = 2;
         p.maxOrder = 20;
         p.status = "active";
         p.action = "sale";
         p.subaction = "hot";
-        p.description = "钩子";
-        p.imageUrl = "";
+        p.description = "经典运动鞋款";
+
+        QString categoryProductDir = QString("%1_%2").arg(p.categoryId).arg(p.productId);
+        QString productDirPath = productsDir.filePath(categoryProductDir);
+        QDir productDir(productDirPath);
+        if (productDir.mkpath(".")) {
+            p.imageUrl = QString("Products/%1/").arg(categoryProductDir);
+            qDebug() << "✅ 创建商品目录: " << productDirPath;
+        } else {
+            p.imageUrl = "";
+            qDebug() << "❌ 无法创建商品目录: " << productDirPath;
+        }
+
         testProducts.append(p);
     }
     // 商品3：食品
     {
         SQL_Product p;
         p.productId = "FOOD001";
-        p.productName = "八只松鼠";
+        p.productName = "三只松鼠坚果";
         p.categoryId = "FOOD";
         p.categoryName = "食品";
-        p.unitPrice = 139.90;
-        p.stock = 2010;
+        p.unitPrice = 39.90;
+        p.stock = 200;
         p.minOrder = 1;
         p.maxOrder = 100;
         p.status = "active";
         p.action = "sale";
         p.subaction = "normal";
         p.description = "这是一包测试零食";
-        p.imageUrl = "";
+
+        QString categoryProductDir = QString("%1_%2").arg(p.categoryId).arg(p.productId);
+        QString productDirPath = productsDir.filePath(categoryProductDir);
+        QDir productDir(productDirPath);
+        if (productDir.mkpath(".")) {
+            p.imageUrl = QString("Products/%1/").arg(categoryProductDir);
+            qDebug() << "✅ 创建商品目录: " << productDirPath;
+        } else {
+            p.imageUrl = "";
+            qDebug() << "❌ 无法创建商品目录: " << productDirPath;
+        }
+
         testProducts.append(p);
     }
     {
         SQL_Product p;
         p.productId = "FOOD002";
-        p.productName = "9只松鼠";
+        p.productName = "九只松鼠坚果";
         p.categoryId = "FOOD";
         p.categoryName = "食品";
-        p.unitPrice = 191.90;
+        p.unitPrice = 49.90;
         p.stock = 20;
         p.minOrder = 1;
         p.maxOrder = 100;
         p.status = "active";
         p.action = "sale";
         p.subaction = "normal";
-        p.description = "这是一包测试零食";
-        p.imageUrl = "";
+        p.description = "这是另一包测试零食";
+
+        QString categoryProductDir = QString("%1_%2").arg(p.categoryId).arg(p.productId);
+        QString productDirPath = productsDir.filePath(categoryProductDir);
+        QDir productDir(productDirPath);
+        if (productDir.mkpath(".")) {
+            p.imageUrl = QString("Products/%1/").arg(categoryProductDir);
+            qDebug() << "✅ 创建商品目录: " << productDirPath;
+        } else {
+            p.imageUrl = "";
+            qDebug() << "❌ 无法创建商品目录: " << productDirPath;
+        }
+
         testProducts.append(p);
     }
     {
         SQL_Product p;
         p.productId = "FOOD003";
-        p.productName = "10只松鼠";
+        p.productName = "十只松鼠坚果";
         p.categoryId = "FOOD";
         p.categoryName = "食品";
-        p.unitPrice = 1921.90;
+        p.unitPrice = 59.90;
         p.stock = 200;
         p.minOrder = 1;
         p.maxOrder = 100;
-        p.status = "inactive";
+        p.status = "active";
         p.action = "sale";
         p.subaction = "normal";
-        p.description = "这是一包测试零食";
-        p.imageUrl = "";
+        p.description = "这是高级版测试零食";
+
+        QString categoryProductDir = QString("%1_%2").arg(p.categoryId).arg(p.productId);
+        QString productDirPath = productsDir.filePath(categoryProductDir);
+        QDir productDir(productDirPath);
+        if (productDir.mkpath(".")) {
+            p.imageUrl = QString("Products/%1/").arg(categoryProductDir);
+            qDebug() << "✅ 创建商品目录: " << productDirPath;
+        } else {
+            p.imageUrl = "";
+            qDebug() << "❌ 无法创建商品目录: " << productDirPath;
+        }
+
         testProducts.append(p);
     }
+
     // 插入商品
     int successCount = 0;
     for (const SQL_Product &product : testProducts) {
         qDebug() << "插入商品: " << product.productName
                  << " (" << product.productId << ")"
-                 << " 价格: " << product.unitPrice << "元";
+                 << " 价格: " << product.unitPrice << "元"
+                 << " 图片路径: " << product.imageUrl;
 
         if (dbManager->insertProduct(product)) {
             qDebug() << "✅ 成功";
@@ -5331,4 +5450,16 @@ void HttpServer::handleCreateProductDebug()
     // 简单验证
     QList<SQL_Product> allProducts = dbManager->getAllProducts();
     qDebug() << "数据库中现有商品总数: " << allProducts.size();
+
+    // 显示目录结构
+    qDebug() << "目录结构:";
+    qDebug() << "当前目录: " << currentDir.absolutePath();
+    qDebug() << "Products目录: " << productsDirPath;
+
+    // 列出所有创建的商品目录
+    QStringList productDirs = productsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    qDebug() << "创建的商品目录数量: " << productDirs.size();
+    for (const QString &dir : productDirs) {
+        qDebug() << "  - " << dir;
+    }
 }

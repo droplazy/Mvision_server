@@ -200,7 +200,7 @@ private:
     SQL_MallUser extractMallUserFromQuery(const QSqlQuery &query);
     bool createWithdrawTable();
     SQL_AppealRecord extractAppealFromQuery(const QSqlQuery &query);
-    bool createTable7();
+    bool createTable7();//商品表单
 };
 
 #endif // DATABASEMANAGER_H

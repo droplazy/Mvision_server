@@ -6,6 +6,8 @@
 #include "commandlsit.h"
 #include "firmware.h"
 #include "mallusermanager.h"  // 添加头文件
+#include "mallproducts.h"
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -205,5 +207,21 @@ void MainWindow::on_pushButton_malluser_clicked()
 
     // 对话框关闭后自动删除
     managerDialog->deleteLater();
+}
+
+
+void MainWindow::on_pushButton_products_clicked()
+{
+    // 创建商品管理对话框，传入数据库指针
+    mallproducts *productsDialog = new mallproducts(p_db, this);
+
+    // 设置模态对话框
+    productsDialog->setModal(true);
+
+    // 显示对话框
+    productsDialog->exec();  // 使用exec()确保模态对话框
+
+    // 对话框关闭后自动删除
+    productsDialog->deleteLater();
 }
 
