@@ -40,10 +40,12 @@ private:
 
     DeviceStatus parseJsonHeartBeat(const QJsonObject &jsonObj);
     QString getMessageType(const QJsonObject &jsonObj);
-
+   // int scribeInt =0;
     DatabaseManager *dbManager;
 signals:
     void updateDeviceInfo(DeviceStatus);
+    void mqttclientconnted(bool);
+
 };
 
 #endif // MQTTCLIENT_H

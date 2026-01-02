@@ -10,8 +10,11 @@ RC_ICONS = rainbow.ico
 
 SOURCES += \
     databasemanager.cpp \
+    devicelistdialog.cpp \
     emailsender.cpp \
     httpserver.cpp \
+    insertdev.cpp \
+    loghandler.cpp \
     main.cpp \
     mainwindow.cpp \
     mqtt_server.cpp \
@@ -19,14 +22,19 @@ SOURCES += \
 
 HEADERS += \
     databasemanager.h \
+    devicelistdialog.h \
     emailsender.h \
     httpserver.h \
+    insertdev.h \
+    loghandler.h \
     mainwindow.h \
     mqtt_server.h \
     mqttclient.h \
     publicheader.h
 
 FORMS += \
+    devicelistdialog.ui \
+    insertdev.ui \
     mainwindow.ui
 
 TRANSLATIONS += \

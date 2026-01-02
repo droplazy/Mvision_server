@@ -64,7 +64,7 @@ void mqttclient::subscribeToTopic(QString topic)
     if (mqttClient->state() == QMqttClient::Connected) {
         QMqttTopicFilter topicFilter(topic);  // 使用QMqttTopicFilter类型的主题过滤器
         mqttClient->subscribe(topicFilter);  // 订阅主题
-        qDebug() << "topic:" << topic << "scbscribed!   >>>> ...... ";
+       // qDebug() << "topic:" << topic << "scbscribed!   >>>> ...... ";
     }
 }
 //     else {
@@ -203,9 +203,12 @@ void mqttclient::onStateChanged(QMqttClient::ClientState state)
     if (state == QMqttClient::Connected) {
         qDebug() << "MQTT client connected successfully.";
         subscribeALLTopic();
+        emit mqttclientconnted(true);
 
     } else {
         qDebug() << "MQTT client disconnected. State: " << state;
+        emit mqttclientconnted(false);
+
     }
 }
 // 解析 JSON 数据并创建 DeviceStatus 结构体实例

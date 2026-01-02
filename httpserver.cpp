@@ -18,8 +18,8 @@
 
 HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
-    handleCreateTestOrdersSimple();
-    handleCreateProductDebug();
+    //handleCreateTestOrdersSimple();
+    //handleCreateProductDebug();
     initVerificationSystem();//邮箱验证码生成
     generateTextData();
     createDownloadDirectoryIfNeeded();

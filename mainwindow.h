@@ -7,6 +7,7 @@
 #include "emailsender.h"
 
 
+
 QT_BEGIN_NAMESPACE
 namespace Ui {
 class MainWindow;
@@ -20,6 +21,11 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+
+public slots:
+    void DispayMqttclientStatus(bool status);
+private slots:
+    void on_pushButton_devlist_clicked();
 
 private:
     Ui::MainWindow *ui;
