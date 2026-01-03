@@ -184,6 +184,11 @@ public:
     int getInvitedUserCount(const QString &inviterUsername);
     double getInvitedUsersTotalConsumption(const QString &inviterUsername);
 
+    bool deleteUserToken(const QString &username);
+    bool cleanExpiredTokens();
+    QString getUsernameByToken(const QString &token);
+    bool validateToken(const QString &token);
+    bool saveUserToken(const QString &username, const QString &token);
 private:
     QSqlDatabase db;
 
@@ -201,6 +206,7 @@ private:
     bool createWithdrawTable();
     SQL_AppealRecord extractAppealFromQuery(const QSqlQuery &query);
     bool createTable7();//商品表单
+    bool createTokenTable();
 };
 
 #endif // DATABASEMANAGER_H

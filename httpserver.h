@@ -27,6 +27,10 @@ public:
     void sendResponse(QTcpSocket *clientSocket, const QByteArray &json);
     void sendNotFound(QTcpSocket *clientSocket);
 
+    // 创建 DeviceStatus 对象的 QVector
+    QVector<DeviceStatus> deviceVector;
+    QVector<Machine_Process_Total> processVector;
+
 protected:
     void incomingConnection(qintptr socketDescriptor) override;
 
@@ -64,9 +68,6 @@ private:
     QJsonObject generateJsonHearResponse(const QJsonObject &data);
     void generateTextData();
 
-    // 创建 DeviceStatus 对象的 QVector
-    QVector<DeviceStatus> deviceVector;
-    QVector<Machine_Process_Total> processVector;
 
 
     Machine_Process_Total *findProcessById(QVector<Machine_Process_Total> &processes, const QString &id);
@@ -151,6 +152,7 @@ private:
     QMutex codeMutex;                             // 线程安全锁
     void printVerificationCodes();
   //  bool checkVerificationCodeFrequency(const QString &username, const QString &email, int minIntervalSeconds);
+    void sendUnauthorized(QTcpSocket *clientSocket);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

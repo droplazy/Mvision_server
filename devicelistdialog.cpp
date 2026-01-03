@@ -215,6 +215,7 @@ void devicelistdialog::deleteDevice(const QString &serialNumber)
 
         // 重新加载设备列表
         loadDeviceList();
+        emit deviceListUpdated();
 
         qDebug() << "设备删除成功：" << serialNumber;
     } else {
@@ -363,7 +364,7 @@ void devicelistdialog::on_button_adddev_clicked()
 
             // 重新加载设备列表
             loadDeviceList();
-
+            emit deviceListUpdated();
             // 清空搜索框（如果有）
             ui->lineEdit_search->clear();
         } else {

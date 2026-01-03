@@ -30,12 +30,139 @@ bool DatabaseManager::createDatabase(const QString &dbName)
     }
     return false;
 }
+// 验证token是否有效
+bool DatabaseManager::validateToken(const QString &token)
+{
+    QSqlQuery query;
 
+    query.prepare(R"(
+        SELECT username FROM UserTokens
+        WHERE token = :token
+        AND expire_time > datetime('now', 'localtime')
+    )");
+
+    query.bindValue(":token", token);
+
+    if (query.exec() && query.next()) {
+        QString username = query.value("username").toString();
+        qDebug() << "Token valid for user:" << username;
+        return true;
+    }
+
+    qDebug() << "Token invalid or expired";
+    return false;
+}
+
+// 根据token获取用户名
+QString DatabaseManager::getUsernameByToken(const QString &token)
+{
+    QSqlQuery query;
+
+    query.prepare(R"(
+        SELECT username FROM UserTokens
+        WHERE token = :token
+        AND expire_time > datetime('now', 'localtime')
+    )");
+
+    query.bindValue(":token", token);
+
+    if (query.exec() && query.next()) {
+        return query.value("username").toString();
+    }
+
+    return "";
+}
+
+// 删除用户token（退出登录时使用）
+bool DatabaseManager::deleteUserToken(const QString &username)
+{
+    QSqlQuery query;
+
+    query.prepare("DELETE FROM UserTokens WHERE username = :username");
+    query.bindValue(":username", username);
+
+    if (!query.exec()) {
+        qDebug() << "Error deleting user token: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "User token deleted for:" << username;
+    return true;
+}
+
+// 清理过期token
+bool DatabaseManager::cleanExpiredTokens()
+{
+    QSqlQuery query;
+
+    query.prepare("DELETE FROM UserTokens WHERE expire_time <= datetime('now', 'localtime')");
+
+    if (!query.exec()) {
+        qDebug() << "Error cleaning expired tokens: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "Expired tokens cleaned";
+    return true;
+}
 bool DatabaseManager::createTables()
 {
     return createTable1() && createTable2() && createTable3() && createAppealTable()&&
            createTable4() && createTable5() && createTable6() && createTable7() &&  // 添加商品表
-           createWithdrawTable();
+           createWithdrawTable()&& createTokenTable();
+}
+// 保存token
+bool DatabaseManager::saveUserToken(const QString &username, const QString &token)
+{
+    QSqlQuery query;
+
+    // 设置token过期时间（24小时后）
+    QDateTime expireTime = QDateTime::currentDateTime().addSecs(24 * 3600);
+
+    query.prepare(R"(
+        INSERT OR REPLACE INTO UserTokens
+        (username, token, expire_time)
+        VALUES (:username, :token, :expire_time)
+    )");
+
+    query.bindValue(":username", username);
+    query.bindValue(":token", token);
+    query.bindValue(":expire_time", expireTime.toString("yyyy-MM-dd HH:mm:ss"));
+
+    if (!query.exec()) {
+        qDebug() << "Error saving user token: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "User token saved for:" << username;
+    return true;
+}
+
+bool DatabaseManager::createTokenTable()
+{
+    QSqlQuery query;
+
+    QString createTableQuery = R"(
+        CREATE TABLE IF NOT EXISTS UserTokens (
+            username TEXT PRIMARY KEY,
+            token TEXT NOT NULL,
+            expire_time TEXT NOT NULL,
+            create_time TEXT DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (username) REFERENCES Users(username) ON DELETE CASCADE
+        )
+    )";
+
+    if (!query.exec(createTableQuery)) {
+        qDebug() << "Error creating table UserTokens: " << query.lastError().text();
+        return false;
+    }
+
+    // 创建索引
+    query.exec("CREATE INDEX IF NOT EXISTS idx_token ON UserTokens(token)");
+    query.exec("CREATE INDEX IF NOT EXISTS idx_token_expire ON UserTokens(expire_time)");
+
+    qDebug() << "Table UserTokens created successfully.";
+    return true;
 }
 bool DatabaseManager::createTable7()
 {

@@ -11,6 +11,7 @@
 #include "orderlist.h"
 #include "userappeal.h"
 #include "guidetextset.h"
+#include "managerui.h"
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -575,13 +576,68 @@ void MainWindow::on_pushButton_devlist_clicked()
 
     // 设置关闭时自动删除
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-
+    // 连接信号到槽函数
+    connect(dialog, &devicelistdialog::deviceListUpdated,
+            this, &MainWindow::updateHttpDeviceContainer);
     // 显示对话框（模态方式）
     dialog->exec();
 
     qDebug() << "设备列表对话框已关闭";
 }
 
+void MainWindow::updateHttpDeviceContainer()
+{
+    if (!p_db || !p_http) {
+        qDebug() << "数据库或HTTP服务未初始化";
+        return;
+    }
+
+    qDebug() << "数据库已更新，开始同步到HTTP容器...";
+
+    // 清空HTTP容器
+    p_http->deviceVector.clear();
+
+    // 从数据库获取设备列表
+    QList<SQL_Device> devices = p_db->getAllDevices();
+
+    // 转换为DeviceStatus并添加到HTTP容器
+    for (const SQL_Device &sqlDevice : devices) {
+        DeviceStatus deviceStatus(
+            "",      // serialNumber
+            "",      // status
+            "",      // location
+            "",      // currentAction
+            "",      // trafficStatistics
+            "",      // lastHeartbeat
+            "",      // ip
+            "",      // current_start
+            "",      // current_end
+            "",      // next_action
+            "",      // next_action_start
+            "",      // next_action_end
+            "",      // usedProcess
+            "",      // usedProcessID
+            0        // Temperature
+            );
+
+        // 对号入座：SQL_Device -> DeviceStatus
+        deviceStatus.serialNumber = sqlDevice.serial_number;
+        deviceStatus.checksum = sqlDevice.checksum;
+        deviceStatus.status = sqlDevice.device_status;
+        deviceStatus.ip = sqlDevice.ip_address;
+        // trafficStatistics 可以从 total_flow 转换
+        deviceStatus.trafficStatistics = sqlDevice.total_flow;
+        // bound_user 可以放在 location 或其他字段
+        deviceStatus.location = sqlDevice.bound_user;
+        // bound_time 可以作为 lastHeartbeat
+        deviceStatus.lastHeartbeat = sqlDevice.bound_time;
+
+        // 添加到HTTP容器
+        p_http->deviceVector.append(deviceStatus);
+    }
+
+    qDebug() << "HTTP容器已更新，当前设备数量:" << p_http->deviceVector.size();
+}
 
 void MainWindow::on_pushButton_cmdquery_clicked()
 {
@@ -691,4 +747,13 @@ void MainWindow::on_pushButton_webUI_clicked()
     setDialog->exec();
 }
 
+
+
+void MainWindow::on_pushButton_contorluser_clicked()
+{
+    // 创建ManagerUI对话框，传入数据库指针
+    ManagerUI *managerDialog = new ManagerUI(p_db, this);
+    managerDialog->exec(); // 或者用show()显示非模态对话框
+    delete managerDialog; // 对话框关闭后删除
+}
 

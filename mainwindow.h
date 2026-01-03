@@ -46,6 +46,9 @@ private slots:
 
     void on_pushButton_openmqtt_clicked();
 
+    void updateHttpDeviceContainer();
+    void on_pushButton_contorluser_clicked();
+
 private:
     Ui::MainWindow *ui;
 

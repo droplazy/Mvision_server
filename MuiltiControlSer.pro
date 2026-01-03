@@ -23,6 +23,7 @@ SOURCES += \
     mainwindow.cpp \
     mallproducts.cpp \
     mallusermanager.cpp \
+    managerui.cpp \
     mqtt_server.cpp \
     mqttclient.cpp \
     orderlist.cpp \
@@ -43,6 +44,7 @@ HEADERS += \
     mainwindow.h \
     mallproducts.h \
     mallusermanager.h \
+    managerui.h \
     mqtt_server.h \
     mqttclient.h \
     orderlist.h \
@@ -60,6 +62,7 @@ FORMS += \
     mainwindow.ui \
     mallproducts.ui \
     mallusermanager.ui \
+    managerui.ui \
     orderlist.ui \
     userappeal.ui
 

@@ -675,14 +675,13 @@ QJsonObject HttpServer::parseJsonData(const QString &jsonString) {
         return QJsonObject();
     }
 }
-
 void HttpServer::onReadyRead() {
     // 获取当前连接的客户端
     QTcpSocket *clientSocket = qobject_cast<QTcpSocket *>(sender());
 
     if (clientSocket) {
         // 获取客户端IP地址
-              QString clientIp = clientSocket->peerAddress().toString();
+        QString clientIp = clientSocket->peerAddress().toString();
         // 读取请求
         QByteArray request = clientSocket->readAll();
         // 发送请求信息信号（在完整处理之前）
@@ -705,6 +704,23 @@ void HttpServer::onReadyRead() {
         // 发送包含完整信息的信号
         QString fullReqInfo = QString("IP: %1 | Path: %2 | Method: %3").arg(clientIp).arg(path).arg(QString(method));
         emit sendreqInfo(fullReqInfo);
+
+        // 获取token参数
+        QString token = query.queryItemValue("token");
+        qDebug() << "token:" << token;
+
+        // Token验证（排除登录接口）
+        bool isLoginPath = (path == "/auth/login" || path == "/mall/login/info");
+        if (!isLoginPath) {
+            // 非登录接口需要验证token
+            if (token.isEmpty() || !dbManager || !dbManager->validateToken(token)) {
+                qDebug() << "Token验证失败或不存在，返回401";
+                sendUnauthorized(clientSocket);
+                clientSocket->disconnectFromHost();
+                return;
+            }
+        }
+
         // 提取 BODY
         QByteArray body;
         int emptyLineIndex = request.indexOf("\r\n\r\n");
@@ -729,13 +745,14 @@ void HttpServer::onReadyRead() {
         qDebug() << "GET REQ PATH: " << path << "GET METHOD: " << method;
 
         if (method == "GET") {
+            // GET请求处理...
             if (path == "/device") {
                 handleGetDevice(clientSocket, query);
             } else if (path == "/mall/login/para") {
                 handleGetLoginUI(clientSocket, query);
-            }else if (path.contains( "/images")) {
+            } else if (path.contains("/images")) {
                 handleBGimagesGet(clientSocket, query);
-            }else if (path == "/process/get") {
+            } else if (path == "/process/get") {
                 handleGetProcess(clientSocket, query);
             } else if (path == "/download") {
                 handleGetDownload(clientSocket, query);
@@ -743,20 +760,20 @@ void HttpServer::onReadyRead() {
                 handleGetCommandList(clientSocket, query);
             } else if (path == "/order/dispose/list") {
                 handleGetOrderList(clientSocket, query);
-            }else if (path == "/mall/auth/info") {
+            } else if (path == "/mall/auth/info") {
                 handleGetAuthInfo(clientSocket, query);
-            }else if (path == "/debug/orderPaid") {
+            } else if (path == "/debug/orderPaid") {
                 handleGetpaidOK(clientSocket, query);
-            }else if (path == "/mall/product/item") {
+            } else if (path == "/mall/product/item") {
                 handleGetMallProducts(clientSocket);
-            }else if (path == "/mall/auth/promot") {
+            } else if (path == "/mall/auth/promot") {
                 handleGetAuthPromote(clientSocket, query);
-            }else if (path == "/mall/auth/order/query") {
+            } else if (path == "/mall/auth/order/query") {
                 handleGetOrderQuery(clientSocket, query);
-            }else if (path == "/mall/auth/order/recheck-response") {
+            } else if (path == "/mall/auth/order/recheck-response") {
                 handleGetOrderAppeal(clientSocket, query);
-            }else if (path == "/home" || path.contains(".css") /*|| path.contains(".jpg")*/ || path.contains("/login") \
-                       || path.contains(".js") /*|| path.contains(".png")*/ || path.contains(".html") \
+            } else if (path == "/home" || path.contains(".css") || path.contains("/login") \
+                       || path.contains(".js") || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
                        || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")) {
                 ShowHomepage(clientSocket, request);
@@ -790,8 +807,6 @@ void HttpServer::onReadyRead() {
                         if (!moreData.isEmpty()) {
                             body.append(moreData);
                             remaining = contentLength - body.size();
-                            // qDebug() << "Read additional" << moreData.size() << "bytes. Total:"
-                            //          << body.size() << "Remaining:" << remaining;
                         } else {
                             break;
                         }
@@ -823,25 +838,25 @@ void HttpServer::onReadyRead() {
                     handlePostWarningIgnore(clientSocket, body);
                 } else if (path == "/auth/login") {
                     handlePostAuthLogin(clientSocket, body);
-                }else if (path == "/process/todev") {
+                } else if (path == "/process/todev") {
                     handlePostDeviceProcess(clientSocket, body);
-                }else if (path == "/mall/login/info") {
+                } else if (path == "/mall/login/info") {
                     handlePostMallLogin(clientSocket, body);
-                }else if (path == "/mall/auth/register") {
+                } else if (path == "/mall/auth/register") {
                     handlePostMallRegist(clientSocket, body);
-                }else if (path == "/mall/auth/passwd-reset/reset") {
+                } else if (path == "/mall/auth/passwd-reset/reset") {
                     handlePostMallPasswdReset(clientSocket, body);
-                }else if (path == "/mall/auth/passwd-reset/sendemail") {
+                } else if (path == "/mall/auth/passwd-reset/sendemail") {
                     handlePostMallSendMailCode(clientSocket, body);
-                }else if (path == "/mall/auth/promot/withdraw") {
+                } else if (path == "/mall/auth/promot/withdraw") {
                     handlePostMallSendwithdraw(clientSocket, body);
-                }else if (path == "/mall/product/order-checkout") {
+                } else if (path == "/mall/product/order-checkout") {
                     handlePostMallOrderCheckout(clientSocket, body);
-                }else if (path == "/order/dispose/Verify") {
+                } else if (path == "/order/dispose/Verify") {
                     handlePostOrderVerify(clientSocket, body);
-                }else if (path == "/mall/auth/order/appeal/text") {
+                } else if (path == "/mall/auth/order/appeal/text") {
                     handlePostMallUserAppealtext(clientSocket, body, query);
-                }else if (path == "/mall/auth/order/appeal/picture") {
+                } else if (path == "/mall/auth/order/appeal/picture") {
                     // 如果已经接收的body不完整，继续读取
                     if (contentLength > 0 && body.size() < contentLength) {
                         qDebug() << "Need to read more data. Current:" << body.size()
@@ -856,8 +871,6 @@ void HttpServer::onReadyRead() {
                             if (!moreData.isEmpty()) {
                                 body.append(moreData);
                                 remaining = contentLength - body.size();
-                                // qDebug() << "Read additional" << moreData.size() << "bytes. Total:"
-                                //          << body.size() << "Remaining:" << remaining;
                             } else {
                                 break;
                             }
@@ -870,10 +883,9 @@ void HttpServer::onReadyRead() {
                     }
 
                     qDebug() << "Before calling handlePostMallUserAppealPic, body size:" << body.size();
-
                     handlePostMallUserAppealPic(clientSocket, body, query);
-                                        qDebug() << "After handlePostFileUpload";
-                }else {
+                    qDebug() << "After handlePostFileUpload";
+                } else {
                     qDebug() << path << "[POST /process/create] body =" << body;
                     sendNotFound(clientSocket);
                 }
@@ -882,9 +894,32 @@ void HttpServer::onReadyRead() {
             sendNotFound(clientSocket);
         }
 
-        // 断开与客户端的连接（对于keep-alive连接可能需要调整）
+        // 断开与客户端的连接
         clientSocket->disconnectFromHost();
     }
+}
+
+
+void HttpServer::sendUnauthorized(QTcpSocket *clientSocket)
+{
+    QJsonObject response;
+    response["code"] = 401;
+    response["message"] = "Unauthorized: Token missing or invalid";
+    response["timestamp"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+
+    QJsonDocument doc(response);
+    QByteArray jsonData = doc.toJson();
+
+    QString responseStr = QString(
+        "HTTP/1.1 401 Unauthorized\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: %1\r\n"
+        "\r\n"
+        "%2"
+    ).arg(jsonData.size()).arg(QString::fromUtf8(jsonData));
+
+    clientSocket->write(responseStr.toUtf8());
+    clientSocket->flush();
 }
 void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
 {
@@ -933,25 +968,63 @@ void HttpServer::handlePostAuthLogin(QTcpSocket *clientSocket, const QByteArray 
     qDebug() << "[POST /auth/login] body =" << body;
 
     QString qjson = QString(body);
-    // 直接打印 body 数据
     qDebug() << "Raw JSON data:" << qjson;
-    // QByteArray response;
 
-    QJsonObject  result = parseJsonData(qjson);
-    int code=400;
-    QJsonObject  jsonObject;
+    QJsonObject result = parseJsonData(qjson);
+    int code = 400;
+    QString token = "";
+    QString username = "";
+
+    QJsonObject jsonObject;
+
     if(!result.isEmpty())
     {
-        QString username = result.value("username").toString();
+        username = result.value("username").toString();
         QString password = result.value("password").toString();
         qDebug() << "Username:" << username;
         qDebug() << "Password:" << password;
-        if(username == MANAGER_USERNAME && password == MANAGER_PASSWD)
-        {
-            code=200;
+
+        // 使用数据库指针验证用户
+        if (dbManager) {
+            // 从Users表中查询用户
+            SQL_User user = dbManager->getUserByUsername(username);
+
+            if (!user.username.isEmpty()) {
+                // 用户存在，验证密码
+                if (user.password == password) {
+                    code = 200; // 登录成功
+
+                    // 生成token
+                    const QString chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+                    const int tokenLength = 32;
+
+                    QRandomGenerator *generator = QRandomGenerator::global();
+                    for(int i = 0; i < tokenLength; ++i) {
+                        int index = generator->bounded(chars.length());
+                        token.append(chars.at(index));
+                    }
+
+                    qDebug() << "Generated token:" << token;
+
+                    // 保存token到数据库
+                    dbManager->saveUserToken(username, token);
+                } else {
+                    qDebug() << "Password incorrect";
+                    code = 401; // 密码错误
+                }
+            } else {
+                qDebug() << "User not found";
+                code = 404; // 用户不存在
+            }
+        } else {
+            qDebug() << "Database manager is null";
+            code = 500; // 服务器错误
         }
-        jsonObject= generateJson(username,code,"951");
+
+        // 生成返回JSON
+        jsonObject = generateJson(username, code, token);
     }
+
     QJsonDocument doc(jsonObject);
     QByteArray jsonData = doc.toJson(QJsonDocument::Indented);
     qDebug() << jsonData;
@@ -1152,14 +1225,7 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
     qDebug() << "=== handlePostFileUpload finished ===";
     qDebug() << "";
 }
-// 辅助函数：获取HTTP头部值
-QString HttpServer::getHeaderValue(QTcpSocket *clientSocket, const QString &headerName)
-{
-    // 这里需要从clientSocket的请求数据中解析头部
-    // 假设你已经有一个存储请求头的数据结构
-    // 或者可以从原始的请求数据中解析
-    return "";
-}
+
 QByteArray HttpServer::getContentType(QString &filePath)
 {
     QFileInfo fileInfo(filePath);
@@ -4527,7 +4593,7 @@ void HttpServer::handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray 
 
             // 生成token
             QString token = generateToken(username);
-
+            dbManager->saveUserToken(username, token);
             // 更新最后登录时间
             dbManager->updateMallUserLastLogin(username);
 

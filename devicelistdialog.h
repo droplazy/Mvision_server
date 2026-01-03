@@ -33,6 +33,9 @@ private:
 
     void addDeleteButtonToRow(int row, const QString &serialNumber);  // 添加删除按钮
     void deleteDevice(const QString &serialNumber);  // 删除设备
+signals:
+    // 添加这个信号，当设备列表发生变化时发出
+    void deviceListUpdated();
 };
 
 #endif // DEVICELISTDIALOG_H
