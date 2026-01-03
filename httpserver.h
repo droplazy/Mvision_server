@@ -20,6 +20,9 @@ class HttpServer : public QTcpServer
 public:
     explicit HttpServer(DatabaseManager *db, QObject *parent = nullptr);
 
+    QString LOGIN_GUIDE_TEXT ="佳荣电子商城";              // 使用宏
+    QString LOGIN_SLOGAN1 = "支持软件硬件研发打样一站式服务";               // 使用宏
+    QString LOGIN_SLOGAN2 =  "已经服务江浙沪上百家企业";             // 使用宏
 
     void sendResponse(QTcpSocket *clientSocket, const QByteArray &json);
     void sendNotFound(QTcpSocket *clientSocket);
@@ -153,7 +156,7 @@ signals:
     void devCommadSend(QJsonObject);
     void devProcessSend(QJsonObject);
     void sendemail(EmailInfo);
-
+    void sendreqInfo(QString);
 };
 
 #endif // HTTPSERVER_H

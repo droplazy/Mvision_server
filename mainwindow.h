@@ -24,6 +24,7 @@ public:
 
 public slots:
     void DispayMqttclientStatus(bool status);
+    void updateNewrqeInfo(QString info);
 private slots:
     void on_pushButton_devlist_clicked();
 
@@ -39,8 +40,18 @@ private slots:
 
     void on_pushButton_appeal_clicked();
 
+    void on_pushButton_webUI_clicked();
+
+    //void on_pushButton_openhttp_clicked();
+
+    void on_pushButton_openmqtt_clicked();
+
 private:
     Ui::MainWindow *ui;
+
+    QString IP;
+    QString MQTT_PORT;
+    QString HTTP_PORT;
 
     class HttpServer *p_http;
     class mqttclient *p_mqtt_cli;
@@ -49,5 +60,20 @@ private:
     class EmailSender *p_email;
 
     void updateSystemTime();
+  //  void initDatabaseAndServices();
+    void initUIStatus();
+    void initDatabase();
+    void startMqttClient(const QString &ip, int port);
+    void initEmailService();
+    void connectHttpToMqtt();
+    void stopMqttServices();
+    bool isMqttServerRunning();
+    bool validateNetworkConfig();
+    bool checkMqttServerRunning();
+    void connectEmailSignals();
+    void disconnectHttpConnections();
+    void disconnectMqttClientSignals();
+    void connectHttpSignals();
+    void enableNetworkControls(bool enable);
 };
 #endif // MAINWINDOW_H

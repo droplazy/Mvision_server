@@ -15,6 +15,7 @@ SOURCES += \
     devicelistdialog.cpp \
     emailsender.cpp \
     firmware.cpp \
+    guidetextset.cpp \
     httpserver.cpp \
     insertdev.cpp \
     loghandler.cpp \
@@ -25,6 +26,7 @@ SOURCES += \
     mqtt_server.cpp \
     mqttclient.cpp \
     orderlist.cpp \
+    privilegehelper.cpp \
     userappeal.cpp
 
 HEADERS += \
@@ -34,6 +36,7 @@ HEADERS += \
     devicelistdialog.h \
     emailsender.h \
     firmware.h \
+    guidetextset.h \
     httpserver.h \
     insertdev.h \
     loghandler.h \
@@ -43,6 +46,7 @@ HEADERS += \
     mqtt_server.h \
     mqttclient.h \
     orderlist.h \
+    privilegehelper.h \
     publicheader.h \
     userappeal.h
 
@@ -51,6 +55,7 @@ FORMS += \
     commandlsit.ui \
     devicelistdialog.ui \
     firmware.ui \
+    guidetextset.ui \
     insertdev.ui \
     mainwindow.ui \
     mallproducts.ui \

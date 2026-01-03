@@ -11,41 +11,47 @@
 #include <QDebug>
 #include <databasemanager.h>
 
-
 class mqttclient : public QThread
 {
     Q_OBJECT
 public:
- //   explicit  mqttclient(DatabaseManager *db, QObject *parent = nullptr);//禁止隐式转换
-    explicit mqttclient(DatabaseManager *db);
-    virtual void run() override;  // 重载 run 函数
+    explicit mqttclient(DatabaseManager *db,
+                        const QString &hostname = "192.168.10.103",
+                        int port = 1883,
+                        const QString &clientId = "pcpcpc222333");
+    virtual void run() override;
     void connectToBroker();  // 连接到MQTT代理
-    void publishMessage(QMqttTopicName topicName, QByteArray message);   // 发布消息
+    void publishMessage(QMqttTopicName topicName, QByteArray message);
 
+    // 设置连接参数
+    void setConnectionParams(const QString &hostname, int port, const QString &clientId);
 
 public slots:
-    void ADDsubscribeTopic(QString device);//添加主题并且订阅
+    void ADDsubscribeTopic(QString device);
     void CommandMuiltSend(QJsonObject json);
     void ProcessDevtSend(QJsonObject json);
+    void reconnectBroker();  // 重新连接
 
 private slots:
-    void onMessageReceived(const QByteArray &message, const QMqttTopicName &topic);  // 消息接收槽
+    void onMessageReceived(const QByteArray &message, const QMqttTopicName &topic);
     void onStateChanged(QMqttClient::ClientState state);
-private:
-    QMqttClient *mqttClient; // MQTT客户端对象
-    QStringList topicList;
-    void subscribeToTopic(QString topic); // 订阅主题
-    void extracted();
-    void subscribeALLTopic(); // 订阅所有主题
 
+private:
+    QMqttClient *mqttClient;
+    QStringList topicList;
+    QString m_hostname;
+    int m_port;
+    QString m_clientId;
+
+    void subscribeToTopic(QString topic);
+    void subscribeALLTopic();
     DeviceStatus parseJsonHeartBeat(const QJsonObject &jsonObj);
     QString getMessageType(const QJsonObject &jsonObj);
-   // int scribeInt =0;
     DatabaseManager *dbManager;
+
 signals:
     void updateDeviceInfo(DeviceStatus);
     void mqttclientconnted(bool);
-
 };
 
 #endif // MQTTCLIENT_H

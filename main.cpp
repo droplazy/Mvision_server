@@ -4,11 +4,25 @@
 #include <QLocale>
 #include <QTranslator>
 #include "loghandler.h"
+#include "privilegehelper.h"  // 添加这行
+#include <QMessageBox>
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
 
+    // 检查管理员权限
+    if (!PrivilegeHelper::requireAdministrator()) {
+        // 用户选择不以管理员运行
+        QMessageBox::warning(nullptr,
+                             QObject::tr("警告"),
+                             QObject::tr("程序将以普通用户权限运行，某些功能可能受限。"));
+    }
+    // else
+    // {
+    //     QMessageBox::information(nullptr, "程序启动","IP请填写实际地址而非全零地址");
+
+    // }
     QTranslator translator;
     const QStringList uiLanguages = QLocale::system().uiLanguages();
     for (const QString &locale : uiLanguages) {
@@ -18,11 +32,9 @@ int main(int argc, char *argv[])
             break;
         }
     }
-    // ==================== 关键修复：添加这行 ====================
-    // 安装全局消息处理器（必须放在QApplication创建后，MainWindow创建前）
-   // qInstallMessageHandler(LogHandler::messageHandler);
-    // ==========================================================
-    //LogHandler::instance()->setLogFile("app_log.txt");
+
+    qInstallMessageHandler(LogHandler::messageHandler);
+    LogHandler::instance()->setLogFile("app_log.txt");
     MainWindow w;
     w.show();
 

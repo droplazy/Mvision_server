@@ -681,9 +681,13 @@ void HttpServer::onReadyRead() {
     QTcpSocket *clientSocket = qobject_cast<QTcpSocket *>(sender());
 
     if (clientSocket) {
+        // 获取客户端IP地址
+              QString clientIp = clientSocket->peerAddress().toString();
         // 读取请求
         QByteArray request = clientSocket->readAll();
-
+        // 发送请求信息信号（在完整处理之前）
+        QString reqInfo = QString("IP: %1").arg(clientIp);
+        emit sendreqInfo(reqInfo);
         // 解析请求行
         QList<QByteArray> lines = request.split('\n');
         if (lines.isEmpty()) return;
@@ -698,7 +702,9 @@ void HttpServer::onReadyRead() {
         // 分离 path 和 query
         QString path = QString(fullPath).split('?').first();
         QUrlQuery query((QUrl(fullPath)));
-
+        // 发送包含完整信息的信号
+        QString fullReqInfo = QString("IP: %1 | Path: %2 | Method: %3").arg(clientIp).arg(path).arg(QString(method));
+        emit sendreqInfo(fullReqInfo);
         // 提取 BODY
         QByteArray body;
         int emptyLineIndex = request.indexOf("\r\n\r\n");
