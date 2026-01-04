@@ -11,11 +11,10 @@
 #include <QMimeDatabase>
 #include <QMimeType>
 #include <QDateTime>
-#define MANAGER_USERNAME "123"
-#define MANAGER_PASSWD   "123"
 #include <QRandomGenerator>
 #include <QCryptographicHash>
-
+#include <QSslServer>  // 修改：使用QSslServer
+#include <QSslSocket>  // 修改：使用QSslSocket
 HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
     //handleCreateTestOrdersSimple();

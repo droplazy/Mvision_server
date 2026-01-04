@@ -9,48 +9,48 @@ RC_ICONS = rainbow.ico
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
-    addproduct.cpp \
-    commandlsit.cpp \
+    UIclass/addproduct.cpp \
+    UIclass/commandlsit.cpp \
+    UIclass/devicelistdialog.cpp \
+    UIclass/firmware.cpp \
+    UIclass/guidetextset.cpp \
+    UIclass/insertdev.cpp \
+    UIclass/mallproducts.cpp \
+    UIclass/mallusermanager.cpp \
+    UIclass/managerui.cpp \
+    UIclass/orderlist.cpp \
+    UIclass/userappeal.cpp \
     databasemanager.cpp \
-    devicelistdialog.cpp \
     emailsender.cpp \
-    firmware.cpp \
-    guidetextset.cpp \
     httpserver.cpp \
-    insertdev.cpp \
     loghandler.cpp \
     main.cpp \
     mainwindow.cpp \
-    mallproducts.cpp \
-    mallusermanager.cpp \
-    managerui.cpp \
     mqtt_server.cpp \
     mqttclient.cpp \
-    orderlist.cpp \
-    privilegehelper.cpp \
-    userappeal.cpp
+    privilegehelper.cpp
 
 HEADERS += \
-    addproduct.h \
-    commandlsit.h \
+    UIclass/addproduct.h \
+    UIclass/commandlsit.h \
+    UIclass/devicelistdialog.h \
+    UIclass/firmware.h \
+    UIclass/guidetextset.h \
+    UIclass/insertdev.h \
+    UIclass/mallproducts.h \
+    UIclass/mallusermanager.h \
+    UIclass/managerui.h \
+    UIclass/orderlist.h \
+    UIclass/userappeal.h \
     databasemanager.h \
-    devicelistdialog.h \
     emailsender.h \
-    firmware.h \
-    guidetextset.h \
     httpserver.h \
-    insertdev.h \
     loghandler.h \
     mainwindow.h \
-    mallproducts.h \
-    mallusermanager.h \
-    managerui.h \
     mqtt_server.h \
     mqttclient.h \
-    orderlist.h \
     privilegehelper.h \
-    publicheader.h \
-    userappeal.h
+    publicheader.h
 
 FORMS += \
     addproduct.ui \
