@@ -756,7 +756,7 @@ bool DatabaseManager::updateDevice(const SQL_Device &device)
         return false;
     }
 
-    qDebug() << "Device updated successfully.";
+   // qDebug() << "Device updated successfully.";
     return true;
 }
 

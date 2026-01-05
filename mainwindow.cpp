@@ -3,15 +3,15 @@
 #include "loghandler.h"
 #include <QMessageBox>
 /****************************子窗口控件*/
-#include "devicelistdialog.h"
-#include "commandlsit.h"
-#include "firmware.h"
-#include "mallusermanager.h"  // 添加头文件
-#include "mallproducts.h"
-#include "orderlist.h"
-#include "userappeal.h"
-#include "guidetextset.h"
-#include "managerui.h"
+#include "./UIclass/devicelistdialog.h"
+#include "./UIclass/commandlsit.h"
+#include "./UIclass/firmware.h"
+#include "./UIclass/mallusermanager.h"  // 添加头文件
+#include "./UIclass/mallproducts.h"
+#include "./UIclass/orderlist.h"
+#include "./UIclass/userappeal.h"
+#include "./UIclass/guidetextset.h"
+#include "./UIclass/managerui.h"
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)

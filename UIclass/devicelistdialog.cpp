@@ -3,7 +3,7 @@
 #include "ui_devicelistdialog.h"
 #include <QStandardItemModel>
 #include <QMessageBox>
-#include <insertdev.h>
+#include <./UIclass/insertdev.h>
 #include <QHBoxLayout>
 
 

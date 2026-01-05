@@ -104,13 +104,6 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     newJson["password"] = "securePassword123";
     newJson["messageType"] = "command";
 
-    QJsonObject data;
-    data["action"] = action;
-    data["sub_action"] = sub_action;
-    data["start_time"] = start_time;
-    data["end_time"] = end_time;
-    data["remark"] = remark;
-    newJson["data"] = data;
 
     // 插入新指令到数据库
     SQL_CommandHistory cmd1;
@@ -124,6 +117,15 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     cmd1.Completeness = "0%";
     cmd1.completed_url = "";
     dbManager->insertCommandHistory(cmd1);
+
+    QJsonObject data;
+    data["command_id"] = cmd1.commandId;
+    data["action"] = cmd1.action;
+    data["sub_action"] = cmd1.sub_action;
+    data["start_time"] = cmd1.start_time;
+    data["end_time"] = cmd1.end_time;
+    data["remark"] = cmd1.remark;
+    newJson["data"] = data;
 
     QByteArray message = QJsonDocument(newJson).toJson();
 
@@ -146,7 +148,7 @@ void mqttclient::ProcessDevtSend(QJsonObject json)
 void mqttclient::onMessageReceived(const QByteArray &message, const QMqttTopicName &topic)
 {
     QJsonDocument doc = QJsonDocument::fromJson(message);
-  //  qDebug() << topic << "\n" <<message;
+//    qDebug() << topic << "\n" <<message;
     QJsonObject jsonObj = doc.object();
 
     if (!jsonObj.isEmpty()) {

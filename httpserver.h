@@ -52,7 +52,7 @@ private:
     void handlePostProcessDelete(QTcpSocket *clientSocket, const QByteArray &body);
     void handlePostAuthLogin(QTcpSocket *clientSocket, const QByteArray &body);
     //void handlePostFileUpload(QTcpSocket *clientSocket,QUrlQuery query, const QByteArray &body);
-    void handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query, const QByteArray &body, QString verify);
+    void handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query, const QByteArray &body);
 
     QByteArray getContentType( QString& filePath);// 新增的静态文件处理方法
     void printStaticFiles(const QByteArray &htmlContent);
@@ -153,6 +153,7 @@ private:
     void printVerificationCodes();
   //  bool checkVerificationCodeFrequency(const QString &username, const QString &email, int minIntervalSeconds);
     void sendUnauthorized(QTcpSocket *clientSocket);
+    void saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

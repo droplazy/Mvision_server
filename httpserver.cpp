@@ -707,9 +707,12 @@ void HttpServer::onReadyRead() {
         // 获取token参数
         QString token = query.queryItemValue("token");
         qDebug() << "token:" << token;
-
+#if 0
         // Token验证（排除登录接口）
-        bool isLoginPath = (path == "/auth/login" || path == "/mall/login/info");
+        bool isLoginPath = (path == "/auth/login" || path == "/mall/login/info"|| (path == "/home" || path.contains(".css") || path.contains("/login") \
+                                                                                   || path.contains(".js") || path.contains(".html") \
+                                                                                   || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
+                                                                                   || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
         if (!isLoginPath) {
             // 非登录接口需要验证token
             if (token.isEmpty() || !dbManager || !dbManager->validateToken(token)) {
@@ -719,7 +722,7 @@ void HttpServer::onReadyRead() {
                 return;
             }
         }
-
+#endif
         // 提取 BODY
         QByteArray body;
         int emptyLineIndex = request.indexOf("\r\n\r\n");
@@ -818,7 +821,7 @@ void HttpServer::onReadyRead() {
                 }
 
                 qDebug() << "Before calling handlePostFileUpload, body size:" << body.size();
-                handlePostFileUpload(clientSocket, query, body, "123654");
+                handlePostFileUpload(clientSocket, query, body);
                 qDebug() << "After handlePostFileUpload";
 
             } else {
@@ -922,37 +925,90 @@ void HttpServer::sendUnauthorized(QTcpSocket *clientSocket)
 }
 void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
 {
-    // Traverse through the QVector to find the device with the same serial number
+    // 更新本地QVector中的设备信息
     for (int i = 0; i < deviceVector.size(); ++i) {
         if (deviceVector[i].serialNumber == updatedDevice.serialNumber) {
-            // If the device with the matching serial number is found, update its details
-
+            // 更新设备信息
             updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-            updatedDevice.status ="在线";
-            updatedDevice.location ="杭州";
-            //  updatedDevice.Temperature=
-            //  deviceVector[i] = updatedDevice;
-            deviceVector[i].usedProcessID =   updatedDevice.usedProcessID;
-            deviceVector[i].usedProcess =   updatedDevice.usedProcess;
-            deviceVector[i].hardversion =   updatedDevice.hardversion;
-            deviceVector[i].current_end =   updatedDevice.current_end;
-            deviceVector[i].current_start =   updatedDevice.current_start;
-            deviceVector[i].ip =   updatedDevice.ip;
-            deviceVector[i].lastHeartbeat =   updatedDevice.lastHeartbeat;
-            deviceVector[i].trafficStatistics =   updatedDevice.trafficStatistics;
-            deviceVector[i].checksum =   updatedDevice.checksum;
-            deviceVector[i].Temperature =   updatedDevice.Temperature;
-            deviceVector[i].status =   updatedDevice.status;
+            updatedDevice.status = "在线";
+            updatedDevice.location = "杭州";
 
-            //  qDebug() << "Device information updated for serial number: " << updatedDevice.serialNumber;
-            return; // Exit after updating the device
+            // 更新设备向量中的各个字段
+            deviceVector[i].usedProcessID = updatedDevice.usedProcessID;
+            deviceVector[i].usedProcess = updatedDevice.usedProcess;
+            deviceVector[i].hardversion = updatedDevice.hardversion;
+            deviceVector[i].current_end = updatedDevice.current_end;
+            deviceVector[i].current_start = updatedDevice.current_start;
+            deviceVector[i].ip = updatedDevice.ip;
+            deviceVector[i].lastHeartbeat = updatedDevice.lastHeartbeat;
+            deviceVector[i].trafficStatistics = updatedDevice.trafficStatistics;
+            deviceVector[i].checksum = updatedDevice.checksum;
+            deviceVector[i].Temperature = updatedDevice.Temperature;
+            deviceVector[i].status = updatedDevice.status;
+
+            // 同时保存到数据库中
+            saveDeviceStatusToDatabase(deviceVector[i]);
+
+            return;
         }
     }
 
-    // If no device is found with the given serial number, you can optionally log it
-    //   qDebug() << "Device with serial number " << updatedDevice.serialNumber << " not found!";
+    // 如果设备不存在于向量中，可能是新设备
+    // 更新传入的设备信息
+    updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    updatedDevice.status = "在线";
+    updatedDevice.location = "杭州";
+
+    // 添加到向量
+    deviceVector.append(updatedDevice);
+
+    // 保存新设备到数据库
+    saveDeviceStatusToDatabase(updatedDevice);
 }
 
+void HttpServer::saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus)
+{
+
+    // 将 DeviceStatus 转换为 SQL_Device
+    SQL_Device sqlDevice;
+    sqlDevice.serial_number = deviceStatus.serialNumber;
+    sqlDevice.checksum = deviceStatus.checksum;
+
+    // 流量统计：这里需要根据你的业务逻辑转换，假设trafficStatistics是已用流量
+    // 如果是总流量，可能需要从数据库中读取原有的总流量然后加上新增流量
+    sqlDevice.total_flow = deviceStatus.trafficStatistics;
+
+    sqlDevice.ip_address = deviceStatus.ip;
+    sqlDevice.device_status = deviceStatus.status;
+
+    // bound_user 和 bound_time 在DeviceStatus中没有对应字段
+    // 这里需要从数据库中查询已有的设备信息，如果有绑定信息则保留
+    SQL_Device existingDevice = dbManager->getDeviceBySerialNumber(deviceStatus.serialNumber);
+    if (!existingDevice.serial_number.isEmpty()) {
+        // 如果设备已存在，保留原有的绑定信息
+        sqlDevice.bound_user = existingDevice.bound_user;
+        sqlDevice.bound_time = existingDevice.bound_time;
+    } else {
+        // 新设备，设置默认值或留空
+        sqlDevice.bound_user = "";
+        sqlDevice.bound_time = "";
+    }
+
+    // 检查设备是否已存在
+    if (dbManager->getDeviceBySerialNumber(deviceStatus.serialNumber).serial_number.isEmpty()) {
+        // 设备不存在，插入新记录
+        if (!dbManager->insertDevice(sqlDevice)) {
+            qDebug() << "Failed to insert device:" << deviceStatus.serialNumber;
+        } else {
+            qDebug() << "Inserted new device:" << deviceStatus.serialNumber;
+        }
+    } else {
+        // 设备已存在，更新记录
+        if (!dbManager->updateDevice(sqlDevice)) {
+            qDebug() << "Failed to update device:" << deviceStatus.serialNumber;
+        }
+    }
+}
 // 发送404响应
 void HttpServer::send404(QTcpSocket *clientSocket) {
     QByteArray errorResponse = "HTTP/1.1 404 Not Found\r\n";
@@ -1074,25 +1130,19 @@ void HttpServer::handlePostWarningIgnore(QTcpSocket *clientSocket, const QByteAr
     QByteArray json = "{\"code\":200,\"message\":\"ok\"}";
     sendResponse(clientSocket, json);
 }
-void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query, const QByteArray &body, QString verify)
+
+void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query, const QByteArray &body)
 {
     qDebug() << "=== handlePostFileUpload called ===";
     qDebug() << "Body size received:" << body.size() << "bytes";
 
     QString serial = query.queryItemValue("serial_number");
+    QString commandId = query.queryItemValue("commandid");
     QString verifycode = query.queryItemValue("verifycode");
-    QString originalFilename = query.queryItemValue("filename");
 
     qDebug() << "Parameters - serial:" << serial
-             << "verifycode:" << verifycode
-             << "originalFilename:" << originalFilename;
-
-    // 校验验证码
-    if (verifycode != verify) {
-        qDebug() << "Verifycode mismatch! Expected:" << verify << "Got:" << verifycode;
-        sendHttpResponse(clientSocket, 403, "Forbidden", "Invalid verifycode");
-        return;
-    }
+             << "commandid:" << commandId
+             << "verifycode:" << verifycode;
 
     if (serial.isEmpty()) {
         qDebug() << "Missing serial_number parameter";
@@ -1100,13 +1150,87 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
         return;
     }
 
-    // 创建目录
+    if (commandId.isEmpty()) {
+        qDebug() << "Missing commandid parameter";
+        sendHttpResponse(clientSocket, 400, "Bad Request", "Missing commandid");
+        return;
+    }
+
+    // 解析multipart/form-data数据
+    QString originalFilename;
+    QByteArray fileContent;
+
+    // 查找boundary（通常是第一行）
+    QByteArray boundary;
+    int boundaryStart = body.indexOf("\r\n");
+    if (boundaryStart != -1) {
+        boundary = body.left(boundaryStart).trimmed();
+        qDebug() << "Found boundary:" << boundary;
+    } else {
+        qDebug() << "Cannot find boundary in multipart data";
+        sendHttpResponse(clientSocket, 400, "Bad Request", "Invalid multipart data format");
+        return;
+    }
+
+    // 查找文件名
+    int filenameStart = body.indexOf("filename=\"");
+    if (filenameStart != -1) {
+        int filenameEnd = body.indexOf("\"", filenameStart + 10);
+        if (filenameEnd != -1) {
+            originalFilename = QString::fromUtf8(body.mid(filenameStart + 10, filenameEnd - filenameStart - 10));
+            qDebug() << "Extracted original filename from multipart:" << originalFilename;
+        }
+    }
+
+    if (originalFilename.isEmpty()) {
+        qDebug() << "Cannot find filename in multipart data";
+        sendHttpResponse(clientSocket, 400, "Bad Request", "No filename in multipart data");
+        return;
+    }
+
+    // 提取文件后缀
+    QString fileExtension;
+    QFileInfo fileInfo(originalFilename);
+    fileExtension = fileInfo.suffix();
+    if (fileExtension.isEmpty()) {
+        fileExtension = "dat"; // 默认后缀
+    }
+
+    // 使用serial_number作为文件名
+    QString finalFilename = serial + "." + fileExtension;
+    qDebug() << "Using final filename:" << finalFilename;
+
+    // 查找文件内容的开始位置（在Content-Type之后有两个空行）
+    QString contentTypeMarker = "Content-Type:";
+    int contentTypePos = body.indexOf(contentTypeMarker.toUtf8());
+    if (contentTypePos != -1) {
+        int contentStart = body.indexOf("\r\n\r\n", contentTypePos);
+        if (contentStart != -1) {
+            contentStart += 4; // 跳过两个空行
+            // 查找文件内容的结束位置（下一个boundary）
+            int contentEnd = body.indexOf(boundary, contentStart);
+            if (contentEnd != -1) {
+                // 减去最后两个换行符（\r\n）
+                contentEnd -= 2;
+                fileContent = body.mid(contentStart, contentEnd - contentStart);
+                qDebug() << "Extracted file content:" << fileContent.size() << "bytes";
+            }
+        }
+    }
+
+    if (fileContent.isEmpty()) {
+        qDebug() << "Cannot extract file content from multipart data";
+        sendHttpResponse(clientSocket, 400, "Bad Request", "No file content in multipart data");
+        return;
+    }
+
+    // 创建目录（在当前目录下的Upload/commandid文件夹）
     QDir currentDir = QDir::current();
     QString uploadDirPath = currentDir.filePath("Upload");
-    QString serialDirPath = QDir(uploadDirPath).filePath(serial);
+    QString commandIdDirPath = currentDir.filePath("Upload/" + commandId);
 
     qDebug() << "Creating directories - Upload:" << uploadDirPath
-             << "Serial:" << serialDirPath;
+             << "CommandId:" << commandIdDirPath;
 
     if (!QDir(uploadDirPath).exists()) {
         if (QDir().mkpath(uploadDirPath)) {
@@ -1118,30 +1242,18 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
         }
     }
 
-    if (!QDir(serialDirPath).exists()) {
-        if (QDir().mkpath(serialDirPath)) {
-            qDebug() << "Created serial directory";
+    if (!QDir(commandIdDirPath).exists()) {
+        if (QDir().mkpath(commandIdDirPath)) {
+            qDebug() << "Created commandId directory";
         } else {
-            qDebug() << "Failed to create serial directory";
-            sendHttpResponse(clientSocket, 500, "Internal Error", "Cannot create serial directory");
+            qDebug() << "Failed to create commandId directory";
+            sendHttpResponse(clientSocket, 500, "Internal Error", "Cannot create commandId directory");
             return;
         }
     }
 
-    // 生成最终文件名
-    QString finalFilename;
-    if (!originalFilename.isEmpty()) {
-        finalFilename = originalFilename;
-        qDebug() << "Using original filename:" << finalFilename;
-    } else {
-        finalFilename = QString("%1_%2.dat")
-        .arg(serial)
-            .arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
-        qDebug() << "Generated filename:" << finalFilename;
-    }
-
-    // 保存文件
-    QString filePath = QDir(serialDirPath).filePath(finalFilename);
+    // 保存文件到当前目录下的Upload/commandid文件夹
+    QString filePath = QDir(commandIdDirPath).filePath(finalFilename);
     qDebug() << "Saving to path:" << filePath;
 
     QFile file(filePath);
@@ -1154,20 +1266,20 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
         return;
     }
 
-    qDebug() << "File opened successfully, writing" << body.size() << "bytes...";
-    qint64 bytesWritten = file.write(body);
+    qDebug() << "File opened successfully, writing" << fileContent.size() << "bytes...";
+    qint64 bytesWritten = file.write(fileContent);
     file.close();
 
-    qDebug() << "Bytes written:" << bytesWritten << "/" << body.size();
+    qDebug() << "Bytes written:" << bytesWritten << "/" << fileContent.size();
 
-    if (bytesWritten != body.size()) {
-        qDebug() << "Warning: Incomplete write! Expected:" << body.size()
+    if (bytesWritten != fileContent.size()) {
+        qDebug() << "Warning: Incomplete write! Expected:" << fileContent.size()
         << "Actual:" << bytesWritten;
     }
 
     // 验证文件大小
-    QFileInfo fileInfo(filePath);
-    qint64 actualFileSize = fileInfo.size();
+    QFileInfo savedFileInfo(filePath);
+    qint64 actualFileSize = savedFileInfo.size();
     qDebug() << "Actual file size on disk:" << actualFileSize << "bytes";
 
     // 返回JSON响应
@@ -1175,8 +1287,11 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
     json["success"] = true;
     json["message"] = "File uploaded successfully";
     json["serial"] = serial;
+    json["commandid"] = commandId;
     json["filename"] = finalFilename;
-    json["requested_size"] = static_cast<qint64>(body.size());
+    json["original_filename"] = originalFilename;
+    json["extension"] = fileExtension;
+    json["requested_size"] = static_cast<qint64>(fileContent.size());
     json["written_size"] = bytesWritten;
     json["actual_size"] = actualFileSize;
     json["path"] = filePath;
