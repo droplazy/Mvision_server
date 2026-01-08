@@ -189,6 +189,11 @@ public:
     QString getUsernameByToken(const QString &token);
     bool validateToken(const QString &token);
     bool saveUserToken(const QString &username, const QString &token);
+    bool updateCommandTasks(const QString &commandId, int totalTasks, int completedTasks);
+    bool updateDeviceSocialMedia(const QString &serialNumber, int tiktok, int bilibili, int xhs, int weibo, int kuaishou);
+    QMap<QString, int> getDeviceSocialMedia(const QString &serialNumber);
+    bool incrementCommandCompletedTasks(const QString &commandId);
+    bool updateDeviceAppStatus(const QString &serialNumber, const QString &appName, const QString &status);
 private:
     QSqlDatabase db;
 
@@ -207,6 +212,7 @@ private:
     SQL_AppealRecord extractAppealFromQuery(const QSqlQuery &query);
     bool createTable7();//商品表单
     bool createTokenTable();
+    bool updateCommandCompleteness(const QString &commandId, int completeness);
 };
 
 #endif // DATABASEMANAGER_H

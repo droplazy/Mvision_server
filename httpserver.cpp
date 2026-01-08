@@ -957,14 +957,14 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
 
     // 如果设备不存在于向量中，可能是新设备
     // 更新传入的设备信息
-    updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-    updatedDevice.status = "在线";
-    updatedDevice.location = "杭州";
-    updatedDevice.warningmsg="新设备";
-    // 添加到向量
-    deviceVector.append(updatedDevice);
-    // 保存新设备到数据库
-    saveDeviceStatusToDatabase(updatedDevice);
+    // updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    // updatedDevice.status = "在线";
+    // updatedDevice.location = "杭州";
+    // updatedDevice.warningmsg="新设备";
+    // // 添加到向量
+    // deviceVector.append(updatedDevice);
+    // // 保存新设备到数据库
+    // saveDeviceStatusToDatabase(updatedDevice);
 }
 
 void HttpServer::saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus)
@@ -2664,7 +2664,7 @@ void HttpServer::handleGetCommandList(QTcpSocket *clientSocket, const QUrlQuery 
         cmdObj["start_time"] = cmd.start_time;
         cmdObj["end_time"] = cmd.end_time;
         cmdObj["remark"] = cmd.remark;
-        cmdObj["Completeness"] = cmd.Completeness;
+        cmdObj["completeness"] = cmd.completeness;
         cmdObj["completed-url"] = cmd.completed_url;
 
         dataArray.append(cmdObj);
@@ -3230,16 +3230,7 @@ void HttpServer::handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArra
         devices = 1; // 默认1个设备
     }
 
-    // 输出接收到的参数
-    qDebug() << "订单ID:" << orderId;
-    qDebug() << "用户:" << user;
-    qDebug() << "验证人:" << verifier;
-    qDebug() << "设备数量:" << devices;
-    qDebug() << "动作:" << (action.isEmpty() ? "default" : action);
-    qDebug() << "子动作:" << (subAction.isEmpty() ? "default" : subAction);
-    qDebug() << "开始时间:" << (startTimeStr.isEmpty() ? "未设置" : startTimeStr);
-    qDebug() << "结束时间:" << (endTimeStr.isEmpty() ? "未设置" : endTimeStr);
-    qDebug() << "备注:" << (remark.isEmpty() ? "无" : remark);
+    qDebug() << "订单ID:" << orderId << "需要设备:" << devices;
 
     try {
         // 1. 检查订单是否存在
@@ -3254,181 +3245,67 @@ void HttpServer::handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArra
             return;
         }
 
-        // 检查订单状态是否可以执行（如果不是pending状态，不能开始执行）
+        // 检查订单状态是否可以执行
         if (existingOrder.status != "paid" && existingOrder.status != "已支付") {
             qDebug() << "订单状态不允许执行，当前状态:" << existingOrder.status;
             QJsonObject errorResponse;
             errorResponse["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
             errorResponse["code"] = 400;
             errorResponse["success"] = false;
-            errorResponse["message"] = QString("订单状态[%1]不允许执行，只能从已支付状态开始执行").arg(existingOrder.status);
+            errorResponse["message"] = QString("订单状态[%1]不允许执行").arg(existingOrder.status);
             sendJsonResponse(clientSocket, 400, errorResponse);
             return;
         }
 
-        // 2. 更新订单状态为execing
-        qDebug() << "更新订单状态为execing...";
-        bool orderStatusUpdated = dbManager->updateOrderStatus(orderId, "execing");
-        if (!orderStatusUpdated) {
-            qDebug() << "更新订单状态失败";
+        // 2. 从内存容器中筛选空闲设备
+        QList<QString> idleDevices;
+        int totalDevices = deviceVector.size();
+        qDebug() << "总设备数:" << totalDevices;
 
-            // 打印订单详情
-            SQL_Order orderDetails = dbManager->getOrderById(orderId);
-            qDebug() << "=== 订单详细信息 (更新失败) ===";
-            qDebug() << "订单ID:" << orderDetails.orderId;
-            qDebug() << "状态:" << orderDetails.status;
-            qDebug() << "商品:" << orderDetails.productName << "[" << orderDetails.productId << "]";
-            qDebug() << "数量:" << orderDetails.quantity << "个";
-            qDebug() << "单价:" << QString::number(orderDetails.unitPrice, 'f', 2) << "元";
-            qDebug() << "总价:" << QString::number(orderDetails.totalPrice, 'f', 2) << "元";
-            qDebug() << "用户:" << orderDetails.user;
-            qDebug() << "联系方式:" << orderDetails.contactInfo;
-            qDebug() << "指令ID:" << orderDetails.commandId;
-            qDebug() << "创建时间:" << orderDetails.createTime;
-            qDebug() << "更新时间:" << orderDetails.updateTime;
+        for (const DeviceStatus &device : deviceVector) {
+            QString currentAction = device.currentAction.trimmed().toLower();
+            bool isIdle = currentAction.isEmpty() ||
+                         currentAction == "idle" ||
+                         currentAction == "空闲" ||
+                         currentAction.contains("idle") ||
+                         currentAction.contains("空闲");
 
+            if (isIdle) {
+                idleDevices.append(device.serialNumber);
+                qDebug() << "找到空闲设备:" << device.serialNumber;
+            }
+        }
+
+        qDebug() << "空闲设备数:" << idleDevices.size() << "需要设备数:" << devices;
+
+        // 3. 检查空闲设备是否足够
+        if (idleDevices.size() < devices) {
+            qDebug() << "空闲设备不足";
             QJsonObject errorResponse;
             errorResponse["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-            errorResponse["code"] = 500;
+            errorResponse["code"] = 400;
             errorResponse["success"] = false;
-            sendJsonResponse(clientSocket, 500, errorResponse);
+            errorResponse["message"] = QString("设备不足，需要%1台，空闲设备%2台").arg(devices).arg(idleDevices.size());
+            sendJsonResponse(clientSocket, 400, errorResponse);
             return;
         }
 
-        // 3. 立即获取更新后的订单信息进行验证
-        SQL_Order updatedOrder = dbManager->getOrderById(orderId);
-
-        // 验证状态是否真的更新了
-        if (updatedOrder.status != "execing") {
-            qDebug() << "❌ 订单状态更新验证失败!";
-            qDebug() << "期望状态: execing";
-            qDebug() << "实际状态:" << updatedOrder.status;
-
-            // 回滚到原始状态
-            dbManager->updateOrderStatus(orderId, existingOrder.status);
-
-            QJsonObject errorResponse;
-            errorResponse["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-            errorResponse["code"] = 500;
-            errorResponse["success"] = false;
-            errorResponse["message"] = QString("订单状态更新失败，当前状态: %1").arg(updatedOrder.status);
-            sendJsonResponse(clientSocket, 500, errorResponse);
-            return;
+        // 4. 取前devices个空闲设备
+        QList<QString> serialNumbers;
+        for (int i = 0; i < devices; i++) {
+            serialNumbers.append(idleDevices[i]);
+            qDebug() << "分配设备" << i+1 << ":" << idleDevices[i];
         }
-
-        // 4. 打印更新成功的订单信息
-        qDebug() << "✅ 订单状态更新成功";
-        qDebug() << "========================================";
-        qDebug() << "订单ID: " << updatedOrder.orderId;
-        qDebug() << "状态:   " << existingOrder.status << " -> " << updatedOrder.status;
-        qDebug() << "========================================";
-        qDebug() << "订单详细信息:";
-        qDebug() << "----------------------------------------";
-        qDebug() << "商品信息:";
-        qDebug() << "  商品名称: " << updatedOrder.productName;
-        qDebug() << "  商品ID:   " << updatedOrder.productId;
-        qDebug() << "  单价:     " << QString::number(updatedOrder.unitPrice, 'f', 2) << "元";
-        qDebug() << "  数量:     " << updatedOrder.quantity;
-        qDebug() << "  总价:     " << QString::number(updatedOrder.totalPrice, 'f', 2) << "元";
-        qDebug() << "";
-        qDebug() << "客户信息:";
-        qDebug() << "  用户名:   " << updatedOrder.user;
-        qDebug() << "  联系方式: " << updatedOrder.contactInfo;
-        qDebug() << "";
-        qDebug() << "指令信息:";
-        qDebug() << "  指令ID:   " << (updatedOrder.commandId.isEmpty() ? "未关联" : updatedOrder.commandId);
-        qDebug() << "";
-        qDebug() << "备注信息:";
-        qDebug() << "  " << (updatedOrder.note.isEmpty() ? "无备注" : updatedOrder.note);
-        qDebug() << "";
-        qDebug() << "时间信息:";
-        qDebug() << "  创建时间: " << updatedOrder.createTime;
-        qDebug() << "  更新时间: " << updatedOrder.updateTime;
-        qDebug() << "========================================";
 
         // 5. 生成指令ID
-        QString commandId = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz");
-        qDebug() << "生成的指令ID:" << commandId;
+        QString commandId = QString("CMD_HTTP_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz"));
+        qDebug() << "生成指令ID:" << commandId;
 
         // 6. 处理时间格式
-        QString start_time, end_time;
+        QString start_time = startTimeStr.isEmpty() ? QDateTime::currentDateTime().toString("HH:mm:ss") : startTimeStr;
+        QString end_time = endTimeStr.isEmpty() ? QDateTime::currentDateTime().addSecs(3600).toString("HH:mm:ss") : endTimeStr;
 
-        // 直接使用输入的时间字符串（HH:mm:ss格式）
-        if (!startTimeStr.isEmpty()) {
-            start_time = startTimeStr;
-        } else {
-            // 如果没有开始时间，使用当前时间（只取时间部分）
-            start_time = QDateTime::currentDateTime().toString("HH:mm:ss");
-        }
-
-        if (!endTimeStr.isEmpty()) {
-            end_time = endTimeStr;
-        } else {
-            // 如果没有结束时间，设置为开始时间后1小时
-            if (!startTimeStr.isEmpty()) {
-                QTime startTime = QTime::fromString(startTimeStr, "HH:mm:ss");
-                if (startTime.isValid()) {
-                    end_time = startTime.addSecs(3600).toString("HH:mm:ss");
-                } else {
-                    end_time = QDateTime::currentDateTime().addSecs(3600).toString("HH:mm:ss");
-                }
-            } else {
-                end_time = QDateTime::currentDateTime().addSecs(3600).toString("HH:mm:ss");
-            }
-        }
-
-        // 7. 生成随机设备序列号
-        QList<QString> serialNumbers;
-        QRandomGenerator *generator = QRandomGenerator::global();
-
-        for (int i = 0; i < devices; i++) {
-            QString serialNumber;
-            if (i < 7) {
-                QStringList sampleSNs = {
-                    "SN999321", "SN999322", "SN999323",
-                    "SN999324", "SN999325", "SN999326",
-                    "YDAT250701000007"
-                };
-                if (i < sampleSNs.size()) {
-                    serialNumber = sampleSNs[i];
-                } else {
-                    serialNumber = QString("SN%1%2")
-                                       .arg(generator->bounded(100, 999))
-                                       .arg(generator->bounded(100000, 999999));
-                }
-            } else {
-                int randomType = generator->bounded(3);
-                switch (randomType) {
-                case 0:
-                    serialNumber = QString("SN%1").arg(generator->bounded(100000, 999999));
-                    break;
-                case 1:
-                    serialNumber = QString("YDAT%1").arg(generator->bounded(250701000000, 250701999999));
-                    break;
-                case 2:
-                    serialNumber = QString("DEV%1").arg(generator->bounded(100000, 999999));
-                    break;
-                default:
-                    serialNumber = QString("SN%1").arg(generator->bounded(100000, 999999));
-                }
-            }
-            serialNumbers.append(serialNumber);
-        }
-
-        // 输出详细信息
-        qDebug() << "=== 指令详细信息 ===";
-        qDebug() << "指令ID:" << commandId;
-        qDebug() << "动作:" << (action.isEmpty() ? "default" : action);
-        qDebug() << "子动作:" << (subAction.isEmpty() ? "default" : subAction);
-        qDebug() << "开始时间:" << start_time;
-        qDebug() << "结束时间:" << end_time;
-        qDebug() << "备注:" << remark;
-        qDebug() << "序列号列表:";
-        for (int i = 0; i < serialNumbers.size(); i++) {
-            qDebug() << "  " << (i+1) << "." << serialNumbers[i];
-        }
-
-        // 8. 创建指令并保存到数据库
+        // 7. 创建指令并保存到数据库
         SQL_CommandHistory cmd;
         cmd.commandId = commandId;
         cmd.status = "execing";
@@ -3437,16 +3314,13 @@ void HttpServer::handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArra
         cmd.start_time = start_time;
         cmd.end_time = end_time;
         cmd.remark = remark;
-        cmd.Completeness = "0%";
+        cmd.completeness = "0%";
         cmd.completed_url = "";
+        cmd.total_tasks = devices;
+        cmd.completed_tasks = 0;
 
         if (!dbManager->insertCommandHistory(cmd)) {
-            qDebug() << "插入指令历史记录失败";
-
-            // 指令插入失败，回滚订单状态到原来的状态
-            dbManager->updateOrderStatus(orderId, existingOrder.status);
-            qDebug() << "订单状态已回滚到:" << existingOrder.status;
-
+            qDebug() << "插入指令失败";
             QJsonObject errorResponse;
             errorResponse["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
             errorResponse["code"] = 500;
@@ -3455,40 +3329,87 @@ void HttpServer::handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArra
             return;
         }
 
-        qDebug() << "指令历史记录插入成功";
+        qDebug() << "指令插入成功";
 
-        // 9. 更新订单的指令ID
+        // 8. 更新订单状态和指令ID
+        dbManager->updateOrderStatus(orderId, "execing");
+        SQL_Order updatedOrder = existingOrder;
         updatedOrder.commandId = commandId;
-        if (!dbManager->updateOrder(updatedOrder)) {
-            qDebug() << "更新订单指令ID失败";
-            // 这里虽然失败，但订单状态已经是execing，指令也已经创建
-            // 所以不进行回滚，只是记录日志
-        } else {
-            qDebug() << "订单指令ID更新成功";
+        dbManager->updateOrder(updatedOrder);
+
+        // 9. 更新数据库中的设备状态
+        for (const QString &serial : serialNumbers) {
+            SQL_Device device = dbManager->getDeviceBySerialNumber(serial);
+            if (!device.serial_number.isEmpty()) {
+                device.device_status = "占用中";
+                device.bound_user = user;
+                device.bound_time = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+                dbManager->updateDevice(device);
+                qDebug() << "更新设备状态:" << serial << "-> 占用中";
+            }
         }
 
-        // 10. 构建成功响应
+        // 10. 构建要发送的指令JSON（给设备）
+        QJsonObject commandJson;
+
+        // 构建data部分
+        QJsonObject commandData;
+        commandData["command_id"] = commandId;
+        commandData["action"] = action.isEmpty() ? "default" : action;
+        commandData["sub_action"] = subAction.isEmpty() ? "default" : subAction;
+        commandData["start_time"] = start_time;
+        commandData["end_time"] = end_time;
+        commandData["remark"] = remark;
+
+        // 添加设备序列号数组
+        QJsonArray serialArray;
+        for (const QString &serial : serialNumbers) {
+            serialArray.append(serial);
+        }
+        commandData["serial_numbers"] = serialArray;
+
+        // 构建完整JSON
+        commandJson["data"] = commandData;
+        commandJson["messageType"] = "command";
+        commandJson["password"] = "securePassword123";
+        commandJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        commandJson["username"] = "user123";
+
+        qDebug() << "生成的指令JSON:";
+        qDebug() << QJsonDocument(commandJson).toJson(QJsonDocument::Indented);
+
+        // 11. 发射信号发送指令
+        emit devCommadSend(commandJson);
+        qDebug() << "已发射指令信号";
+
+        // 12. 构建HTTP响应
         QJsonObject response;
         response["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
         response["code"] = 200;
         response["success"] = true;
 
-        // 11. 发送成功响应
+        QJsonObject responseData;
+        responseData["orderId"] = orderId;
+        responseData["commandId"] = commandId;
+        responseData["devices"] = devices;
+        responseData["serial_numbers"] = serialArray;
+
+        response["data"] = responseData;
+
+        // 13. 发送HTTP响应
         sendJsonResponse(clientSocket, 200, response);
 
-        qDebug() << "====== 订单验证处理成功 ======";
-        qDebug() << "订单:" << orderId << "状态: execing";
-        qDebug() << "指令:" << commandId << "状态: execing";
+        qDebug() << "处理完成，指令已发送";
 
     } catch (const std::exception& e) {
-        qDebug() << "处理订单验证时发生异常:" << e.what();
+        qDebug() << "异常:" << e.what();
         QJsonObject errorResponse;
         errorResponse["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
         errorResponse["code"] = 500;
         errorResponse["success"] = false;
         sendJsonResponse(clientSocket, 500, errorResponse);
     } catch (...) {
-        qDebug() << "处理订单验证时发生未知异常";
+        qDebug() << "未知异常";
         QJsonObject errorResponse;
         errorResponse["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
         errorResponse["code"] = 500;
@@ -4620,10 +4541,54 @@ void HttpServer::handlePostDeviceCommand(QTcpSocket *clientSocket, const QByteAr
     QJsonDocument doc = QJsonDocument::fromJson(body);
     if (!doc.isNull()) {
         QJsonObject jsonObj = doc.object();
-        //  qDebug() << "Parsed JSON body:" << jsonObj;
-        emit  devCommadSend(jsonObj);
+
+        // 生成指令ID
+        QString commandId = QString("CMD_HTTP_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz"));
+
+        // 确保data字段存在
+        QJsonObject dataObj = jsonObj["data"].toObject();
+
+        // 添加command_id到data中
+        dataObj["command_id"] = commandId;
+
+        // 计算总任务数
+        int totalTasks = 0;
+        if (dataObj.contains("serial_numbers")) {
+            QJsonArray serialArray = dataObj["serial_numbers"].toArray();
+            totalTasks = serialArray.size();
+        }
+
+        // 插入数据库
+        SQL_CommandHistory cmd;
+        cmd.commandId = commandId;
+        cmd.status = "execing";
+        cmd.action = dataObj["action"].toString();
+        cmd.sub_action = dataObj["sub_action"].toString();
+        cmd.start_time = dataObj["start_time"].toString();
+        cmd.end_time = dataObj["end_time"].toString();
+        cmd.remark = dataObj["remark"].toString();
+        cmd.completeness = "0%";
+        cmd.completed_url = "";
+        cmd.total_tasks = totalTasks;
+        cmd.completed_tasks = 0;
+
+        // 这里需要数据库管理器的实例，你可能需要传入或全局获取
+        if (dbManager) {
+            if (dbManager->insertCommandHistory(cmd)) {
+                qDebug() << "HTTP指令已插入数据库，ID:" << commandId;
+            } else {
+                qDebug() << "HTTP指令插入数据库失败";
+            }
+        }
+
+        // 更新外层JSON
+        jsonObj["data"] = dataObj;
+
+        qDebug() << "添加command_id后的JSON:" << jsonObj;
+
+        emit devCommadSend(jsonObj);
     }
-    sendResponse(clientSocket, "{\"code\":200,\"msg\":\"POST /process/command success\"}");
+    sendResponse(clientSocket, "{\"code\":200,\"msg\":\"POST /device/command success\"}");
 }
 // 添加生成邀请码的辅助函数（需要在头文件中声明）
 QString HttpServer::generateInviteCode()

@@ -571,9 +571,9 @@ void MainWindow::on_pushButton_devlist_clicked()
 
     // 创建并显示设备列表对话框
     devicelistdialog *dialog = new devicelistdialog(p_db,&p_http->deviceVector, this);
-    // connect(p_mqtt_cli, &mqttclient::updateDeviceInfo,
-    //         dialog, &devicelistdialog::updatedeviceinfo,
-    //         Qt::AutoConnection);
+    connect(dialog, &devicelistdialog::deviceUpgrade,
+            p_mqtt_cli, &mqttclient::devUpgrade,
+            Qt::AutoConnection);
 
 
     connect(p_http, &HttpServer::updateDev,

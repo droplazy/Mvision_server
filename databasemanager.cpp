@@ -1,5 +1,10 @@
 #include "DatabaseManager.h"
 
+#include <QVariantList>
+#include <QVariant>
+#include <QSqlRecord>
+#include <QMap>
+
 DatabaseManager::DatabaseManager(QObject *parent)
     : QObject(parent), db(QSqlDatabase::addDatabase("QSQLITE"))
 {
@@ -639,7 +644,12 @@ bool DatabaseManager::createTable1()
             ip_address TEXT,
             device_status TEXT,
             bound_user TEXT,
-            bound_time TEXT
+            bound_time TEXT,
+            tiktok INTEGER DEFAULT 0,     -- 新增：TikTok开关
+            bilibili INTEGER DEFAULT 0,   -- 新增：Bilibili开关
+            xhs INTEGER DEFAULT 0,        -- 新增：小红书开关
+            weibo INTEGER DEFAULT 0,      -- 新增：微博开关
+            kuaishou INTEGER DEFAULT 0    -- 新增：快手开关
         );
     )";
 
@@ -708,8 +718,12 @@ bool DatabaseManager::insertDevice(const SQL_Device &device)
 {
     QSqlQuery query;
     query.prepare(R"(
-        INSERT INTO Devices (serial_number, checksum, total_flow, ip_address, device_status, bound_user ,bound_time)
-        VALUES (:serial_number, :checksum, :total_flow, :ip_address, :device_status, :bound_user, :bound_time)
+        INSERT INTO Devices (serial_number, checksum, total_flow, ip_address,
+                           device_status, bound_user, bound_time,
+                           tiktok, bilibili, xhs, weibo, kuaishou)
+        VALUES (:serial_number, :checksum, :total_flow, :ip_address,
+                :device_status, :bound_user, :bound_time,
+                :tiktok, :bilibili, :xhs, :weibo, :kuaishou)
     )");
 
     query.bindValue(":serial_number", device.serial_number);
@@ -719,6 +733,11 @@ bool DatabaseManager::insertDevice(const SQL_Device &device)
     query.bindValue(":device_status", device.device_status);
     query.bindValue(":bound_user", device.bound_user);
     query.bindValue(":bound_time", device.bound_time);
+    query.bindValue(":tiktok", device.tiktok);
+    query.bindValue(":bilibili", device.bilibili);
+    query.bindValue(":xhs", device.xhs);
+    query.bindValue(":weibo", device.weibo);
+    query.bindValue(":kuaishou", device.kuaishou);
 
     if (!query.exec()) {
         qDebug() << "Error inserting device: " << query.lastError().text();
@@ -739,7 +758,12 @@ bool DatabaseManager::updateDevice(const SQL_Device &device)
             ip_address = :ip_address,
             device_status = :device_status,
             bound_user = :bound_user,
-            bound_time = :bound_time
+            bound_time = :bound_time,
+            tiktok = :tiktok,
+            bilibili = :bilibili,
+            xhs = :xhs,
+            weibo = :weibo,
+            kuaishou = :kuaishou
         WHERE serial_number = :serial_number
     )");
 
@@ -750,16 +774,19 @@ bool DatabaseManager::updateDevice(const SQL_Device &device)
     query.bindValue(":device_status", device.device_status);
     query.bindValue(":bound_user", device.bound_user);
     query.bindValue(":bound_time", device.bound_time);
+    query.bindValue(":tiktok", device.tiktok);
+    query.bindValue(":bilibili", device.bilibili);
+    query.bindValue(":xhs", device.xhs);
+    query.bindValue(":weibo", device.weibo);
+    query.bindValue(":kuaishou", device.kuaishou);
 
     if (!query.exec()) {
         qDebug() << "Error updating device: " << query.lastError().text();
         return false;
     }
 
-   // qDebug() << "Device updated successfully.";
     return true;
 }
-
 bool DatabaseManager::deleteDevice(const QString &serial_number)
 {
     QSqlQuery query;
@@ -780,22 +807,15 @@ bool DatabaseManager::deleteDevice(const QString &serial_number)
 
 QList<SQL_Device> DatabaseManager::getAllDevices()
 {
- //   qDebug() << "=== DatabaseManager::getAllDevices() 开始 ===";
-  //  qDebug() << "数据库连接状态：" << (db.isOpen() ? "已打开" : "未打开");
+    qDebug() << "[DB] 开始查询所有设备...";
 
     QList<SQL_Device> devices;
     QSqlQuery query("SELECT * FROM Devices");
 
-  //  qDebug() << "SQL查询执行状态：" << (query.isActive() ? "活跃" : "未激活");
-
     if (!query.exec()) {
-        qCritical() << "SQL查询执行失败：" << query.lastError().text();
-        qDebug() << "SQL语句：" << query.lastQuery();
-        qDebug() << "=== DatabaseManager::getAllDevices() 结束（错误）===";
+        qCritical() << "[DB] SQL查询失败：" << query.lastError().text();
         return devices;
     }
-
-//    qDebug() << "SQL查询执行成功";
 
     int count = 0;
     while (query.next()) {
@@ -808,18 +828,30 @@ QList<SQL_Device> DatabaseManager::getAllDevices()
         device.bound_user = query.value("bound_user").toString();
         device.bound_time = query.value("bound_time").toString();
 
+        // 新增字段
+        device.tiktok = query.value("tiktok").toInt();
+        device.bilibili = query.value("bilibili").toInt();
+        device.xhs = query.value("xhs").toInt();
+        device.weibo = query.value("weibo").toInt();
+        device.kuaishou = query.value("kuaishou").toInt();
+
         devices.append(device);
         count++;
-
-//        qDebug() << "读取到第" << count << "个设备：" << device.serial_number;
     }
 
-//    qDebug() << "共读取到" << devices.size() << "个设备";
-//    qDebug() << "=== DatabaseManager::getAllDevices() 结束 ===";
+    qDebug() << "[DB] 查询完成，共获取" << devices.size() << "个设备";
+
+    // 简单打印一个样本设备（如果有设备的话）
+    if (!devices.isEmpty()) {
+        const SQL_Device &firstDevice = devices.first();
+        qDebug() << "[DB] 样本设备 - SN:" << firstDevice.serial_number
+                 << "状态:" << firstDevice.device_status
+                 << "TikTok:" << firstDevice.tiktok
+                 << "Bilibili:" << firstDevice.bilibili;
+    }
 
     return devices;
 }
-
 SQL_Device DatabaseManager::getDeviceBySerialNumber(const QString &serial_number)
 {
     SQL_Device device;
@@ -834,11 +866,79 @@ SQL_Device DatabaseManager::getDeviceBySerialNumber(const QString &serial_number
         device.ip_address = query.value("ip_address").toString();
         device.device_status = query.value("device_status").toString();
         device.bound_user = query.value("bound_user").toString();
+        device.bound_time = query.value("bound_time").toString();
+        device.tiktok = query.value("tiktok").toInt();
+        device.bilibili = query.value("bilibili").toInt();
+        device.xhs = query.value("xhs").toInt();
+        device.weibo = query.value("weibo").toInt();
+        device.kuaishou = query.value("kuaishou").toInt();
     } else {
         qDebug() << "Error fetching device: " << query.lastError().text();
     }
 
     return device;
+}
+
+// 更新设备社交媒体开关
+bool DatabaseManager::updateDeviceSocialMedia(const QString &serialNumber,
+                                              int tiktok, int bilibili,
+                                              int xhs, int weibo, int kuaishou)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE Devices
+        SET tiktok = :tiktok,
+            bilibili = :bilibili,
+            xhs = :xhs,
+            weibo = :weibo,
+            kuaishou = :kuaishou
+        WHERE serial_number = :serial_number
+    )");
+
+    query.bindValue(":serial_number", serialNumber);
+    query.bindValue(":tiktok", tiktok);
+    query.bindValue(":bilibili", bilibili);
+    query.bindValue(":xhs", xhs);
+    query.bindValue(":weibo", weibo);
+    query.bindValue(":kuaishou", kuaishou);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating device social media: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No device found with serial number:" << serialNumber;
+        return false;
+    }
+
+    qDebug() << "Device social media updated. SN:" << serialNumber
+             << " TikTok:" << tiktok << " Bilibili:" << bilibili
+             << " XHS:" << xhs << " Weibo:" << weibo << " Kuaishou:" << kuaishou;
+    return true;
+}
+
+
+// 获取设备社交媒体状态
+QMap<QString, int> DatabaseManager::getDeviceSocialMedia(const QString &serialNumber)
+{
+    QMap<QString, int> socialMedia;
+
+    QSqlQuery query;
+    query.prepare("SELECT tiktok, bilibili, xhs, weibo, kuaishou FROM Devices WHERE serial_number = :serial_number");
+    query.bindValue(":serial_number", serialNumber);
+
+    if (query.exec() && query.next()) {
+        socialMedia["tiktok"] = query.value("tiktok").toInt();
+        socialMedia["bilibili"] = query.value("bilibili").toInt();
+        socialMedia["xhs"] = query.value("xhs").toInt();
+        socialMedia["weibo"] = query.value("weibo").toInt();
+        socialMedia["kuaishou"] = query.value("kuaishou").toInt();
+    } else {
+        qDebug() << "Error fetching device social media: " << query.lastError().text();
+    }
+
+    return socialMedia;
 }
 
 bool DatabaseManager::insertUser(const SQL_User &user)
@@ -1116,7 +1216,7 @@ bool DatabaseManager::createTable4()
 {
     QSqlQuery query;
 
-    // 1. 先创建表
+    // 1. 先创建表，添加 total_tasks 和 completed_tasks 字段
     QString createTableQuery = R"(
         CREATE TABLE IF NOT EXISTS CommandHistory (
             command_id TEXT PRIMARY KEY,
@@ -1128,6 +1228,8 @@ bool DatabaseManager::createTable4()
             remark TEXT,
             completeness TEXT,
             completed_url TEXT,
+            total_tasks INTEGER DEFAULT 0,      -- 新增：总任务数
+            completed_tasks INTEGER DEFAULT 0,  -- 新增：已完成任务数
             created_at TEXT DEFAULT (datetime('now', 'localtime')),
             updated_at TEXT DEFAULT (datetime('now', 'localtime'))
         )
@@ -1455,32 +1557,45 @@ QList<SQL_Order> DatabaseManager::getOrdersByTimeRange(const QString &startTime,
 bool DatabaseManager::insertCommandHistory(const SQL_CommandHistory &command)
 {
     QSqlQuery query;
-    query.prepare(R"(
-        INSERT INTO CommandHistory
-        (command_id, status, action, sub_action, start_time, end_time,
-         remark, completeness, completed_url)
-        VALUES (:command_id, :status, :action, :sub_action, :start_time,
-                :end_time, :remark, :completeness, :completed_url)
-    )");
 
-    query.bindValue(":command_id", command.commandId);
-    query.bindValue(":status", command.status);
-    query.bindValue(":action", command.action);
-    query.bindValue(":sub_action", command.sub_action);
-    query.bindValue(":start_time", command.start_time);
-    query.bindValue(":end_time", command.end_time);
-    query.bindValue(":remark", command.remark);
-    query.bindValue(":completeness", command.Completeness);  // 注意：小写c
-    query.bindValue(":completed_url", command.completed_url);
+    qDebug() << "=== 开始插入指令历史记录 ===";
+    qDebug() << "指令ID:" << command.commandId;
+    qDebug() << "状态:" << command.status;
 
-    if (!query.exec()) {
-        qDebug() << "Error inserting command history: " << query.lastError().text();
-        qDebug() << "Last query:" << query.lastQuery();
-        qDebug() << "Bound values:" << query.boundValues();
+    // 使用简单的SQL语句
+    QString sql = QString("INSERT INTO CommandHistory (command_id, status, action, sub_action, start_time, end_time, "
+                          "remark, completeness, completed_url, total_tasks, completed_tasks) "
+                          "VALUES ('%1', '%2', '%3', '%4', '%5', '%6', '%7', '%8', '%9', %10, %11)")
+                      .arg(command.commandId)
+                      .arg(command.status)
+                      .arg(command.action)
+                      .arg(command.sub_action)
+                      .arg(command.start_time)
+                      .arg(command.end_time)
+                      .arg(command.remark)
+                      .arg(command.completeness)
+                      .arg(command.completed_url)
+                      .arg(command.total_tasks)
+                      .arg(command.completed_tasks);
+
+    qDebug() << "生成的SQL:" << sql;
+
+    if (!query.exec(sql)) {
+        qDebug() << "插入失败:" << query.lastError().text();
         return false;
     }
 
-    qDebug() << "Command history inserted successfully. ID:" << command.commandId;
+    qDebug() << "插入成功";
+
+    // 立即查询验证
+    QSqlQuery verifyQuery;
+    verifyQuery.prepare("SELECT * FROM CommandHistory WHERE command_id = ?");
+    verifyQuery.addBindValue(command.commandId);
+
+    if (verifyQuery.exec() && verifyQuery.next()) {
+        qDebug() << "验证成功，找到记录";
+    }
+
     return true;
 }
 bool DatabaseManager::updateCommandHistory(const SQL_CommandHistory &command)
@@ -1496,6 +1611,8 @@ bool DatabaseManager::updateCommandHistory(const SQL_CommandHistory &command)
             remark = :remark,
             completeness = :completeness,
             completed_url = :completed_url,
+            total_tasks = :total_tasks,
+            completed_tasks = :completed_tasks,
             updated_at = datetime('now', 'localtime')
         WHERE command_id = :command_id
     )");
@@ -1507,8 +1624,10 @@ bool DatabaseManager::updateCommandHistory(const SQL_CommandHistory &command)
     query.bindValue(":start_time", command.start_time);
     query.bindValue(":end_time", command.end_time);
     query.bindValue(":remark", command.remark);
-    query.bindValue(":completeness", command.Completeness);
+    query.bindValue(":completeness", command.completeness);
     query.bindValue(":completed_url", command.completed_url);
+    query.bindValue(":total_tasks", command.total_tasks);
+    query.bindValue(":completed_tasks", command.completeness);
 
     if (!query.exec()) {
         qDebug() << "Error updating command history: " << query.lastError().text();
@@ -1579,12 +1698,31 @@ QList<SQL_CommandHistory> DatabaseManager::getAllCommands()
     QList<SQL_CommandHistory> commands;
     QSqlQuery query("SELECT * FROM CommandHistory ORDER BY start_time DESC");
 
-    while (query.next()) {
-        SQL_CommandHistory command = extractCommandFromQuery(query);
-        commands.append(command);
+    qDebug() << "=== 查询指令历史 ===";
+    qDebug() << "SQL:" << query.lastQuery();
+
+    if (!query.exec()) {
+        qDebug() << "查询失败:" << query.lastError().text();
+        return commands;
     }
 
-    qDebug() << "Retrieved" << commands.size() << "command records";
+    int count = 0;
+    while (query.next()) {
+        SQL_CommandHistory command = extractCommandFromQuery(query);
+
+        // 调试输出每个指令的详细信息
+        qDebug() << "指令" << count + 1 << ":";
+        qDebug() << "  ID:" << command.commandId;
+        qDebug() << "  状态:" << command.status;
+        qDebug() << "  动作:" << command.action;
+        qDebug() << "  完成度:" << command.completeness;
+        qDebug() << "  总任务:" << command.total_tasks;
+
+        commands.append(command);
+        count++;
+    }
+
+    qDebug() << "总共检索到" << commands.size() << "条指令记录";
     return commands;
 }
 
@@ -1681,11 +1819,42 @@ SQL_CommandHistory DatabaseManager::extractCommandFromQuery(const QSqlQuery &que
     command.start_time = query.value("start_time").toString();
     command.end_time = query.value("end_time").toString();
     command.remark = query.value("remark").toString();
-    command.Completeness = query.value("completeness").toString();
+    command.completeness = query.value("completeness").toString();
     command.completed_url = query.value("completed_url").toString();
+    command.total_tasks = query.value("total_tasks").toInt();
+    command.completed_tasks = query.value("completed_tasks").toInt();
     return command;
 }
+// 更新指令的任务数量
+bool DatabaseManager::updateCommandTasks(const QString &commandId, int total_tasks, int completed_tasks)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE CommandHistory
+        SET total_tasks = :total_tasks,
+            completed_tasks = :completed_tasks,
+            updated_at = datetime('now', 'localtime')
+        WHERE command_id = :command_id
+    )");
 
+    query.bindValue(":command_id", commandId);
+    query.bindValue(":total_tasks", total_tasks);
+    query.bindValue(":completed_tasks", completed_tasks);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating command tasks: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No command found with ID:" << commandId;
+        return false;
+    }
+
+    qDebug() << "Command tasks updated. ID:" << commandId
+             << "Total:" << total_tasks << "Completed:" << completed_tasks;
+    return true;
+}
 // 统计不同状态的指令数量
 int DatabaseManager::getCommandCountByStatus(const QString &status)
 {
@@ -2866,208 +3035,129 @@ QList<SQL_AppealRecord> DatabaseManager::getAppealsByPriority(const QString &pri
     return appeals;
 }
 
-
-
-
-
-
-#if 0
-
-// 创建测试用户
-void createTestMallUsers()
+// DatabaseManager.cpp 中实现
+bool DatabaseManager::updateDeviceAppStatus(const QString &serialNumber, const QString &appName, const QString &status)
 {
-    DatabaseManager dbManager;
-    if (!dbManager.openDatabase("your_database.db")) {
-        return;
-    }
+    qDebug() << "=== 更新设备应用状态 ===";
+    qDebug() << "设备序列号:" << serialNumber;
+    qDebug() << "应用名称:" << appName;
+    qDebug() << "状态:" << status;
 
-    // 确保表存在
-    dbManager.createTable6();
+    // 映射应用名称到数据库字段
+    QString fieldName;
+    int fieldValue = 0;
 
-    // 创建测试用户
-    SQL_MallUser user1;
-    user1.username = "user001";
-    user1.password = "password123";
-    user1.email = "user001@example.com";
-    user1.inviteCode = "INV001";
-    user1.phone = "13800138001";
-    user1.userLevel = 1;
-    user1.balance = 100.0;
-    user1.points = 50;
-
-    // 插入用户
-    if (dbManager.insertMallUser(user1)) {
-        qDebug() << "User created successfully";
-    }
-
-    // 验证登录
-    if (dbManager.validateMallUserLogin("user001", "password123")) {
-        qDebug() << "Login successful";
+    if (appName == "抖音" || appName.toLower() == "tiktok") {
+        fieldName = "tiktok";
+    } else if (appName == "B站" || appName.toLower() == "bilibili") {
+        fieldName = "bilibili";
+    } else if (appName == "小红书" || appName.toLower() == "xhs") {
+        fieldName = "xhs";
+    } else if (appName == "微博" || appName.toLower() == "weibo") {
+        fieldName = "weibo";
+    } else if (appName == "快手" || appName.toLower() == "kuaishou") {
+        fieldName = "kuaishou";
     } else {
-        qDebug() << "Login failed";
+        qDebug() << "未知的应用名称:" << appName;
+        return false;
     }
 
-    // 查询用户
-    SQL_MallUser retrievedUser = dbManager.getMallUserByUsername("user001");
-    qDebug() << "User email:" << retrievedUser.email;
-    qDebug() << "User balance:" << retrievedUser.balance;
-
-    // 更新余额
-    dbManager.updateMallUserBalance("user001", 50.0);
-
-    // 获取用户统计
-    int totalUsers = dbManager.getMallUserCount();
-    double totalBalance = dbManager.getTotalMallUserBalance();
-    qDebug() << "Total users:" << totalUsers << "Total balance:" << totalBalance;
-}
-
-// 生成邀请码
-QString generateInviteCode()
-{
-    QString chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    QString inviteCode;
-    QRandomGenerator *generator = QRandomGenerator::global();
-
-    for (int i = 0; i < 8; i++) {
-        int index = generator->bounded(chars.length());
-        inviteCode.append(chars.at(index));
+    // 根据状态设置值
+    if (status == "finish" || status == "login_success" || status == "running") {
+        fieldValue = 1;
+    } else if (status == "unlogin" || status == "fail" || status == "stopped") {
+        fieldValue = 0;
+    } else {
+        qDebug() << "未知的状态:" << status;
+        return false;
     }
 
-    return inviteCode;
-}
+    qDebug() << "对应字段:" << fieldName << "值:" << fieldValue;
 
+    QSqlQuery query;
+    query.prepare(QString("UPDATE Devices SET %1 = :value WHERE serial_number = :serial_number").arg(fieldName));
+    query.bindValue(":value", fieldValue);
+    query.bindValue(":serial_number", serialNumber);
 
-// 创建订单
-void createOrderExample()
-{
-    DatabaseManager dbManager;
-    if (!dbManager.openDatabase("your_database.db")) {
-        return;
+    if (!query.exec()) {
+        qDebug() << "更新设备应用状态失败:" << query.lastError().text();
+        return false;
     }
 
-    // 确保表存在
-    dbManager.createTable5();
+    qDebug() << "设备应用状态更新成功";
+    return true;
+}
 
-    // 创建订单
-    SQL_Order order;
-    order.orderId = "ORD" + QDateTime::currentDateTime().toString("yyyyMMddHHmmss");
-    order.productId = "PROD001";
-    order.unitPrice = 99.99;
-    order.quantity = 2;
-    order.calculateTotal(); // 计算总价
-    order.note = "请尽快发货";
-    order.user = "张三";
-    order.contactInfo = "13800138000";
-    order.status = "pending";
+bool DatabaseManager::incrementCommandCompletedTasks(const QString &commandId)
+{
+    qDebug() << "=== 增加指令完成数 ===";
+    qDebug() << "指令ID:" << commandId;
 
-    // 插入订单
-    if (dbManager.insertOrder(order)) {
-        qDebug() << "Order created successfully";
+    // 先获取当前的任务信息
+    SQL_CommandHistory command = getCommandById(commandId);
+    if (command.commandId.isEmpty()) {
+        qDebug() << "指令不存在:" << commandId;
+        return false;
     }
 
-    // 查询用户的所有订单
-    QList<SQL_Order> userOrders = dbManager.getOrdersByUser("张三");
-    qDebug() << "User has" << userOrders.size() << "orders";
+    // 检查是否已经完成所有任务
+    if (command.completed_tasks >= command.total_tasks) {
+        qDebug() << "指令已完成所有任务，无需增加";
+        return false;
+    }
 
-    // 更新订单状态
-    dbManager.updateOrderStatus(order.orderId, "paid");
+    // 增加完成数
+    int newcompleted_tasks = command.completed_tasks + 1;
 
-    // 获取统计信息
-    int pendingCount = dbManager.getOrderCountByStatus("pending");
-    double totalSales = dbManager.getTotalSales();
-    qDebug() << "Pending orders:" << pendingCount << "Total sales:" << totalSales;
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE CommandHistory
+        SET completed_tasks = :completed_tasks,
+            updated_at = datetime('now', 'localtime')
+        WHERE command_id = :command_id
+    )");
+    query.bindValue(":completed_tasks", newcompleted_tasks);
+    query.bindValue(":command_id", commandId);
+
+    if (!query.exec()) {
+        qDebug() << "增加指令完成数失败:" << query.lastError().text();
+        return false;
+    }
+
+    // 计算完成度
+    int completionRate = 0;
+    if (command.total_tasks > 0) {
+        completionRate = (newcompleted_tasks * 100) / command.total_tasks;
+    }
+
+    qDebug() << "指令完成数更新成功";
+    qDebug() << "原完成数:" << command.completed_tasks << "-> 新完成数:" << newcompleted_tasks;
+    qDebug() << "总任务数:" << command.total_tasks;
+    qDebug() << "完成率:" << completionRate << "%";
+
+    // 同时更新完成度字段
+    updateCommandCompleteness(commandId, completionRate);
+
+    return true;
 }
 
-// 生成订单ID的辅助函数
-QString generateOrderId()
+// 如果需要，可以添加一个更新完成度的方法
+bool DatabaseManager::updateCommandCompleteness(const QString &commandId, int completeness)
 {
-    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMddHHmmss");
-    QString random = QString::number(QRandomGenerator::global()->bounded(1000, 9999));
-    return "ORD_" + timestamp + "_" + random;
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE CommandHistory
+        SET completeness = :completeness,
+            updated_at = datetime('now', 'localtime')
+        WHERE command_id = :command_id
+    )");
+    query.bindValue(":completeness", QString("%1%").arg(completeness));
+    query.bindValue(":command_id", commandId);
+
+    if (!query.exec()) {
+        qDebug() << "更新指令完成度失败:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
 }
-static SQL_CommandHistory extractCommandFromQuery(const QSqlQuery &query)
-{
-    SQL_CommandHistory command;
-    command.commandId = query.value("command_id").toString();
-    command.status = query.value("status").toString();
-    command.action = query.value("action").toString();
-    command.sub_action = query.value("sub_action").toString();
-    command.start_time = query.value("start_time").toString();
-    command.end_time = query.value("end_time").toString();
-    command.remark = query.value("remark").toString();
-    command.Completeness = query.value("completeness").toString();
-    command.completed_url = query.value("completed_url").toString();
-    return command;
-}
-// 创建 User 结构体实例
-User newUser = { "john_doe", "password123", "1234567890", "john@example.com" };
-
-// 插入用户
-dbManager.insertUser(newUser);
-
-// 更新用户信息
-newUser.password = "new_password";
-dbManager.updateUser(newUser);
-
-// 获取所有用户
-QList<User> users = dbManager.getAllUsers();
-
-// 获取指定用户
-User user = dbManager.getUserByUsername("john_doe");
-
-// 删除用户
-dbManager.deleteUser("john_doe");
-
-Device newDevice = { "12345", "abcd", 100, "192.168.1.1", "active", "user1" };
-
-// 插入设备
-dbManager.insertDevice(newDevice);
-
-// 更新设备
-newDevice.total_flow = 200;
-dbManager.updateDevice(newDevice);
-
-// 获取所有设备
-QList<Device> devices = dbManager.getAllDevices();
-
-// 获取指定设备
-Device device = dbManager.getDeviceBySerialNumber("12345");
-
-// 删除设备
-dbManager.deleteDevice("12345");
-
-// 创建商品
-SQL_Product product;
-product.productId = "PROD001";
-product.productName = "iPhone 15 Pro";
-product.categoryId = "PHONE";
-product.categoryName = "智能手机";
-product.unitPrice = 8999.00;
-product.stock = 100;
-product.minOrder = 1;
-product.maxOrder = 10;
-product.status = "active";
-product.action = "sale";
-product.subaction = "discount";
-product.description = "最新款苹果手机";
-product.imageUrl = "https://example.com/iphone15.jpg";
-product.tags = "手机,苹果,iPhone,旗舰";
-product.specifications = "{\"color\":\"黑色\",\"storage\":\"256GB\"}";
-
-// 插入商品
-databaseManager.insertProduct(product);
-
-// 查询商品
-SQL_Product retrieved = databaseManager.getProductById("PROD001");
-
-// 更新库存
-databaseManager.updateProductStock("PROD001", 10, false); // 减少10个库存
-
-// 搜索商品
-QList<SQL_Product> searchResults = databaseManager.searchProducts("苹果");
-
-// 获取热门商品
-QList<SQL_Product> hotProducts = databaseManager.getHotProducts(5);
-
-
-#endif

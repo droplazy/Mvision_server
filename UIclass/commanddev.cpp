@@ -352,7 +352,6 @@ void commanddev::on_pushButton_allselect_clicked()
 
     QMessageBox::information(this, "全选", "已选择所有设备");
 }
-
 void commanddev::on_pushButton_command_clicked()
 {
     qDebug() << "====== 开始处理指令 ======";
@@ -382,6 +381,10 @@ void commanddev::on_pushButton_command_clicked()
         QMessageBox::warning(this, "警告", "请至少选择一个设备");
         return;
     }
+
+    // 获取选中的设备数量 - 作为total_tasks
+    int totalTasks = m_selectedDevices.size();
+    qDebug() << "选中的设备数量（作为总任务数）:" << totalTasks;
 
     // 检查是否勾选直接发送
     bool isDirectSend = ui->checkBox_direct_send->isChecked();
@@ -530,6 +533,8 @@ void commanddev::on_pushButton_command_clicked()
     qDebug() << "开始时间:" << start_time;
     qDebug() << "结束时间:" << end_time;
     qDebug() << "备注:" << remark;
+    qDebug() << "总任务数:" << totalTasks;
+    qDebug() << "已完成任务数: 0";
     qDebug() << "序列号列表:";
     for (int i = 0; i < m_selectedDevices.size(); i++) {
         qDebug() << QString("  %1. %2").arg(i+1).arg(m_selectedDevices[i]);
@@ -545,8 +550,10 @@ void commanddev::on_pushButton_command_clicked()
         cmd.start_time = start_time;
         cmd.end_time = end_time;
         cmd.remark = remark;
-        cmd.Completeness = "0%";
+        cmd.completeness = "0%";
         cmd.completed_url = "";
+        cmd.total_tasks = totalTasks;       // 设置总任务数
+        cmd.completed_tasks = 0;            // 设置已完成任务数
 
         if (!m_db->insertCommandHistory(cmd)) {
             qDebug() << "插入指令历史记录失败";
@@ -563,6 +570,7 @@ void commanddev::on_pushButton_command_clicked()
         }
 
         qDebug() << "指令历史记录插入成功";
+        qDebug() << "总任务数:" << totalTasks << "已存入数据库";
 
         // 更新订单的指令ID
         if (!orderId.isEmpty()) {
@@ -577,10 +585,34 @@ void commanddev::on_pushButton_command_clicked()
             }
         }
     } else {
-        qDebug() << "直接发送模式：跳过数据库操作";
+        // 直接发送模式：也需要保存指令记录，但可能不需要关联订单
+        SQL_CommandHistory cmd;
+        cmd.commandId = commandId;
+        cmd.status = "execing";
+        cmd.action = action.isEmpty() ? "default" : action;
+        cmd.sub_action = subAction.isEmpty() ? "default" : subAction;
+        cmd.start_time = start_time;
+        cmd.end_time = end_time;
+        cmd.remark = remark;
+        cmd.completeness = "0%";
+        cmd.completed_url = "";
+        cmd.total_tasks = totalTasks;       // 设置总任务数
+        cmd.completed_tasks = 0;            // 设置已完成任务数
+
+        if (m_db) {
+            if (!m_db->insertCommandHistory(cmd)) {
+                qDebug() << "插入指令历史记录失败（直接发送模式）";
+                // 直接发送模式下，失败不影响指令发送，只是记录日志
+            } else {
+                qDebug() << "指令历史记录插入成功（直接发送模式）";
+                qDebug() << "总任务数:" << totalTasks << "已存入数据库";
+            }
+        } else {
+            qDebug() << "数据库不可用（直接发送模式）";
+        }
     }
 
-    // 9. 构建指令JSON（用于发送给设备） - 关键修改在这里！
+    // 9. 构建指令JSON（用于发送给设备）
     QJsonObject dataObj;
     dataObj["command_id"] = commandId;
     dataObj["action"] = action;
@@ -589,12 +621,12 @@ void commanddev::on_pushButton_command_clicked()
     dataObj["end_time"] = end_time;
     dataObj["remark"] = remark;
 
-    // 添加设备序列号数组 - 这是关键修改！
+    // 添加设备序列号数组
     QJsonArray serialNumbersArray;
     for (const QString &serialNumber : m_selectedDevices) {
         serialNumbersArray.append(serialNumber);
     }
-    dataObj["serial_numbers"] = serialNumbersArray;  // 添加设备序列号数组
+    dataObj["serial_numbers"] = serialNumbersArray;
 
     m_command = QJsonObject();
     m_command["data"] = dataObj;
@@ -619,52 +651,53 @@ void commanddev::on_pushButton_command_clicked()
     qDebug() << "指令信号已发送";
 
     // 12. 显示成功信息
+    QString successMessage;
     if (!isDirectSend) {
-        QMessageBox::information(this, "指令生成成功",
-                                 QString("指令生成完成！\n\n"
-                                         "订单信息:\n"
-                                         "  ID: %1\n"
-                                         "  状态: execing\n"
-                                         "  指令ID: %2\n\n"
-                                         "设备信息:\n"
-                                         "  已选择 %3 个设备\n\n"
-                                         "指令信息:\n"
-                                         "  动作: %4\n"
-                                         "  子动作: %5\n"
-                                         "  时间: %6 ~ %7\n\n"
-                                         "备注: %8\n\n"
-                                         "指令已发送到MQTT，等待处理...")
-                                     .arg(orderId)
-                                     .arg(commandId)
-                                     .arg(m_selectedDevices.size())
-                                     .arg(action)
-                                     .arg(subAction)
-                                     .arg(start_time)
-                                     .arg(end_time)
-                                     .arg(remark.isEmpty() ? "无" : remark));
+        successMessage = QString("指令生成完成！\n\n"
+                                 "订单信息:\n"
+                                 "  ID: %1\n"
+                                 "  状态: execing\n"
+                                 "  指令ID: %2\n\n"
+                                 "设备信息:\n"
+                                 "  已选择 %3 个设备（总任务数）\n\n"
+                                 "指令信息:\n"
+                                 "  动作: %4\n"
+                                 "  子动作: %5\n"
+                                 "  时间: %6 ~ %7\n\n"
+                                 "备注: %8\n\n"
+                                 "指令已发送到MQTT，等待处理...")
+                             .arg(orderId)
+                             .arg(commandId)
+                             .arg(totalTasks)  // 显示总任务数
+                             .arg(action)
+                             .arg(subAction)
+                             .arg(start_time)
+                             .arg(end_time)
+                             .arg(remark.isEmpty() ? "无" : remark);
     } else {
-        QMessageBox::information(this, "指令生成成功",
-                                 QString("直接发送模式指令生成完成！\n\n"
-                                         "设备信息:\n"
-                                         "  已选择 %1 个设备\n\n"
-                                         "指令信息:\n"
-                                         "  指令ID: %2\n"
-                                         "  动作: %3\n"
-                                         "  子动作: %4\n"
-                                         "  时间: %5 ~ %6\n\n"
-                                         "备注: %7\n\n"
-                                         "指令已发送到MQTT，等待处理...")
-                                     .arg(m_selectedDevices.size())
-                                     .arg(commandId)
-                                     .arg(action)
-                                     .arg(subAction)
-                                     .arg(start_time)
-                                     .arg(end_time)
-                                     .arg(remark.isEmpty() ? "无" : remark));
+        successMessage = QString("直接发送模式指令生成完成！\n\n"
+                                 "设备信息:\n"
+                                 "  已选择 %1 个设备（总任务数）\n\n"
+                                 "指令信息:\n"
+                                 "  指令ID: %2\n"
+                                 "  动作: %3\n"
+                                 "  子动作: %4\n"
+                                 "  时间: %5 ~ %6\n\n"
+                                 "备注: %7\n\n"
+                                 "指令已发送到MQTT，等待处理...")
+                             .arg(totalTasks)  // 显示总任务数
+                             .arg(commandId)
+                             .arg(action)
+                             .arg(subAction)
+                             .arg(start_time)
+                             .arg(end_time)
+                             .arg(remark.isEmpty() ? "无" : remark);
     }
 
+    QMessageBox::information(this, "指令生成成功", successMessage);
     qDebug() << "====== 指令处理完成 ======";
 }
+
 QJsonObject commanddev::getGeneratedCommand() const
 {
     return m_command;

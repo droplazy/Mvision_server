@@ -91,52 +91,118 @@ void mqttclient::ADDsubscribeTopic(QString device)
 
 void mqttclient::CommandMuiltSend(QJsonObject json)
 {
-    //qDebug() << "我又不认识你" ;
+    qDebug() << "=== 开始转发指令到多个设备 ===";
+
+    // 检查必需的字段
+    if (!json.contains("data")) {
+        qDebug() << "错误：JSON缺少data字段";
+        return;
+    }
 
     QJsonObject dataObj = json["data"].toObject();
-    QString action = dataObj["action"].toString();
-    QString sub_action = dataObj["sub_action"].toString();
-    QString start_time = dataObj["start_time"].toString();
-    QString end_time = dataObj["end_time"].toString();
-    QString remark = dataObj["remark"].toString();
+
+    // 检查必需的数据字段
+    if (!dataObj.contains("command_id") ||
+        !dataObj.contains("action") ||
+        !dataObj.contains("serial_numbers")) {
+        qDebug() << "错误：data字段缺少必需的command_id、action或serial_numbers";
+        qDebug() << "收到的JSON：" << json;
+        return;
+    }
+
+    QString commandId = dataObj["command_id"].toString();
     QJsonArray serial_numbers = dataObj["serial_numbers"].toArray();
 
+    qDebug() << "指令ID:" << commandId;
+    qDebug() << "目标设备数量:" << serial_numbers.size();
+
+    // 验证指令是否存在（可选）
+    if (dbManager) {
+        SQL_CommandHistory cmd = dbManager->getCommandById(commandId);
+        if (cmd.commandId.isEmpty()) {
+            qDebug() << "警告：指令ID" << commandId << "在数据库中不存在";
+            // 根据需求决定是否继续发送
+        }
+    }
+
+    // 准备发送的消息（使用原JSON，只确保格式正确）
+    // 确保JSON格式符合设备要求
     QJsonObject newJson;
+
+    // 复制原始数据（保持指令ID等信息不变）
+    QJsonObject sendData;
+    sendData["command_id"] = commandId;
+    sendData["action"] = dataObj["action"].toString();
+    sendData["sub_action"] = dataObj.value("sub_action").toString();  // 使用value避免不存在时报错
+    sendData["start_time"] = dataObj.value("start_time").toString();
+    sendData["end_time"] = dataObj.value("end_time").toString();
+    sendData["remark"] = dataObj.value("remark").toString();
+
+    // 移除serial_numbers字段，设备不需要这个
+    // sendData.remove("serial_numbers");
+
+    newJson["data"] = sendData;
+    newJson["messageType"] = "command";
+    newJson["password"] = "securePassword123";
     newJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     newJson["username"] = "user123";
-    newJson["password"] = "securePassword123";
-    newJson["messageType"] = "command";
 
-
-    // 插入新指令到数据库
-    SQL_CommandHistory cmd1;
-    cmd1.commandId = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz");
-    cmd1.status = "todo";
-    cmd1.action = action;
-    cmd1.sub_action = sub_action;
-    cmd1.start_time = start_time;
-    cmd1.end_time = end_time;
-    cmd1.remark = remark;
-    cmd1.Completeness = "0%";
-    cmd1.completed_url = "";
-    dbManager->insertCommandHistory(cmd1);
-
-    QJsonObject data;
-    data["command_id"] = cmd1.commandId;
-    data["action"] = cmd1.action;
-    data["sub_action"] = cmd1.sub_action;
-    data["start_time"] = cmd1.start_time;
-    data["end_time"] = cmd1.end_time;
-    data["remark"] = cmd1.remark;
-    newJson["data"] = data;
-
+    // 转换为JSON字符串
     QByteArray message = QJsonDocument(newJson).toJson();
 
+    qDebug() << "指令JSON格式验证通过";
+    qDebug() << "发送的消息格式:" << newJson;
+
+    // 发送到每个设备
+    int sentCount = 0;
     for (const QJsonValue &serialNumber : std::as_const(serial_numbers)) {
-        QString topic = "Device/Dispatch/" + serialNumber.toString();
+        QString deviceSerial = serialNumber.toString().trimmed();
+        if (deviceSerial.isEmpty()) {
+            qDebug() << "跳过空的设备序列号";
+            continue;
+        }
+
+        QString topic = "Device/Dispatch/" + deviceSerial;
         QMqttTopicName topicName(topic);
-     //   qDebug() << topicName << " : " << message ;
+
+        qDebug() << "发送到设备" << deviceSerial << "主题:" << topic;
+
+        // 检查MQTT连接状态
+        if (mqttClient->state() != QMqttClient::Connected) {
+            qDebug() << "错误：MQTT客户端未连接，无法发送指令";
+            break;
+        }
+
         publishMessage(topicName, message);
+        sentCount++;
+
+        // 短暂延迟，避免发送过快
+        QThread::msleep(10);
+    }
+
+    qDebug() << "指令转发完成，成功发送到" << sentCount << "个设备";
+    // 可选：更新指令状态为发送中
+    if (dbManager && sentCount > 0) {
+        // 将指令状态更新为sending或executing
+        SQL_CommandHistory cmd;
+        cmd.commandId = commandId;
+        cmd.status = "executing";  // 或 "sending"
+        // 从数据库获取原有的完整数据
+        SQL_CommandHistory originalCmd = dbManager->getCommandById(commandId);
+        cmd.action = originalCmd.action;
+        cmd.sub_action = originalCmd.sub_action;
+        cmd.start_time = originalCmd.start_time;
+        cmd.end_time = originalCmd.end_time;
+        cmd.remark = originalCmd.remark;
+        cmd.completeness = originalCmd.completeness;
+        cmd.completed_url = originalCmd.completed_url;
+        cmd.total_tasks = originalCmd.total_tasks;
+        cmd.completed_tasks = originalCmd.completed_tasks;
+        if (!dbManager->updateCommandHistory(cmd)) {
+            qDebug() << "警告：更新指令状态失败";
+        } else {
+            qDebug() << "指令状态已更新为executing";
+        }
     }
 }
 
@@ -148,11 +214,105 @@ void mqttclient::ProcessDevtSend(QJsonObject json)
     QMqttTopicName topicName(topic);
     publishMessage(topicName, message);
 }
+void mqttclient::devUpgrade(QStringList upgradeList)
+{
+    qDebug() << "=== 开始处理设备升级请求 ===";
 
+    if (upgradeList.isEmpty()) {
+        qDebug() << "升级列表为空";
+        return;
+    }
+
+    // 第一个元素是固件文件名
+    QString firmwareFile = upgradeList.first();
+    qDebug() << "固件文件:" << firmwareFile;
+
+    // 从第二个元素开始是设备列表
+    QStringList deviceList = upgradeList.mid(1);
+    qDebug() << "需要升级的设备数量:" << deviceList.size();
+    qDebug() << "设备列表:" << deviceList;
+
+    if (deviceList.isEmpty()) {
+        qDebug() << "没有需要升级的设备";
+        return;
+    }
+
+    // 1. 计算固件文件的MD5
+    QString firmwarePath = QDir::current().filePath("Download/" + firmwareFile);
+    QFile file(firmwarePath);
+
+    if (!file.exists()) {
+        qDebug() << "固件文件不存在:" << firmwarePath;
+        return;
+    }
+
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "无法打开固件文件:" << firmwarePath;
+        return;
+    }
+
+    QCryptographicHash hash(QCryptographicHash::Md5);
+    if (hash.addData(&file)) {
+        QByteArray md5Hash = hash.result().toHex().toLower();  // 转换为小写
+        QString md5String = QString::fromLatin1(md5Hash);
+        qDebug() << "固件文件MD5:" << md5String;
+        file.close();
+
+        // 2. 构建升级JSON
+        QJsonObject upgradeJson;
+        QJsonObject dataObj;
+
+        // 构建URL，假设服务器地址为192.168.10.103:8080
+        QString url = QString("http://192.168.10.103:8080/download?filename=%1").arg(firmwareFile);
+        dataObj["url"] = url;
+        dataObj["md5"] = md5String;
+
+        upgradeJson["data"] = dataObj;
+        upgradeJson["messageType"] = "upgrade";
+        upgradeJson["password"] = "securePassword123";
+        upgradeJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        upgradeJson["username"] = "user123";
+
+        // 转换为JSON字符串
+        QJsonDocument doc(upgradeJson);
+        QString jsonString = doc.toJson(QJsonDocument::Indented);
+
+        qDebug() << "\n=== 升级指令JSON ===";
+        qDebug() << jsonString;
+
+        // 3. 打印需要发送的设备列表
+        qDebug() << "\n=== 需要升级的设备列表 ===";
+        for (int i = 0; i < deviceList.size(); ++i) {
+            qDebug() << QString("%1. %2").arg(i+1).arg(deviceList[i]);
+        }
+
+        // 4. 打印发送信息（实际项目中可以取消注释下面的代码来真正发送）
+        qDebug() << "\n=== 模拟发送升级指令 ===";
+        qDebug() << "固件文件:" << firmwareFile;
+        qDebug() << "下载URL:" << url;
+        qDebug() << "MD5校验码:" << md5String;
+        qDebug() << "目标设备数量:" << deviceList.size();
+
+
+        // 实际发送代码（注释状态）
+        for (const QString &deviceSerial : deviceList) {
+        QString topic = "Device/Dispatch/" + deviceSerial;
+        QMqttTopicName topicName(topic);
+        qDebug() << topicName << " : " << jsonString.toUtf8() ;
+        publishMessage(topicName, jsonString.toUtf8());
+        }
+
+
+        qDebug() << "=== 升级指令处理完成 ===";
+
+    } else {
+        qDebug() << "计算MD5失败";
+        file.close();
+    }
+}
 void mqttclient::onMessageReceived(const QByteArray &message, const QMqttTopicName &topic)
 {
     QJsonDocument doc = QJsonDocument::fromJson(message);
-  //  qDebug() << topic << "\n" <<message;
     QJsonObject jsonObj = doc.object();
 
     if (!jsonObj.isEmpty()) {
@@ -164,11 +324,17 @@ void mqttclient::onMessageReceived(const QByteArray &message, const QMqttTopicNa
         } else if (messageType == "heart") {
             DeviceStatus deviceStatus = parseJsonHeartBeat(jsonObj);
             emit updateDeviceInfo(deviceStatus);
-        } else {
+        } else if (messageType == "appliaction_status") {
+            // 处理应用状态消息
+            handleApplicationStatus(jsonObj);
+        }
+        else {
             qDebug() << "Error: messageType is unknown!";
+                     qDebug() << topic << "\n" <<message;
         }
     } else {
         qDebug() << "error: not a json ...";
+         qDebug() << topic << "\n" <<message;
     }
 }
 
@@ -205,6 +371,7 @@ DeviceStatus mqttclient::parseJsonHeartBeat(const QJsonObject& jsonObj)
     QString usedProcess = jsonObj["data"]["usedProcess"].toString();
     QString ProcessID = jsonObj["data"]["ProcessID"].toString();
     QString HardVersion = jsonObj["data"]["firmware_version"].toString();
+    QString CheckSum = jsonObj["verification_code"].toString();
 
     float temp = jsonObj["data"]["temperature"].toDouble(0.0);
 
@@ -213,6 +380,8 @@ DeviceStatus mqttclient::parseJsonHeartBeat(const QJsonObject& jsonObj)
                               current_start, current_end, next_action,
                               next_action_start, next_action_end, usedProcess, ProcessID, temp);
     deviceStatus.hardversion  =HardVersion;
+    deviceStatus.checksum  =CheckSum;
+
     return deviceStatus;
 }
 
@@ -230,4 +399,93 @@ void mqttclient::run()
     while (true) {
         sleep(1);
     }
+}
+void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
+{
+    qDebug() << "=== 处理应用状态消息 ===";
+
+    // 解析消息
+    QString serialNumber = jsonObj["serial_number"].toString();
+    QString verificationCode = jsonObj["verification_code"].toString();
+    QString timestamp = jsonObj["timestamp"].toString();
+
+    QJsonObject dataObj = jsonObj["data"].toObject();
+    QString appName = dataObj["app_name"].toString();
+    QString commandId = dataObj["command_id"].toString();
+    QString status = dataObj["status"].toString();
+
+    qDebug() << "设备序列号:" << serialNumber;
+    qDebug() << "验证码:" << verificationCode;
+    qDebug() << "时间戳:" << timestamp;
+    qDebug() << "应用名称:" << appName;
+    qDebug() << "指令ID:" << commandId;
+    qDebug() << "状态:" << status;
+
+    // 验证设备校验码
+    if (!verifyDeviceChecksum(serialNumber, verificationCode)) {
+        qDebug() << "设备校验码验证失败";
+        return;
+    }
+
+    // 更新设备应用状态
+    if (dbManager) {
+        // 更新设备社交媒体开关状态
+        bool appStatusUpdated = dbManager->updateDeviceAppStatus(serialNumber, appName, status);
+        if (appStatusUpdated) {
+            qDebug() << "设备应用状态更新成功";
+        } else {
+            qDebug() << "设备应用状态更新失败";
+        }
+
+        // 如果是完成状态，增加指令完成数
+        if (status == "finish" || status == "login_success" || status == "running") {
+            if (!commandId.isEmpty()) {
+                bool taskIncremented = dbManager->incrementCommandCompletedTasks(commandId);
+                if (taskIncremented) {
+                    qDebug() << "指令完成数增加成功";
+
+                    // 可以发送一个信号来通知界面更新
+                   // emit commandTaskUpdated(commandId);
+                } else {
+                    qDebug() << "指令完成数增加失败";
+                }
+            } else {
+                qDebug() << "指令ID为空，跳过增加完成数";
+            }
+        }
+    } else {
+        qDebug() << "数据库管理器不可用";
+    }
+
+    qDebug() << "=== 应用状态消息处理完成 ===";
+}
+
+// 新增：验证设备校验码
+bool mqttclient::verifyDeviceChecksum(const QString &serialNumber, const QString &verificationCode)
+{
+    if (!dbManager) {
+        qDebug() << "数据库管理器不可用，跳过校验";
+        return true; // 如果不校验，返回true
+    }
+
+    // 从数据库获取设备信息
+    SQL_Device device = dbManager->getDeviceBySerialNumber(serialNumber);
+
+    if (device.serial_number.isEmpty()) {
+        qDebug() << "设备不存在:" << serialNumber;
+        return false;
+    }
+
+    // 比较校验码
+    bool isValid = (device.checksum == verificationCode);
+
+    if (!isValid) {
+        qDebug() << "校验码不匹配";
+        qDebug() << "设备校验码:" << device.checksum;
+        qDebug() << "接收校验码:" << verificationCode;
+    } else {
+        qDebug() << "校验码验证通过";
+    }
+
+    return isValid;
 }

@@ -31,6 +31,7 @@ public slots:
     void CommandMuiltSend(QJsonObject json);
     void ProcessDevtSend(QJsonObject json);
     void reconnectBroker();  // 重新连接
+    void devUpgrade(QStringList devList);
 
 private slots:
     void onMessageReceived(const QByteArray &message, const QMqttTopicName &topic);
@@ -49,6 +50,8 @@ private:
     QString getMessageType(const QJsonObject &jsonObj);
     DatabaseManager *dbManager;
 
+    bool verifyDeviceChecksum(const QString &serialNumber, const QString &verificationCode);
+    void handleApplicationStatus(const QJsonObject &jsonObj);
 signals:
     void updateDeviceInfo(DeviceStatus);
     void mqttclientconnted(bool);

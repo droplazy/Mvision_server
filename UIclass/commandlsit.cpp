@@ -115,7 +115,7 @@ void commandlsit::loadCommandList()
         ui->tableWidget->setItem(row, 5, new QTableWidgetItem(command.end_time));
 
         // 完成度
-        ui->tableWidget->setItem(row, 6, new QTableWidgetItem(command.Completeness));
+        ui->tableWidget->setItem(row, 6, new QTableWidgetItem(command.completeness));
 
         // 截图URL（截断显示）
         QString url = command.completed_url;
@@ -243,7 +243,7 @@ void commandlsit::filterCommands(const QString &keyword)
             command.status.toLower().contains(searchText) ||
             command.action.toLower().contains(searchText) ||
             command.sub_action.toLower().contains(searchText) ||
-            command.Completeness.toLower().contains(searchText) ||
+            command.completeness.toLower().contains(searchText) ||
             command.completed_url.toLower().contains(searchText)) {
             filteredCommands.append(command);
         }
@@ -291,7 +291,7 @@ void commandlsit::filterCommands(const QString &keyword)
         ui->tableWidget->setItem(row, 5, new QTableWidgetItem(command.end_time));
 
         // 完成度
-        ui->tableWidget->setItem(row, 6, new QTableWidgetItem(command.Completeness));
+        ui->tableWidget->setItem(row, 6, new QTableWidgetItem(command.completeness));
 
         // 截图URL（截断显示）
         QString url = command.completed_url;

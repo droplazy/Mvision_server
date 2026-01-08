@@ -65,7 +65,7 @@
     <string>添加设备</string>
    </property>
   </widget>
-  <widget class="QPushButton" name="button_adddev_2">
+  <widget class="QPushButton" name="button_upgrade">
    <property name="geometry">
     <rect>
      <x>420</x>
@@ -75,7 +75,7 @@
     </rect>
    </property>
    <property name="text">
-    <string>下发指令</string>
+    <string>固件升级</string>
    </property>
   </widget>
   <widget class="QTableView" name="tableView">
@@ -86,6 +86,19 @@
      <width>1061</width>
      <height>591</height>
     </rect>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_lastversion">
+   <property name="geometry">
+    <rect>
+     <x>510</x>
+     <y>10</y>
+     <width>131</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>TextLabel</string>
    </property>
   </widget>
  </widget>

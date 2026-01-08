@@ -222,6 +222,7 @@ struct Machine_Process_Total {
     }
 };
 
+// 设备结构体
 struct SQL_Device {
     QString serial_number;
     QString checksum;
@@ -230,7 +231,14 @@ struct SQL_Device {
     QString device_status;
     QString bound_user;
     QString bound_time;
+    int tiktok;      // 新增：TikTok开关 (0=关闭, 1=开启)
+    int bilibili;    // 新增：Bilibili开关
+    int xhs;         // 新增：小红书开关
+    int weibo;       // 新增：微博开关
+    int kuaishou;    // 新增：快手开关
 
+    // 构造函数
+    SQL_Device() : tiktok(0), bilibili(0), xhs(0), weibo(0), kuaishou(0) {}
 };
 struct SQL_User {
     QString username;
@@ -240,6 +248,7 @@ struct SQL_User {
 };
 
 // 指令历史记录结构体
+// 指令历史记录结构体
 struct SQL_CommandHistory {
     QString commandId;          // 指令ID（主键）
     QString status;             // 状态（如：pending, executing, completed, failed）
@@ -248,20 +257,23 @@ struct SQL_CommandHistory {
     QString start_time;         // 开始时间
     QString end_time;           // 结束时间
     QString remark;             // 备注
-    QString Completeness;       // 完成度（如：0%, 50%, 100%）
-    QString completed_url;      // 完成后的URL或资源路径
+    QString completeness  ;       // 完成度（如：0%, 50%, 100%）
+    QString completed_url ;      // 完成后的URL或资源路径
+    int total_tasks ;             // 新增：总任务数
+    int completed_tasks ;         // 新增：已完成任务数
 
     // 构造函数
-    SQL_CommandHistory() {}
+    SQL_CommandHistory() : total_tasks (0), completed_tasks (0) {}
 
     SQL_CommandHistory(const QString& id, const QString& stat, const QString& act,
                        const QString& subAct, const QString& start, const QString& end,
-                       const QString& rem, const QString& comp, const QString& url)
+                       const QString& rem, const QString& comp, const QString& url,
+                       int total = 0, int completed = 0)
         : commandId(id), status(stat), action(act), sub_action(subAct),
         start_time(start), end_time(end), remark(rem),
-        Completeness(comp), completed_url(url) {}
+        completeness(comp), completed_url(url),
+        total_tasks(total), completed_tasks(completed) {}
 };
-
 // SQL_Order.h 或直接在 DatabaseManager.h 中添加
 struct SQL_Order {
     QString orderId;

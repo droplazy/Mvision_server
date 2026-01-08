@@ -22,6 +22,8 @@ private slots:
     void on_button_adddev_clicked();
     void onDeleteButtonClicked(const QString &serialNumber);
 
+    void on_button_upgrade_clicked();
+
 private:
     Ui::devicelistdialog *ui;
     DatabaseManager* m_dbManager;
@@ -36,6 +38,12 @@ private:
 
     // 辅助函数
     DeviceStatus* findDeviceInVector(const QString &serialNumber);
+    // 新增：固件升级相关函数
+    QString getLatestFirmwareVersion();  // 获取最新固件版本
+    void updateVersionLabel();           // 更新版本标签
+    int compareVersions(const QString &v1, const QString &v2);
+signals:
+    void deviceUpgrade(QStringList upgradeList);  // 新增：设备升级信号，第一个元素是固件文件名，后面是设备列表
 };
 
 

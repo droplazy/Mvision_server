@@ -7,8 +7,9 @@
 #include <QDateTime>
 #include <algorithm>
 #include <publicheader.h>
-
-
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
 devicelistdialog::devicelistdialog(DatabaseManager* dbManager, QVector<DeviceStatus> *deviceVector, QWidget *parent)
     : QDialog(parent)
     , ui(new Ui::devicelistdialog)
@@ -227,6 +228,7 @@ void devicelistdialog::updatedeviceinfo()
     setWindowTitle(QString("设备列表（共 %1 台设备）最后更新：%2")
                        .arg(m_deviceVector->size())
                        .arg(QDateTime::currentDateTime().toString("hh:mm:ss")));
+        updateVersionLabel();
 }
 
 
@@ -665,6 +667,211 @@ bool devicelistdialog::insertDevice(const QString &serialNumber, const QString &
     newDevice.bound_user = belongUser.isEmpty() ? "未绑定" : belongUser;
     newDevice.bound_time = belongUser.isEmpty() ? "" : QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
 
+    // ====== 需要添加这里 ======
+    // 初始化新增的社交媒体字段
+    newDevice.tiktok = 0;      // 默认关闭
+    newDevice.bilibili = 0;    // 默认关闭
+    newDevice.xhs = 0;         // 默认关闭
+    newDevice.weibo = 0;       // 默认关闭
+    newDevice.kuaishou = 0;    // 默认关闭
+
     // 插入数据库
     return m_dbManager->insertDevice(newDevice);
+}
+// 获取最新固件版本
+QString devicelistdialog::getLatestFirmwareVersion()
+{
+    QDir downloadDir(QDir::current().filePath("Download"));
+
+    // 如果Download目录不存在，返回空
+    if (!downloadDir.exists()) {
+        qDebug() << "Download目录不存在";
+        return "";
+    }
+
+    // 设置过滤器，只查找firmware开头的.tar.gz文件
+    QStringList filters;
+    filters << "firmware_*.tar.gz";
+    downloadDir.setNameFilters(filters);
+
+    QFileInfoList fileList = downloadDir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
+
+    if (fileList.isEmpty()) {
+        qDebug() << "Download目录中没有固件文件";
+        return "";
+    }
+
+    QString latestVersion = "";
+    QString latestFileName = "";
+
+    foreach (const QFileInfo &fileInfo, fileList) {
+        QString fileName = fileInfo.fileName();
+
+        // 提取版本号，例如从"firmware_0.1.1.tar.gz"中提取"0.1.1"
+        if (fileName.startsWith("firmware_") && fileName.endsWith(".tar.gz")) {
+            QString versionStr = fileName.mid(9);  // 去掉"firmware_"
+            versionStr = versionStr.left(versionStr.length() - 7);  // 去掉".tar.gz"
+
+            // 比较版本号
+            if (latestVersion.isEmpty() || compareVersions(versionStr, latestVersion) > 0) {
+                latestVersion = versionStr;
+                latestFileName = fileName;
+            }
+        }
+    }
+
+    return latestFileName;  // 返回完整的文件名
+}
+// 比较版本号的辅助函数
+int devicelistdialog::compareVersions(const QString &v1, const QString &v2)
+{
+    QStringList v1Parts = v1.split('.');
+    QStringList v2Parts = v2.split('.');
+
+    int maxLength = qMax(v1Parts.size(), v2Parts.size());
+
+    for (int i = 0; i < maxLength; i++) {
+        int v1Num = (i < v1Parts.size()) ? v1Parts[i].toInt() : 0;
+        int v2Num = (i < v2Parts.size()) ? v2Parts[i].toInt() : 0;
+
+        if (v1Num > v2Num) return 1;
+        if (v1Num < v2Num) return -1;
+    }
+
+    return 0;
+}
+// 更新版本标签
+void devicelistdialog::updateVersionLabel()
+{
+    QString latestFirmware = getLatestFirmwareVersion();
+
+    if (latestFirmware.isEmpty()) {
+        ui->label_lastversion->setText("最新版本: 无");
+        ui->label_lastversion->setStyleSheet("color: red;");
+    } else {
+        // 提取版本号用于显示
+        QString versionNumber = latestFirmware.mid(9);  // 去掉"firmware_"
+        versionNumber = versionNumber.left(versionNumber.length() - 7);  // 去掉".tar.gz"
+
+        ui->label_lastversion->setText(QString("最新版本: v%1").arg(versionNumber));
+        ui->label_lastversion->setStyleSheet("color: green;");
+
+        qDebug() << "最新固件文件:" << latestFirmware;
+        qDebug() << "版本号:" << versionNumber;
+    }
+}
+
+void devicelistdialog::on_button_upgrade_clicked()
+{
+    qDebug() << "=== 开始固件升级处理 ===";
+
+    // 1. 获取最新固件版本
+    QString latestFirmware = getLatestFirmwareVersion();
+
+    if (latestFirmware.isEmpty()) {
+        QMessageBox::warning(this, "警告", "未找到固件文件，请将固件文件放在Download目录下");
+        return;
+    }
+
+    qDebug() << "最新固件文件:" << latestFirmware;
+
+    // 2. 查找需要升级的设备
+    QStringList devicesToUpgrade;
+
+    if (!m_deviceVector) {
+        QMessageBox::warning(this, "警告", "设备列表为空");
+        return;
+    }
+
+    // 解析最新版本号
+    QString latestVersion = latestFirmware.mid(9);  // 去掉"firmware_"
+    latestVersion = latestVersion.left(latestVersion.length() - 7);  // 去掉".tar.gz"
+
+    qDebug() << "最新版本号:" << latestVersion;
+    qDebug() << "筛选条件: 设备状态=空闲 且 版本号<" << latestVersion;
+
+    foreach (const DeviceStatus &device, *m_deviceVector) {
+        // 检查设备状态是否为"空闲"
+        QString currentAction = device.currentAction.isEmpty() ? "空闲" : device.currentAction;
+
+        if (currentAction != "空闲") {
+            qDebug() << "设备" << device.serialNumber << "状态为" << currentAction << "，跳过";
+            continue;
+        }
+
+        // 获取设备硬件版本
+        QString deviceVersion = device.hardversion.trimmed();
+
+        // 如果设备版本号未知或为空，假设需要升级
+        bool needsUpgrade = deviceVersion.isEmpty() || deviceVersion == "未知";
+
+        // 如果有版本号，进行比较
+        if (!needsUpgrade && !deviceVersion.isEmpty()) {
+            // 标准化版本号：去掉可能的"v"前缀
+            if (deviceVersion.startsWith("v") || deviceVersion.startsWith("V")) {
+                deviceVersion = deviceVersion.mid(1);
+            }
+
+            // 比较版本号
+            if (compareVersions(deviceVersion, latestVersion) < 0) {
+                needsUpgrade = true;
+            }
+        }
+
+        if (needsUpgrade) {
+            devicesToUpgrade.append(device.serialNumber);
+            qDebug() << "设备" << device.serialNumber << "版本" << device.hardversion << "需要升级";
+        } else {
+            qDebug() << "设备" << device.serialNumber << "版本" << device.hardversion << "已是最新，跳过";
+        }
+    }
+
+    if (devicesToUpgrade.isEmpty()) {
+        QMessageBox::information(this, "提示", "没有需要升级的设备");
+        return;
+    }
+
+    qDebug() << "需要升级的设备数量:" << devicesToUpgrade.size();
+    qDebug() << "设备列表:" << devicesToUpgrade;
+
+    // 3. 确认升级
+    QString confirmMessage = QString("准备升级 %1 台设备\n\n固件文件: %2\n最新版本: v%3\n\n是否继续？")
+                                 .arg(devicesToUpgrade.size())
+                                 .arg(latestFirmware)
+                                 .arg(latestVersion);
+
+    int result = QMessageBox::question(this, "确认升级", confirmMessage,
+                                       QMessageBox::Yes | QMessageBox::No,
+                                       QMessageBox::No);
+
+    if (result != QMessageBox::Yes) {
+        qDebug() << "用户取消升级";
+        return;
+    }
+
+    // 4. 构建升级列表并发送信号
+    // 升级列表的第一个元素是固件文件名，后面是需要升级的设备列表
+    QStringList upgradeList;
+    upgradeList.append(latestFirmware);  // 第一个元素是固件文件名
+    upgradeList.append(devicesToUpgrade);  // 后面是设备列表
+
+    qDebug() << "发送升级信号，升级列表:" << upgradeList;
+
+    // 发送升级信号
+    emit deviceUpgrade(upgradeList);
+
+    // 5. 显示升级提示
+    QString successMessage = QString("升级指令已发送\n\n"
+                                     "固件: %1\n"
+                                     "版本: v%2\n"
+                                     "设备数量: %3台\n\n"
+                                     "设备列表:\n%4")
+                                 .arg(latestFirmware)
+                                 .arg(latestVersion)
+                                 .arg(devicesToUpgrade.size())
+                                 .arg(devicesToUpgrade.join("\n"));
+
+    QMessageBox::information(this, "升级指令已发送", successMessage);
+
+    qDebug() << "=== 固件升级处理完成 ===";
 }
