@@ -38,6 +38,7 @@ void mqttclient::setConnectionParams(const QString &hostname, int port, const QS
     }
 }
 
+
 void mqttclient::connectToBroker()
 {
     qDebug() << __FUNCTION__;
@@ -90,6 +91,8 @@ void mqttclient::ADDsubscribeTopic(QString device)
 
 void mqttclient::CommandMuiltSend(QJsonObject json)
 {
+    //qDebug() << "我又不认识你" ;
+
     QJsonObject dataObj = json["data"].toObject();
     QString action = dataObj["action"].toString();
     QString sub_action = dataObj["sub_action"].toString();
@@ -132,6 +135,7 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     for (const QJsonValue &serialNumber : std::as_const(serial_numbers)) {
         QString topic = "Device/Dispatch/" + serialNumber.toString();
         QMqttTopicName topicName(topic);
+     //   qDebug() << topicName << " : " << message ;
         publishMessage(topicName, message);
     }
 }
@@ -148,7 +152,7 @@ void mqttclient::ProcessDevtSend(QJsonObject json)
 void mqttclient::onMessageReceived(const QByteArray &message, const QMqttTopicName &topic)
 {
     QJsonDocument doc = QJsonDocument::fromJson(message);
-//    qDebug() << topic << "\n" <<message;
+  //  qDebug() << topic << "\n" <<message;
     QJsonObject jsonObj = doc.object();
 
     if (!jsonObj.isEmpty()) {
@@ -200,12 +204,15 @@ DeviceStatus mqttclient::parseJsonHeartBeat(const QJsonObject& jsonObj)
     QString lastHeartbeat = jsonObj["timestamp"].toString();
     QString usedProcess = jsonObj["data"]["usedProcess"].toString();
     QString ProcessID = jsonObj["data"]["ProcessID"].toString();
+    QString HardVersion = jsonObj["data"]["firmware_version"].toString();
+
     float temp = jsonObj["data"]["temperature"].toDouble(0.0);
 
     DeviceStatus deviceStatus(serialNumber, status, location, currentAction,
                               trafficStatistics, lastHeartbeat, ip,
                               current_start, current_end, next_action,
                               next_action_start, next_action_end, usedProcess, ProcessID, temp);
+    deviceStatus.hardversion  =HardVersion;
     return deviceStatus;
 }
 

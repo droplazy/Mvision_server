@@ -929,16 +929,17 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
     for (int i = 0; i < deviceVector.size(); ++i) {
         if (deviceVector[i].serialNumber == updatedDevice.serialNumber) {
             // 更新设备信息
-            updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+          //  updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
             updatedDevice.status = "在线";
-            updatedDevice.location = "杭州";
-
+           // updatedDevice.location = "杭州";
+           // updatedDevice.printInfo();
             // 更新设备向量中的各个字段
             deviceVector[i].usedProcessID = updatedDevice.usedProcessID;
             deviceVector[i].usedProcess = updatedDevice.usedProcess;
             deviceVector[i].hardversion = updatedDevice.hardversion;
             deviceVector[i].current_end = updatedDevice.current_end;
             deviceVector[i].current_start = updatedDevice.current_start;
+            deviceVector[i].currentAction = updatedDevice.currentAction;
             deviceVector[i].ip = updatedDevice.ip;
             deviceVector[i].lastHeartbeat = updatedDevice.lastHeartbeat;
             deviceVector[i].trafficStatistics = updatedDevice.trafficStatistics;
@@ -948,6 +949,7 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
 
             // 同时保存到数据库中
             saveDeviceStatusToDatabase(deviceVector[i]);
+            emit updateDev();//发送信号到客户端界面  如果界面被打开的化
 
             return;
         }
@@ -958,10 +960,9 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
     updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     updatedDevice.status = "在线";
     updatedDevice.location = "杭州";
-
+    updatedDevice.warningmsg="新设备";
     // 添加到向量
     deviceVector.append(updatedDevice);
-
     // 保存新设备到数据库
     saveDeviceStatusToDatabase(updatedDevice);
 }

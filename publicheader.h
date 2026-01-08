@@ -140,7 +140,7 @@ struct DeviceStatus {
         jsonObj["serial_number"] = serialNumber;
         jsonObj["status"] = status;
         jsonObj["warning"] = warningmsg;
-        jsonObj["hard-version"] = hardversion;
+        jsonObj["firmware_version"] = hardversion;
 
 
         return jsonObj;
@@ -154,6 +154,8 @@ struct DeviceStatus {
         qDebug() << "Current Action: " << currentAction;
         qDebug() << "Traffic Statistics: " << trafficStatistics;
         qDebug() << "Last Heartbeat: " << lastHeartbeat;
+        qDebug() << "HardVerison: " << hardversion;
+
     }
 };
 struct Machine_Process_Single {

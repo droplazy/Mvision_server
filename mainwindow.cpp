@@ -12,6 +12,8 @@
 #include "./UIclass/userappeal.h"
 #include "./UIclass/guidetextset.h"
 #include "./UIclass/managerui.h"
+#include "./UIclass/commanddev.h"
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -401,8 +403,7 @@ void MainWindow::connectHttpToMqtt()
 
     // 使用Qt::UniqueConnection避免重复连接
     connect(p_http, &HttpServer::devCommadSend,
-            p_mqtt_cli, &mqttclient::CommandMuiltSend,
-            Qt::UniqueConnection);
+            p_mqtt_cli, &mqttclient::CommandMuiltSend);
 
     connect(p_http, &HttpServer::devProcessSend,
             p_mqtt_cli, &mqttclient::ProcessDevtSend,
@@ -569,16 +570,24 @@ void MainWindow::on_pushButton_devlist_clicked()
     qDebug() << "正在打开设备列表对话框...";
 
     // 创建并显示设备列表对话框
-    devicelistdialog *dialog = new devicelistdialog(p_db, this);
+    devicelistdialog *dialog = new devicelistdialog(p_db,&p_http->deviceVector, this);
+    // connect(p_mqtt_cli, &mqttclient::updateDeviceInfo,
+    //         dialog, &devicelistdialog::updatedeviceinfo,
+    //         Qt::AutoConnection);
+
+
+    connect(p_http, &HttpServer::updateDev,
+            dialog, &devicelistdialog::updatedeviceinfo,
+            Qt::UniqueConnection);
 
     // 设置模态对话框
     dialog->setModal(true);
 
     // 设置关闭时自动删除
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-    // 连接信号到槽函数
-    connect(dialog, &devicelistdialog::deviceListUpdated,
-            this, &MainWindow::updateHttpDeviceContainer);
+    // 更新到页面端
+    // connect(dialog, &devicelistdialog::deviceListUpdated,
+    //         this, &MainWindow::updateHttpDeviceContainer);
     // 显示对话框（模态方式）
     dialog->exec();
 
@@ -755,5 +764,39 @@ void MainWindow::on_pushButton_contorluser_clicked()
     ManagerUI *managerDialog = new ManagerUI(p_db, this);
     managerDialog->exec(); // 或者用show()显示非模态对话框
     delete managerDialog; // 对话框关闭后删除
+}
+
+
+void MainWindow::on_pushButton_cmddispatch_clicked()
+{
+    // 假设p_db和p_http是MainWindow的成员变量
+    if (!p_db || !p_http) {
+        qDebug() << "数据库或设备指针为空";
+        return;
+    }
+
+    // 创建指令分发对话框
+    commanddev *dialog = new commanddev(p_db, &p_http->deviceVector, this);
+    // 使用Qt::UniqueConnection避免重复连接
+
+    connect(dialog, &commanddev::dCommadSend,
+            p_mqtt_cli, &mqttclient::CommandMuiltSend);
+    // 显示对话框
+    if (dialog->exec() == QDialog::Accepted) {
+        // 获取生成的指令和选中的设备
+        QJsonObject command = dialog->getGeneratedCommand();
+        QList<QString> selectedDevices = dialog->getSelectedDevices();
+
+        // 这里可以处理指令发送逻辑
+        qDebug() << "指令已生成，选中的设备数:" << selectedDevices.size();
+
+        // 将指令发送给选中的设备
+        for (const QString &serial : selectedDevices) {
+            // 这里添加发送逻辑
+            qDebug() << "发送指令给设备:" << serial;
+        }
+    }
+
+    delete dialog;
 }
 

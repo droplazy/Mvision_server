@@ -63,11 +63,11 @@
      <string>用户操作（后台）</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="pushButton_close">
+   <widget class="QPushButton" name="pushButton_cmddispatch">
     <property name="geometry">
      <rect>
-      <x>120</x>
-      <y>560</y>
+      <x>230</x>
+      <y>440</y>
       <width>101</width>
       <height>31</height>
      </rect>
@@ -76,7 +76,7 @@
      <string notr="true"/>
     </property>
     <property name="text">
-     <string>关闭服务</string>
+     <string>指令下发</string>
     </property>
    </widget>
    <widget class="QPushButton" name="pushButton_smtpinfo">
@@ -114,8 +114,8 @@
    <widget class="QPushButton" name="pushButton_firmware">
     <property name="geometry">
      <rect>
-      <x>230</x>
-      <y>440</y>
+      <x>120</x>
+      <y>560</y>
       <width>101</width>
       <height>31</height>
      </rect>
@@ -477,6 +477,19 @@
       <width>141</width>
       <height>20</height>
      </rect>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_2">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>210</y>
+      <width>321</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>服务如果发生重启后至少等待30秒设备才能全部到场</string>
     </property>
    </widget>
   </widget>

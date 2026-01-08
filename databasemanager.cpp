@@ -780,13 +780,13 @@ bool DatabaseManager::deleteDevice(const QString &serial_number)
 
 QList<SQL_Device> DatabaseManager::getAllDevices()
 {
-    qDebug() << "=== DatabaseManager::getAllDevices() 开始 ===";
-    qDebug() << "数据库连接状态：" << (db.isOpen() ? "已打开" : "未打开");
+ //   qDebug() << "=== DatabaseManager::getAllDevices() 开始 ===";
+  //  qDebug() << "数据库连接状态：" << (db.isOpen() ? "已打开" : "未打开");
 
     QList<SQL_Device> devices;
     QSqlQuery query("SELECT * FROM Devices");
 
-    qDebug() << "SQL查询执行状态：" << (query.isActive() ? "活跃" : "未激活");
+  //  qDebug() << "SQL查询执行状态：" << (query.isActive() ? "活跃" : "未激活");
 
     if (!query.exec()) {
         qCritical() << "SQL查询执行失败：" << query.lastError().text();
@@ -795,7 +795,7 @@ QList<SQL_Device> DatabaseManager::getAllDevices()
         return devices;
     }
 
-    qDebug() << "SQL查询执行成功";
+//    qDebug() << "SQL查询执行成功";
 
     int count = 0;
     while (query.next()) {
@@ -814,8 +814,8 @@ QList<SQL_Device> DatabaseManager::getAllDevices()
 //        qDebug() << "读取到第" << count << "个设备：" << device.serial_number;
     }
 
-    qDebug() << "共读取到" << devices.size() << "个设备";
-    qDebug() << "=== DatabaseManager::getAllDevices() 结束 ===";
+//    qDebug() << "共读取到" << devices.size() << "个设备";
+//    qDebug() << "=== DatabaseManager::getAllDevices() 结束 ===";
 
     return devices;
 }

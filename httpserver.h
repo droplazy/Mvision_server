@@ -160,6 +160,8 @@ signals:
     void devProcessSend(QJsonObject);
     void sendemail(EmailInfo);
     void sendreqInfo(QString);
+    void updateDev();
+
 };
 
 #endif // HTTPSERVER_H

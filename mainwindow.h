@@ -49,6 +49,8 @@ private slots:
     void updateHttpDeviceContainer();
     void on_pushButton_contorluser_clicked();
 
+    void on_pushButton_cmddispatch_clicked();
+
 private:
     Ui::MainWindow *ui;
 

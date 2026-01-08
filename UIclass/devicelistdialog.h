@@ -4,7 +4,6 @@
 
 #include <QDialog>
 #include "DatabaseManager.h"
-
 namespace Ui {
 class devicelistdialog;
 }
@@ -14,18 +13,19 @@ class devicelistdialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit devicelistdialog(DatabaseManager* dbManager, QWidget *parent = nullptr);
+    explicit devicelistdialog(DatabaseManager* dbManager, QVector<DeviceStatus> *deviceVector, QWidget *parent = nullptr);
     ~devicelistdialog();
-
+public slots:
+    void updatedeviceinfo();
 private slots:
     void on_button_search_clicked();
-
     void on_button_adddev_clicked();
-
     void onDeleteButtonClicked(const QString &serialNumber);
+
 private:
     Ui::devicelistdialog *ui;
     DatabaseManager* m_dbManager;
+    QVector<DeviceStatus> *m_deviceVector;
 
     void loadDeviceList();
     void setupTableView();
@@ -33,9 +33,10 @@ private:
 
     void addDeleteButtonToRow(int row, const QString &serialNumber);  // 添加删除按钮
     void deleteDevice(const QString &serialNumber);  // 删除设备
-signals:
-    // 添加这个信号，当设备列表发生变化时发出
-    void deviceListUpdated();
+
+    // 辅助函数
+    DeviceStatus* findDeviceInVector(const QString &serialNumber);
 };
+
 
 #endif // DEVICELISTDIALOG_H

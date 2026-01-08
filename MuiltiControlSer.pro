@@ -10,6 +10,7 @@ RC_ICONS = rainbow.ico
 
 SOURCES += \
     UIclass/addproduct.cpp \
+    UIclass/commanddev.cpp \
     UIclass/commandlsit.cpp \
     UIclass/devicelistdialog.cpp \
     UIclass/firmware.cpp \
@@ -21,6 +22,7 @@ SOURCES += \
     UIclass/orderlist.cpp \
     UIclass/userappeal.cpp \
     databasemanager.cpp \
+    dialog.cpp \
     emailsender.cpp \
     httpserver.cpp \
     loghandler.cpp \
@@ -32,6 +34,7 @@ SOURCES += \
 
 HEADERS += \
     UIclass/addproduct.h \
+    UIclass/commanddev.h \
     UIclass/commandlsit.h \
     UIclass/devicelistdialog.h \
     UIclass/firmware.h \
@@ -43,6 +46,7 @@ HEADERS += \
     UIclass/orderlist.h \
     UIclass/userappeal.h \
     databasemanager.h \
+    dialog.h \
     emailsender.h \
     httpserver.h \
     loghandler.h \
@@ -53,9 +57,11 @@ HEADERS += \
     publicheader.h
 
 FORMS += \
+    UIclass/commanddev.ui \
     addproduct.ui \
     commandlsit.ui \
     devicelistdialog.ui \
+    dialog.ui \
     firmware.ui \
     guidetextset.ui \
     insertdev.ui \
