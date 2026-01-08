@@ -51,6 +51,8 @@ private slots:
 
     void on_pushButton_cmddispatch_clicked();
 
+    void on_pushButton_appcount_clicked();
+
 private:
     Ui::MainWindow *ui;
 

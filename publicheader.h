@@ -231,14 +231,14 @@ struct SQL_Device {
     QString device_status;
     QString bound_user;
     QString bound_time;
-    int tiktok;      // 新增：TikTok开关 (0=关闭, 1=开启)
-    int bilibili;    // 新增：Bilibili开关
-    int xhs;         // 新增：小红书开关
-    int weibo;       // 新增：微博开关
-    int kuaishou;    // 新增：快手开关
+    QString tiktok;      // 新增：TikTok开关 (0=关闭, 1=开启)
+    QString bilibili;    // 新增：Bilibili开关
+    QString xhs;         // 新增：小红书开关
+    QString weibo;       // 新增：微博开关
+    QString kuaishou;    // 新增：快手开关
 
     // 构造函数
-    SQL_Device() : tiktok(0), bilibili(0), xhs(0), weibo(0), kuaishou(0) {}
+    SQL_Device() : tiktok("未登录"), bilibili("未登录"), xhs("未登录"), weibo("未登录"), kuaishou("未登录") {}
 };
 struct SQL_User {
     QString username;
@@ -261,7 +261,7 @@ struct SQL_CommandHistory {
     QString completed_url ;      // 完成后的URL或资源路径
     int total_tasks ;             // 新增：总任务数
     int completed_tasks ;         // 新增：已完成任务数
-
+   int failed_tasks = 0;  // 新增失败任务数
     // 构造函数
     SQL_CommandHistory() : total_tasks (0), completed_tasks (0) {}
 

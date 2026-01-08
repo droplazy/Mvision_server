@@ -3332,9 +3332,10 @@ void HttpServer::handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArra
         qDebug() << "指令插入成功";
 
         // 8. 更新订单状态和指令ID
-        dbManager->updateOrderStatus(orderId, "execing");
+        //dbManager->updateOrderStatus(orderId, "execing");
         SQL_Order updatedOrder = existingOrder;
         updatedOrder.commandId = commandId;
+        updatedOrder.status = "execing";
         dbManager->updateOrder(updatedOrder);
 
         // 9. 更新数据库中的设备状态
@@ -3400,6 +3401,13 @@ void HttpServer::handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArra
         sendJsonResponse(clientSocket, 200, response);
 
         qDebug() << "处理完成，指令已发送";
+
+        SQL_Order info =  dbManager->getOrderById(orderId);
+
+        qDebug() << info.orderId;
+        qDebug() << info.commandId;
+        qDebug() << info.status;
+
 
     } catch (const std::exception& e) {
         qDebug() << "异常:" << e.what();

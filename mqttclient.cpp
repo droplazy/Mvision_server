@@ -186,7 +186,7 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
         // 将指令状态更新为sending或executing
         SQL_CommandHistory cmd;
         cmd.commandId = commandId;
-        cmd.status = "executing";  // 或 "sending"
+        cmd.status = "execing";  // 或 "sending"
         // 从数据库获取原有的完整数据
         SQL_CommandHistory originalCmd = dbManager->getCommandById(commandId);
         cmd.action = originalCmd.action;
@@ -427,35 +427,75 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
         return;
     }
 
-    // 更新设备应用状态
-    if (dbManager) {
-        // 更新设备社交媒体开关状态
-        bool appStatusUpdated = dbManager->updateDeviceAppStatus(serialNumber, appName, status);
-        if (appStatusUpdated) {
-            qDebug() << "设备应用状态更新成功";
+    if (!dbManager) {
+        qDebug() << "数据库管理器不可用";
+        return;
+    }
+
+    // 处理设备应用状态
+    bool appStatusUpdated = false;
+
+    if (appStatusUpdated) {
+        qDebug() << "设备应用状态更新成功";
+    } else {
+        qDebug() << "设备应用状态更新失败";
+    }
+
+    // 处理指令任务统计
+    if (!commandId.isEmpty()) {
+        if (status == "finish") {
+            // 成功任务增加
+            bool taskIncremented = dbManager->incrementCommandCompletedTasks(commandId);
+            if (taskIncremented) {
+                qDebug() << "指令成功任务数增加成功";
+
+                // 同时更新设备对应的应用字段为1
+             /*   if (appName == "抖音" || appName.toLower() == "tiktok") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "抖音", "finish");
+                } else if (appName == "BILIBILI" || appName.toLower() == "bilibili") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "BILIBILI", "finish");
+                } else if (appName == "小红书" || appName.toLower() == "xhs") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "小红书", "finish");
+                } else if (appName == "微博" || appName.toLower() == "weibo") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "微博", "finish");
+                } else if (appName == "快手" || appName.toLower() == "kuaishou") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "快手", "finish");
+                }*/
+            } else {
+                qDebug() << "指令成功任务数增加失败";
+            }
         } else {
-            qDebug() << "设备应用状态更新失败";
-        }
+            // 失败任务增加
+            bool failedIncremented = dbManager->incrementCommandFailedTasks(commandId);
+            if (failedIncremented) {
+                qDebug() << "指令失败任务数增加成功";
 
-        // 如果是完成状态，增加指令完成数
-        if (status == "finish" || status == "login_success" || status == "running") {
-            if (!commandId.isEmpty()) {
-                bool taskIncremented = dbManager->incrementCommandCompletedTasks(commandId);
-                if (taskIncremented) {
-                    qDebug() << "指令完成数增加成功";
-
-                    // 可以发送一个信号来通知界面更新
-                   // emit commandTaskUpdated(commandId);
-                } else {
-                    qDebug() << "指令完成数增加失败";
+                if(status == "unlogin")
+                {
+                    if (appName == "抖音" || appName.toLower() == "tiktok") {
+                        dbManager->updateDeviceAppStatus(serialNumber, "抖音", "未登录");
+                    } else if (appName == "BILIBILI" || appName.toLower() == "bilibili") {
+                        dbManager->updateDeviceAppStatus(serialNumber, "BILIBILI", "未登录");
+                    } else if (appName == "小红书" || appName.toLower() == "xhs") {
+                        dbManager->updateDeviceAppStatus(serialNumber, "小红书", "未登录");
+                    } else if (appName == "微博" || appName.toLower() == "weibo") {
+                        dbManager->updateDeviceAppStatus(serialNumber, "微博", "未登录");
+                    } else if (appName == "快手" || appName.toLower() == "kuaishou") {
+                        dbManager->updateDeviceAppStatus(serialNumber, "快手", "未登录");
+                    }
                 }
             } else {
-                qDebug() << "指令ID为空，跳过增加完成数";
+                qDebug() << "指令失败任务数增加失败";
             }
         }
     } else {
-        qDebug() << "数据库管理器不可用";
+        qDebug() << "指令ID为空，跳过任务统计";
     }
+
+    // 可选：发送信号通知界面更新
+    // if (!commandId.isEmpty()) {
+    //     emit commandTaskUpdated(commandId);
+    // }
 
     qDebug() << "=== 应用状态消息处理完成 ===";
 }

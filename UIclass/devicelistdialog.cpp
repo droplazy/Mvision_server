@@ -676,7 +676,16 @@ bool devicelistdialog::insertDevice(const QString &serialNumber, const QString &
     newDevice.kuaishou = 0;    // 默认关闭
 
     // 插入数据库
-    return m_dbManager->insertDevice(newDevice);
+    bool ret = m_dbManager->insertDevice(newDevice);
+    if(ret)
+    {
+        emit NewDeviceCallED(serialNumber);
+        return true;
+    }
+
+    return false;
+
+
 }
 // 获取最新固件版本
 QString devicelistdialog::getLatestFirmwareVersion()

@@ -13,7 +13,7 @@
 #include "./UIclass/guidetextset.h"
 #include "./UIclass/managerui.h"
 #include "./UIclass/commanddev.h"
-
+#include "./UIclass/appacount.h"
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -580,6 +580,9 @@ void MainWindow::on_pushButton_devlist_clicked()
             dialog, &devicelistdialog::updatedeviceinfo,
             Qt::UniqueConnection);
 
+    connect(dialog, &devicelistdialog::NewDeviceCallED,
+            p_mqtt_cli, &mqttclient::ADDsubscribeTopic,
+            Qt::UniqueConnection);
     // 设置模态对话框
     dialog->setModal(true);
 
@@ -798,5 +801,14 @@ void MainWindow::on_pushButton_cmddispatch_clicked()
     }
 
     delete dialog;
+}
+
+
+void MainWindow::on_pushButton_appcount_clicked()
+{
+    appacount *p_appacount = new appacount(p_db, this);
+    p_appacount->setAttribute(Qt::WA_DeleteOnClose);  // 关闭时自动删除
+    p_appacount->exec();  // 模态显示
+
 }
 

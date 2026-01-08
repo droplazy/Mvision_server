@@ -190,10 +190,17 @@ public:
     bool validateToken(const QString &token);
     bool saveUserToken(const QString &username, const QString &token);
     bool updateCommandTasks(const QString &commandId, int totalTasks, int completedTasks);
-    bool updateDeviceSocialMedia(const QString &serialNumber, int tiktok, int bilibili, int xhs, int weibo, int kuaishou);
-    QMap<QString, int> getDeviceSocialMedia(const QString &serialNumber);
+    QMap<QString, QString> getDeviceSocialMedia(const QString &serialNumber);
     bool incrementCommandCompletedTasks(const QString &commandId);
     bool updateDeviceAppStatus(const QString &serialNumber, const QString &appName, const QString &status);
+    bool updateCommandTaskStatistics(const QString &commandId);
+    bool incrementCommandFailedTasks(const QString &commandId);
+    bool updateCommandStatus(const QString &commandId);
+    // DatabaseManager.h 中添加
+    bool updateOrderStatusByCommandId(const QString &commandId, const QString &commandStatus);
+    bool updateOrderStatusByCommandId2(const QString &commandId, const QString &commandStatus);
+    QString mapCommandStatusToOrderStatus(const QString &commandStatus);
+    bool updateDeviceSocialMedia(const QString &serialNumber, const QString &tiktok, const QString &bilibili, const QString &xhs, const QString &weibo, const QString &kuaishou);
 private:
     QSqlDatabase db;
 

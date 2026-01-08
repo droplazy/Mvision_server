@@ -44,6 +44,8 @@ private:
     int compareVersions(const QString &v1, const QString &v2);
 signals:
     void deviceUpgrade(QStringList upgradeList);  // 新增：设备升级信号，第一个元素是固件文件名，后面是设备列表
+    void NewDeviceCallED(QString);
+
 };
 
 

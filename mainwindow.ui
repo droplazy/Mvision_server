@@ -273,7 +273,7 @@
      </rect>
     </property>
    </widget>
-   <widget class="QPushButton" name="pushButton_mqtt">
+   <widget class="QPushButton" name="pushButton_appcount">
     <property name="geometry">
      <rect>
       <x>10</x>
@@ -286,7 +286,7 @@
      <string notr="true"/>
     </property>
     <property name="text">
-     <string>MQTT配置</string>
+     <string>APP账号管理</string>
     </property>
    </widget>
    <widget class="QLabel" name="label_6">

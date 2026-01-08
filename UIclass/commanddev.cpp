@@ -561,7 +561,7 @@ void commanddev::on_pushButton_command_clicked()
             // 指令插入失败，回滚订单状态到原来的状态
             if (!orderId.isEmpty()) {
                 SQL_Order existingOrder = m_db->getOrderById(orderId);
-                m_db->updateOrderStatus(orderId, existingOrder.status);
+                m_db->updateOrderStatus(orderId, "paid");
                 qDebug() << "订单状态已回滚到:" << existingOrder.status;
             }
 
