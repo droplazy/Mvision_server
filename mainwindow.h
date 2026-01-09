@@ -27,30 +27,17 @@ public slots:
     void updateNewrqeInfo(QString info);
 private slots:
     void on_pushButton_devlist_clicked();
-
     void on_pushButton_cmdquery_clicked();
-
     void on_pushButton_firmware_clicked();
-
     void on_pushButton_malluser_clicked();
-
     void on_pushButton_products_clicked();
-
     void on_pushButton_order_clicked();
-
     void on_pushButton_appeal_clicked();
-
     void on_pushButton_webUI_clicked();
-
-    //void on_pushButton_openhttp_clicked();
-
     void on_pushButton_openmqtt_clicked();
-
     void updateHttpDeviceContainer();
     void on_pushButton_contorluser_clicked();
-
     void on_pushButton_cmddispatch_clicked();
-
     void on_pushButton_appcount_clicked();
 
 private:
@@ -82,5 +69,6 @@ private:
     void disconnectMqttClientSignals();
     void connectHttpSignals();
     void enableNetworkControls(bool enable);
+    void insertCommandFromJson(const QString &jsonString);
 };
 #endif // MAINWINDOW_H

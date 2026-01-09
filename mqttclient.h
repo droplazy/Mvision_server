@@ -33,6 +33,7 @@ public slots:
     void reconnectBroker();  // 重新连接
     void devUpgrade(QStringList devList);
 
+    void SingleTopicPub(QString topic, QString msg);
 private slots:
     void onMessageReceived(const QByteArray &message, const QMqttTopicName &topic);
     void onStateChanged(QMqttClient::ClientState state);
@@ -52,9 +53,12 @@ private:
 
     bool verifyDeviceChecksum(const QString &serialNumber, const QString &verificationCode);
     void handleApplicationStatus(const QJsonObject &jsonObj);
+    QString extractAccountUsingSplit(const QString &remark);
 signals:
     void updateDeviceInfo(DeviceStatus);
     void mqttclientconnted(bool);
+    void applogginstatus(QString commid,bool);
+
 };
 
 #endif // MQTTCLIENT_H

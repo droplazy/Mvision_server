@@ -13,11 +13,6 @@ class applogin2 : public QDialog
     Q_OBJECT
 
 public:
-    // 构造函数，接收设备号、平台名称和当前状态
-    explicit applogin2(const QString& deviceSerial,
-                       const QString& platformName,
-                       const QString& currentStatus,
-                       QWidget *parent = nullptr);
     ~applogin2();
 
     // 获取用户输入的信息
@@ -25,20 +20,17 @@ public:
     QString getPassword() const;
     QString getVerifyCode() const;
 
+    // 6. 生成指令ID
+    QString  m_commandId;
+    applogin2(const QString &deviceSerial, const QString &platformName, const QString &currentStatus, const QString &commandId, QWidget *parent);
+
 signals:
-    // 信号：当登录按钮被点击时发射
-    void loginRequested(const QString& deviceSerial,
-                        const QString& platformName,
-                        const QString& account,
-                        const QString& password,
-                        const QString& verifyCode);
+    void sendJsonToMQTT(const QString& deviceSerial,
+                        const QString& JSON);
 
-    // 信号：当发送验证码按钮被点击时发射
-    void sendCodeRequested(const QString& deviceSerial,
-                           const QString& platformName,
-                           const QString& account,
-                           const QString& password);
+public slots:
 
+    void onLoginResultReceived(const QString& commandId, const QString& status, const QString& message);
 private slots:
     void on_pushButton_loggin_clicked();
     void on_pushButton_sendcode_clicked();
@@ -48,9 +40,15 @@ private:
     QString m_deviceSerial;    // 设备号
     QString m_platformName;    // 平台名称
     QString m_currentStatus;   // 当前状态
+    QString m_account;         // 保存账号，用于结果显示
 
     // 初始化UI
     void initUI();
+    QString getCurrentTimestamp() const;
+
+    // 生成JSON的辅助函数
+    QString generateSendCodeJson(const QString& account);
+    QString generateLoginJson(const QString& account, const QString& verifyCode);
 };
 
 #endif // APPLOGIN2_H

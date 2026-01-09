@@ -6,6 +6,7 @@
 #include <QMessageBox>
 #include <QTableWidgetItem>
 #include "applogin2.h"
+
 // 构造函数，接收数据库指针
 appacount::appacount(DatabaseManager* dbManager, QWidget *parent)
     : QDialog(parent)
@@ -81,6 +82,20 @@ void appacount::loadAllDevices()
     // 遍历设备并添加到表格
     for (const SQL_Device& device : devices) {
         addDeviceToTable(device);
+    }
+}
+
+// 刷新表格数据
+void appacount::refreshTableData()
+{
+    QString searchText = ui->lineEdit_search->text().trimmed();
+
+    if (searchText.isEmpty()) {
+        // 如果搜索框为空，加载所有设备
+        loadAllDevices();
+    } else {
+        // 如果有搜索文本，重新执行搜索
+        on_pushButton_search_clicked();
     }
 }
 
@@ -183,9 +198,28 @@ void appacount::on_pushButton_search_clicked()
         }
     }
 }
-// 添加双击单元格事件处理函数（在文件末尾添加）
 
-
+// 更新设备状态
+void appacount::updateDeviceStatus(const QString& deviceSerial, int platformColumn, const QString& newStatus)
+{
+    // 查找设备所在行
+    for (int row = 0; row < ui->tableWidget->rowCount(); row++) {
+        QTableWidgetItem* serialItem = ui->tableWidget->item(row, 0);
+        if (serialItem && serialItem->text() == deviceSerial) {
+            // 找到设备，更新对应平台的状态
+            QTableWidgetItem* statusItem = ui->tableWidget->item(row, platformColumn);
+            if (statusItem) {
+                statusItem->setText(newStatus);
+                statusItem->setForeground(getStatusColor(newStatus));
+                qDebug() << QString("更新设备状态: %1, 平台列: %2, 新状态: %3")
+                                .arg(deviceSerial)
+                                .arg(platformColumn)
+                                .arg(newStatus);
+            }
+            break;
+        }
+    }
+}
 
 void appacount::on_tableWidget_cellDoubleClicked(int row, int column)
 {
@@ -197,13 +231,31 @@ void appacount::on_tableWidget_cellDoubleClicked(int row, int column)
 
     // 获取列名（平台名称）
     QString platformName = "";
+    int platformColumn = -1;
     switch(column) {
-    case 1: platformName = "TikTok"; break;
-    case 2: platformName = "Bilibili"; break;
-    case 3: platformName = "小红书"; break;
-    case 4: platformName = "微博"; break;
-    case 5: platformName = "快手"; break;
-    default: platformName = "设备信息"; break;
+    case 1:
+        platformName = "TikTok";
+        platformColumn = 1;
+        break;
+    case 2:
+        platformName = "Bilibili";
+        platformColumn = 2;
+        break;
+    case 3:
+        platformName = "小红书";
+        platformColumn = 3;
+        break;
+    case 4:
+        platformName = "微博";
+        platformColumn = 4;
+        break;
+    case 5:
+        platformName = "快手";
+        platformColumn = 5;
+        break;
+    default:
+        platformName = "设备信息";
+        break;
     }
 
     // 获取当前单元格的状态
@@ -226,39 +278,80 @@ void appacount::on_tableWidget_cellDoubleClicked(int row, int column)
     }
 
     // 创建并显示登录对话框
-    currentDialog = new applogin2(deviceSerial, platformName, currentStatus, this);
+    QString commandId = QString("CMD_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz"));
+
+    currentDialog = new applogin2(deviceSerial, platformName, currentStatus, commandId, this);
     currentDialog->setAttribute(Qt::WA_DeleteOnClose);  // 关闭时自动删除
 
-    // 连接信号（如果需要处理）
-    connect(currentDialog, &applogin2::loginRequested,
-            [this, deviceSerial, platformName](const QString& device,
-                                               const QString& platform,
-                                               const QString& account,
-                                               const QString& password,
-                                               const QString& verifyCode) {
-                qDebug() << "收到登录请求信号:";
-                qDebug() << "设备:" << device;
-                qDebug() << "平台:" << platform;
-                qDebug() << "账号:" << account;
-                qDebug() << "验证码:" << verifyCode;
+    // 保存对话框指针到映射中
+    m_loginDialogs[commandId] = currentDialog;
 
-                // 这里可以添加实际的登录处理逻辑
-                // 例如: 更新数据库、调用API等
+    // 保存命令ID与设备号、平台列的映射
+    if (platformColumn != -1) {
+        m_commandDeviceMap[commandId] = QString("%1|%2").arg(deviceSerial).arg(platformColumn);
+    }
+
+    // 连接信号 - 新增的JSON发送信号
+    connect(currentDialog, &applogin2::sendJsonToMQTT,
+            [this](const QString& device, const QString& jsonString) {
+                qDebug() << "收到JSON发送信号:";
+                qDebug() << "设备:" << device;
+                qDebug() << "JSON:" << jsonString;
+
+                // 转发信号给MainWindow
+                emit forwardJsonToMQTT(device, jsonString);
             });
 
-    connect(currentDialog, &applogin2::sendCodeRequested,
-            [this, deviceSerial, platformName](const QString& device,
-                                               const QString& platform,
-                                               const QString& account,
-                                               const QString& password) {
-                qDebug() << "收到发送验证码请求信号:";
-                qDebug() << "设备:" << device;
-                qDebug() << "平台:" << platform;
-                qDebug() << "账号:" << account;
-
-                // 这里可以添加实际的验证码发送逻辑
-            });
+    // 连接登录结果信号
+    connect(currentDialog, &applogin2::destroyed, [this, commandId]() {
+        // 对话框销毁时从映射中移除
+        m_loginDialogs.remove(commandId);
+        m_commandDeviceMap.remove(commandId);
+    });
 
     // 非模态显示
     currentDialog->show();
+}
+
+// 修改接收登录结果的槽函数
+void appacount::onAppLoginStatusReceived(const QString& commandId, bool success)
+{
+    qDebug() << "appacount收到登录结果 - 命令ID:" << commandId
+             << "成功:" << success;
+
+    // 查找对应的登录对话框
+    if (m_loginDialogs.contains(commandId)) {
+        QPointer<applogin2> dialog = m_loginDialogs[commandId];
+        if (dialog) {
+            // 根据布尔值转换状态信息
+            QString status = success ? "success" : "failed";
+            QString message = success ? "登录成功" : "登录失败";
+
+            // 转发结果给登录对话框
+            dialog->onLoginResultReceived(commandId, status, message);
+
+            // 如果登录成功，更新表格中的状态
+            if (success && m_commandDeviceMap.contains(commandId)) {
+                QString deviceInfo = m_commandDeviceMap[commandId];
+                QStringList parts = deviceInfo.split("|");
+                if (parts.size() == 2) {
+                    QString deviceSerial = parts[0];
+                    int platformColumn = parts[1].toInt();
+
+                    // 更新表格中该设备对应平台的状态为"已登录"
+                    updateDeviceStatus(deviceSerial, platformColumn, "已登录");
+
+                    // 同时从数据库重新加载数据以确保数据一致性
+                    QTimer::singleShot(100, this, [this]() {
+                        refreshTableData();
+                        qDebug() << "登录成功，刷新表格数据";
+                    });
+                }
+            }
+        } else {
+            // 对话框已销毁，从映射中移除
+            m_loginDialogs.remove(commandId);
+            m_commandDeviceMap.remove(commandId);
+        }
+    }
 }

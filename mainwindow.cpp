@@ -808,7 +808,141 @@ void MainWindow::on_pushButton_appcount_clicked()
 {
     appacount *p_appacount = new appacount(p_db, this);
     p_appacount->setAttribute(Qt::WA_DeleteOnClose);  // 关闭时自动删除
-    p_appacount->exec();  // 模态显示
 
+    // 连接信号链
+    connect(p_appacount, &appacount::forwardJsonToMQTT,
+            this, [this](const QString& deviceSerial, const QString& jsonString) {
+                // 直接调用mqttclient的SingleTopicPub函数
+        insertCommandFromJson(jsonString);
+                if (p_mqtt_cli) {
+                    p_mqtt_cli->SingleTopicPub(deviceSerial, jsonString);
+                }
+            });
+    connect(p_mqtt_cli,&mqttclient::applogginstatus,p_appacount,&appacount::onAppLoginStatusReceived);
+    p_appacount->exec();  // 模态显示
 }
 
+// 从JSON中解析命令信息并插入数据库
+void MainWindow::insertCommandFromJson(const QString& jsonString)
+{
+    if (!p_db) {
+        qDebug() << "数据库指针为空，无法插入命令历史";
+        return;
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonString.toUtf8(), &parseError);
+
+    if (parseError.error != QJsonParseError::NoError) {
+        qDebug() << "JSON解析错误:" << parseError.errorString();
+        return;
+    }
+
+    if (!jsonDoc.isObject()) {
+        qDebug() << "JSON不是对象";
+        return;
+    }
+
+    QJsonObject jsonObj = jsonDoc.object();
+
+    // 解析command_id，可以从根对象或data对象中获取
+    QString commandId = "";
+    if (jsonObj.contains("command_id")) {
+        commandId = jsonObj["command_id"].toString();
+    } else if (jsonObj.contains("data")) {
+        QJsonObject dataObj = jsonObj["data"].toObject();
+        if (dataObj.contains("command_id")) {
+            commandId = dataObj["command_id"].toString();
+        }
+    }
+
+    if (commandId.isEmpty()) {
+        qDebug() << "未找到command_id，跳过数据库插入";
+        return;
+    }
+
+    // 解析其他字段
+    QString action = "";
+    QString subAction = "";
+    QString startTime = "00:00:00";
+    QString endTime = "23:59:59";
+    QString remark = "";
+    QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+
+    if (jsonObj.contains("data")) {
+        QJsonObject dataObj = jsonObj["data"].toObject();
+
+        if (dataObj.contains("action")) {
+            action = dataObj["action"].toString();
+        }
+
+        if (dataObj.contains("sub_action")) {
+            subAction = dataObj["sub_action"].toString();
+        }
+
+        if (dataObj.contains("start_time")) {
+            startTime = dataObj["start_time"].toString();
+        }
+
+        if (dataObj.contains("end_time")) {
+            endTime = dataObj["end_time"].toString();
+        }
+
+        if (dataObj.contains("remark")) {
+            remark = dataObj["remark"].toString();
+        }
+    }
+
+    // 如果从data中没找到，尝试从根对象中查找
+    if (action.isEmpty() && jsonObj.contains("action")) {
+        action = jsonObj["action"].toString();
+    }
+
+    if (subAction.isEmpty() && jsonObj.contains("sub_action")) {
+        subAction = jsonObj["sub_action"].toString();
+    }
+
+    // 获取时间戳
+    if (jsonObj.contains("timestamp")) {
+        QString isoTime = jsonObj["timestamp"].toString();
+        // 尝试将ISO时间转换为标准格式
+        QDateTime dt = QDateTime::fromString(isoTime, Qt::ISODate);
+        if (dt.isValid()) {
+            timestamp = dt.toString("yyyy-MM-dd hh:mm:ss");
+        }
+    }
+
+    qDebug() << "=== 解析JSON并准备插入数据库 ===";
+    qDebug() << "命令ID:" << commandId;
+    qDebug() << "动作:" << action;
+    qDebug() << "子动作:" << subAction;
+    qDebug() << "开始时间:" << startTime;
+    qDebug() << "结束时间:" << endTime;
+    qDebug() << "备注:" << remark;
+    qDebug() << "时间戳:" << timestamp;
+    qDebug() << "原始JSON:" << jsonString;
+
+    // 创建SQL_CommandHistory对象
+    SQL_CommandHistory commandHistory;
+    commandHistory.commandId = commandId;
+    commandHistory.status = "执行中";  // 固定为"执行中"
+    commandHistory.action = action;
+    commandHistory.sub_action = subAction;
+    commandHistory.start_time = startTime;
+    commandHistory.end_time = endTime;
+    commandHistory.remark = remark;
+    commandHistory.completeness = "0%";  // 初始完成度
+    commandHistory.completed_url = "";
+    commandHistory.total_tasks = 1;
+    commandHistory.completed_tasks = 0;
+    commandHistory.failed_tasks = 0;
+
+    // 插入数据库
+    bool success = p_db->insertCommandHistory(commandHistory);
+
+    if (success) {
+        qDebug() << "命令历史记录插入成功";
+    } else {
+        qDebug() << "命令历史记录插入失败";
+    }
+}

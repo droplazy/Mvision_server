@@ -88,7 +88,20 @@ void mqttclient::ADDsubscribeTopic(QString device)
     topicList.append(topic);
     subscribeToTopic(topic);
 }
+void mqttclient::SingleTopicPub(QString deviceSerial ,QString msg)
+{
+    QString topic = "Device/Dispatch/" + deviceSerial;
+    QByteArray message = msg.toUtf8();
+    QMqttTopicName topicName(topic);
 
+    if (mqttClient->state() == QMqttClient::Connected) {
+        qDebug()<<topicName << "::  " << message;
+        mqttClient->publish(topicName, message, 0, false);
+
+    } else {
+        qDebug() << "Failed to publish message, MQTT client is not connected.";
+    }
+}
 void mqttclient::CommandMuiltSend(QJsonObject json)
 {
     qDebug() << "=== 开始转发指令到多个设备 ===";
@@ -400,6 +413,24 @@ void mqttclient::run()
         sleep(1);
     }
 }
+QString mqttclient::extractAccountUsingSplit(const QString& remark)
+{
+    // 按空格分割字符串
+    QStringList parts = remark.split(" ", Qt::SkipEmptyParts);
+
+    for (const QString& part : parts) {
+        // 查找以"ID:"开头且包含":ID"的部分
+        if (part.startsWith("ID:") && part.contains(":ID")) {
+            // 去掉开头的"ID:"和结尾的":ID"
+            QString account = part.mid(3);  // 去掉"ID:"
+            account = account.left(account.length() - 3);  // 去掉":ID"
+            return account;
+        }
+    }
+
+    return "";
+}
+
 void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
 {
     qDebug() << "=== 处理应用状态消息 ===";
@@ -432,35 +463,33 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
         return;
     }
 
-    // 处理设备应用状态
-    bool appStatusUpdated = false;
-
-    if (appStatusUpdated) {
-        qDebug() << "设备应用状态更新成功";
-    } else {
-        qDebug() << "设备应用状态更新失败";
-    }
-
     // 处理指令任务统计
     if (!commandId.isEmpty()) {
         if (status == "finish") {
+           SQL_CommandHistory cmd =  dbManager->getCommandById(commandId);
+            qDebug() << "查看一下remark:" << cmd.remark;
+           if(cmd.remark.contains("MARK:LOGGIN_APP:MARK"))
+            {
+                QString account = extractAccountUsingSplit(cmd.remark);
+                   if (appName == "抖音" || appName.toLower() == "tiktok") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "抖音", account);
+                } else if (appName == "BILIBILI" || appName.toLower() == "bilibili") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "BILIBILI", account);
+                } else if (appName == "小红书" || appName.toLower() == "xhs") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "小红书", account);
+                } else if (appName == "微博" || appName.toLower() == "weibo") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "微博", account);
+                } else if (appName == "快手" || appName.toLower() == "kuaishou") {
+                    dbManager->updateDeviceAppStatus(serialNumber, "快手", account);
+                }
+                emit applogginstatus(commandId,true);
+           }
             // 成功任务增加
             bool taskIncremented = dbManager->incrementCommandCompletedTasks(commandId);
             if (taskIncremented) {
                 qDebug() << "指令成功任务数增加成功";
 
-                // 同时更新设备对应的应用字段为1
-             /*   if (appName == "抖音" || appName.toLower() == "tiktok") {
-                    dbManager->updateDeviceAppStatus(serialNumber, "抖音", "finish");
-                } else if (appName == "BILIBILI" || appName.toLower() == "bilibili") {
-                    dbManager->updateDeviceAppStatus(serialNumber, "BILIBILI", "finish");
-                } else if (appName == "小红书" || appName.toLower() == "xhs") {
-                    dbManager->updateDeviceAppStatus(serialNumber, "小红书", "finish");
-                } else if (appName == "微博" || appName.toLower() == "weibo") {
-                    dbManager->updateDeviceAppStatus(serialNumber, "微博", "finish");
-                } else if (appName == "快手" || appName.toLower() == "kuaishou") {
-                    dbManager->updateDeviceAppStatus(serialNumber, "快手", "finish");
-                }*/
+
             } else {
                 qDebug() << "指令成功任务数增加失败";
             }
@@ -469,6 +498,13 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
             bool failedIncremented = dbManager->incrementCommandFailedTasks(commandId);
             if (failedIncremented) {
                 qDebug() << "指令失败任务数增加成功";
+                SQL_CommandHistory cmd =  dbManager->getCommandById(commandId);
+                if(cmd.remark.contains("MARK:LOGGIN_APP:MARK"))
+                {
+                    emit applogginstatus(commandId,false);
+
+                }
+
 
                 if(status == "unlogin")
                 {
