@@ -26,7 +26,8 @@ HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent)
     createAppealDirectoryIfNeeded();
     // 初始化订单超时定时器
     initOrderTimer();
-
+    // 初始化定时器
+    initTimer();
     qDebug() << "HttpServer initialized with pending order container";
 }
 
@@ -972,6 +973,7 @@ void HttpServer::saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus)
 
     // 将 DeviceStatus 转换为 SQL_Device
     SQL_Device sqlDevice;
+  //  sqlDevice =
     sqlDevice.serial_number = deviceStatus.serialNumber;
     sqlDevice.checksum = deviceStatus.checksum;
 
@@ -987,8 +989,12 @@ void HttpServer::saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus)
     SQL_Device existingDevice = dbManager->getDeviceBySerialNumber(deviceStatus.serialNumber);
     if (!existingDevice.serial_number.isEmpty()) {
         // 如果设备已存在，保留原有的绑定信息
-        sqlDevice.bound_user = existingDevice.bound_user;
-        sqlDevice.bound_time = existingDevice.bound_time;
+        sqlDevice.tiktok = existingDevice.tiktok;
+        sqlDevice.bilibili = existingDevice.bilibili;
+        sqlDevice.kuaishou = existingDevice.kuaishou;
+
+        sqlDevice.xhs = existingDevice.xhs;
+        sqlDevice.weibo = existingDevice.weibo;
     } else {
         // 新设备，设置默认值或留空
         sqlDevice.bound_user = "";
@@ -5621,5 +5627,93 @@ void HttpServer::handleCreateProductDebug()
     qDebug() << "创建的商品目录数量: " << productDirs.size();
     for (const QString &dir : productDirs) {
         qDebug() << "  - " << dir;
+    }
+}
+// 初始化定时器
+void HttpServer::initTimer()
+{
+    m_tenSecondTimer = new QTimer(this);
+    m_tenSecondTimer->setInterval(10000);  // 10秒 = 10000毫秒
+
+    // 连接定时器信号到槽函数
+    connect(m_tenSecondTimer, &QTimer::timeout,
+            this, &HttpServer::tenSecondTimerFunction);
+
+    // 启动定时器
+    m_tenSecondTimer->start();
+}
+void HttpServer::tenSecondTimerFunction()
+{
+    QDateTime currentTime = QDateTime::currentDateTime();
+
+    for (int i = 0; i < deviceVector.size(); ++i) {
+        DeviceStatus &device = deviceVector[i];
+
+        // 心跳为"未知"直接离线
+        if (device.lastHeartbeat == "未知" || device.lastHeartbeat.isEmpty()) {
+            if (device.status != "离线") {
+                markDeviceOffline(device);
+            }
+            continue;
+        }
+
+        // 解析时间（设备发的是本地时间）
+        QDateTime heartbeatTime = parseHeartbeatTime(device.lastHeartbeat);
+        if (!heartbeatTime.isValid()) {
+            if (device.status != "离线") {
+                markDeviceOffline(device);
+            }
+            continue;
+        }
+
+        // 计算时间差
+        int secondsDiff = heartbeatTime.secsTo(currentTime);
+
+
+
+        // 超过35秒标记离线
+        if (secondsDiff > 35) {
+            if (device.status != "离线") {
+                markDeviceOffline(device);
+            }
+        }
+    }
+}
+QDateTime HttpServer::parseHeartbeatTime(const QString &timeStr)
+{
+    // 处理 "2026-01-09T16:39:27Z" 格式（实际上是本地时间）
+    if (timeStr.endsWith('Z')) {
+        QString cleaned = timeStr;
+        cleaned.chop(1);  // 去掉Z
+        cleaned.replace('T', ' ');  // 把T换成空格
+
+        // 直接解析为本地时间，不加时区转换
+        QDateTime result = QDateTime::fromString(cleaned, "yyyy-MM-dd HH:mm:ss");
+        if (result.isValid()) {
+            return result;
+        }
+    }
+
+    // 其他格式
+    QDateTime time = QDateTime::fromString(timeStr, Qt::ISODate);
+    if (time.isValid()) return time;
+
+    time = QDateTime::fromString(timeStr, "yyyy-MM-dd HH:mm:ss");
+    if (time.isValid()) return time;
+
+    return QDateTime();
+}
+// 辅助函数：标记设备离线
+void HttpServer::markDeviceOffline(DeviceStatus &device)
+{
+    device.status = "离线";
+
+
+    // 更新数据库
+    SQL_Device sql_d = dbManager->getDeviceBySerialNumber(device.serialNumber);
+    if (!sql_d.serial_number.isEmpty()) {
+        sql_d.device_status = "离线";
+        sql_d.ip_address = device.ip;
+        dbManager->updateDevice(sql_d);
     }
 }

@@ -39,7 +39,8 @@ private slots:
     void cleanupExpiredCodes();                    // 清理过期验证码
 public slots:
     void onDeviceUpdata(DeviceStatus updatedDevice);
-
+    // 十秒定时函数
+    void tenSecondTimerFunction(); //todo 设备上报时间格式有错误
 private:
     void handleGetOrderQuery(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handlePostDeviceProcess(QTcpSocket *clientSocket, const QByteArray &body);
@@ -68,8 +69,9 @@ private:
     QJsonObject generateJsonHearResponse(const QJsonObject &data);
     void generateTextData();
 
-
-
+    // 初始化定时器
+    void initTimer();
+    QTimer *m_tenSecondTimer;  // 十秒定时器
     Machine_Process_Total *findProcessById(QVector<Machine_Process_Total> &processes, const QString &id);
     QJsonObject generateProcessResponse(const QJsonArray &data);
     QJsonObject generateProcessSingleResponse(const QJsonObject &data);
@@ -154,6 +156,8 @@ private:
   //  bool checkVerificationCodeFrequency(const QString &username, const QString &email, int minIntervalSeconds);
     void sendUnauthorized(QTcpSocket *clientSocket);
     void saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus);
+    void markDeviceOffline(DeviceStatus &device);
+    QDateTime parseHeartbeatTime(const QString &timeStr);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

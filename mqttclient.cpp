@@ -23,6 +23,14 @@ mqttclient::mqttclient(DatabaseManager *db,
     for (const SQL_Device &device : std::as_const(devices)) {
         ADDsubscribeTopic(device.serial_number);
     }
+    // // 初始化定时器
+    // initTimer();
+
+    // 连接信号槽
+    connect(mqttClient, &QMqttClient::messageReceived,
+            this, &mqttclient::onMessageReceived);
+    connect(mqttClient, &QMqttClient::stateChanged,
+            this, &mqttclient::onStateChanged);
 }
 
 void mqttclient::setConnectionParams(const QString &hostname, int port, const QString &clientId)
@@ -564,4 +572,23 @@ bool mqttclient::verifyDeviceChecksum(const QString &serialNumber, const QString
     }
 
     return isValid;
+}
+// 初始化定时器
+void mqttclient::initTimer()
+{
+    m_tenSecondTimer = new QTimer(this);
+    m_tenSecondTimer->setInterval(10000);  // 10秒 = 10000毫秒
+
+    // 连接定时器信号到槽函数
+    connect(m_tenSecondTimer, &QTimer::timeout,
+            this, &mqttclient::tenSecondTimerFunction);
+
+    // 启动定时器
+    m_tenSecondTimer->start();
+}
+
+// 十秒定时函数
+void mqttclient::tenSecondTimerFunction()
+{
+
 }

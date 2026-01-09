@@ -10,6 +10,8 @@
 #include <QString>
 #include <QDebug>
 #include <databasemanager.h>
+#include <QTimer>
+
 
 class mqttclient : public QThread
 {
@@ -32,7 +34,8 @@ public slots:
     void ProcessDevtSend(QJsonObject json);
     void reconnectBroker();  // 重新连接
     void devUpgrade(QStringList devList);
-
+    // 十秒定时函数
+    void tenSecondTimerFunction();
     void SingleTopicPub(QString topic, QString msg);
 private slots:
     void onMessageReceived(const QByteArray &message, const QMqttTopicName &topic);
@@ -44,7 +47,9 @@ private:
     QString m_hostname;
     int m_port;
     QString m_clientId;
-
+    // 初始化定时器
+        QTimer *m_tenSecondTimer;  // 十秒定时器
+    void initTimer();
     void subscribeToTopic(QString topic);
     void subscribeALLTopic();
     DeviceStatus parseJsonHeartBeat(const QJsonObject &jsonObj);

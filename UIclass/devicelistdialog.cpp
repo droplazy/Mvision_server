@@ -765,8 +765,8 @@ void devicelistdialog::updateVersionLabel()
         ui->label_lastversion->setText(QString("最新版本: v%1").arg(versionNumber));
         ui->label_lastversion->setStyleSheet("color: green;");
 
-        qDebug() << "最新固件文件:" << latestFirmware;
-        qDebug() << "版本号:" << versionNumber;
+        // qDebug() << "最新固件文件:" << latestFirmware;
+        // qDebug() << "版本号:" << versionNumber;
     }
 }
 
