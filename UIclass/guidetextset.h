@@ -1,14 +1,14 @@
 #ifndef GUIDETEXTSET_H
 #define GUIDETEXTSET_H
 
-#include <QDialog>
+#include <QWidget>
 #include <QString>
 
 namespace Ui {
 class guidetextset;
 }
 
-class guidetextset : public QDialog
+class guidetextset : public QWidget
 {
     Q_OBJECT
 

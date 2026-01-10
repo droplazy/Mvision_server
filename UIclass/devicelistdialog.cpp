@@ -11,7 +11,7 @@
 #include <QFileInfo>
 #include <QDir>
 devicelistdialog::devicelistdialog(DatabaseManager* dbManager, QVector<DeviceStatus> *deviceVector, QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
     , ui(new Ui::devicelistdialog)
     , m_dbManager(dbManager)
     , m_deviceVector(deviceVector)

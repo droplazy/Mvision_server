@@ -27,11 +27,15 @@ private slots:
 private:
     Ui::firmware *ui;
 
+    int compareVersions(const QString &version1, const QString &version2);
     void checkExistingFirmware();  // 检查现有固件
     bool copyFirmwareFile(const QString &sourcePath, const QString &version);  // 复制固件文件
     bool isValidVersion(const QString &version);  // 验证版本号格式
     bool isValidFirmwareFile(const QString &filePath);  // 验证固件文件
     QString generateFirmwareFilename(const QString &version);  // 生成固件文件名
+    void extractVersionFromFilename(const QString &filePath);
+    bool eventFilter(QObject *watched, QEvent *event);
+    QString getLatestFirmwareVersion();
 };
 
 #endif // FIRMWARE_H

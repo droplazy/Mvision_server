@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>orderlist</class>
- <widget class="QDialog" name="orderlist">
+ <widget class="QWidget" name="orderlist">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>872</width>
+    <width>1000</width>
     <height>587</height>
    </rect>
   </property>
@@ -41,7 +41,7 @@
     <rect>
      <x>10</x>
      <y>60</y>
-     <width>851</width>
+     <width>991</width>
      <height>521</height>
     </rect>
    </property>

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>ManagerUI</class>
- <widget class="QDialog" name="ManagerUI">
+ <widget class="QWidget" name="ManagerUI">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>843</width>
-    <height>623</height>
+    <width>1000</width>
+    <height>620</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -52,10 +52,10 @@
   <widget class="QTableView" name="tableView">
    <property name="geometry">
     <rect>
-     <x>30</x>
-     <y>130</y>
-     <width>791</width>
-     <height>471</height>
+     <x>20</x>
+     <y>120</y>
+     <width>971</width>
+     <height>490</height>
     </rect>
    </property>
   </widget>

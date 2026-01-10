@@ -26,11 +26,11 @@ mqttclient::mqttclient(DatabaseManager *db,
     // // 初始化定时器
     // initTimer();
 
-    // 连接信号槽
-    connect(mqttClient, &QMqttClient::messageReceived,
-            this, &mqttclient::onMessageReceived);
-    connect(mqttClient, &QMqttClient::stateChanged,
-            this, &mqttclient::onStateChanged);
+    // // 连接信号槽
+    // connect(mqttClient, &QMqttClient::messageReceived,
+    //         this, &mqttclient::onMessageReceived);
+    // connect(mqttClient, &QMqttClient::stateChanged,
+    //         this, &mqttclient::onStateChanged);
 }
 
 void mqttclient::setConnectionParams(const QString &hostname, int port, const QString &clientId)
@@ -335,7 +335,7 @@ void mqttclient::onMessageReceived(const QByteArray &message, const QMqttTopicNa
 {
     QJsonDocument doc = QJsonDocument::fromJson(message);
     QJsonObject jsonObj = doc.object();
-
+   // qDebug() << "onMessageReceived called : " << topic<< "msg:" <<message;
     if (!jsonObj.isEmpty()) {
         QString messageType = getMessageType(jsonObj);
 
@@ -476,7 +476,10 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
         if (status == "finish") {
            SQL_CommandHistory cmd =  dbManager->getCommandById(commandId);
             qDebug() << "查看一下remark:" << cmd.remark;
-           if(cmd.remark.contains("MARK:LOGGIN_APP:MARK"))
+
+   //        if()
+
+           if(cmd.remark.contains("MARK:LOGGIN_APP:MARK") )
             {
                 QString account = extractAccountUsingSplit(cmd.remark);
                    if (appName == "抖音" || appName.toLower() == "tiktok") {
@@ -491,6 +494,22 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
                     dbManager->updateDeviceAppStatus(serialNumber, "快手", account);
                 }
                 emit applogginstatus(commandId,true);
+           }
+           else if(cmd.remark.contains("MARK:CRCODE_LOGGIN:MARK") )
+           {
+               QString account = "CRCODE";
+               if (appName == "抖音" || appName.toLower() == "tiktok") {
+                   dbManager->updateDeviceAppStatus(serialNumber, "抖音", account);
+               } else if (appName == "BILIBILI" || appName.toLower() == "bilibili") {
+                   dbManager->updateDeviceAppStatus(serialNumber, "BILIBILI", account);
+               } else if (appName == "小红书" || appName.toLower() == "xhs") {
+                   dbManager->updateDeviceAppStatus(serialNumber, "小红书", account);
+               } else if (appName == "微博" || appName.toLower() == "weibo") {
+                   dbManager->updateDeviceAppStatus(serialNumber, "微博", account);
+               } else if (appName == "快手" || appName.toLower() == "kuaishou") {
+                   dbManager->updateDeviceAppStatus(serialNumber, "快手", account);
+               }
+               emit applogginstatus(commandId,true);
            }
             // 成功任务增加
             bool taskIncremented = dbManager->incrementCommandCompletedTasks(commandId);

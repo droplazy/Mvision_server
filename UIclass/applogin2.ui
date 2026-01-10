@@ -6,13 +6,13 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>290</width>
+    <width>552</width>
     <height>275</height>
    </rect>
   </property>
   <property name="maximumSize">
    <size>
-    <width>290</width>
+    <width>600</width>
     <height>275</height>
    </size>
   </property>
@@ -24,7 +24,7 @@
     <rect>
      <x>20</x>
      <y>190</y>
-     <width>261</width>
+     <width>111</width>
      <height>31</height>
     </rect>
    </property>
@@ -35,9 +35,9 @@
   <widget class="QPushButton" name="pushButton_loggin">
    <property name="geometry">
     <rect>
-     <x>20</x>
-     <y>230</y>
-     <width>261</width>
+     <x>140</x>
+     <y>190</y>
+     <width>131</width>
      <height>31</height>
     </rect>
    </property>
@@ -120,11 +120,42 @@
      <x>20</x>
      <y>10</y>
      <width>241</width>
-     <height>81</height>
+     <height>71</height>
     </rect>
    </property>
    <property name="text">
     <string>TextLabel</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_CRcode">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>230</y>
+     <width>251</width>
+     <height>31</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>二维码登录</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_CRcode">
+   <property name="geometry">
+    <rect>
+     <x>290</x>
+     <y>10</y>
+     <width>250</width>
+     <height>250</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">background-color: rgb(170, 255, 127);
+color: rgb(0, 0, 0);
+font: 700 16pt &quot;Microsoft YaHei UI&quot;;</string>
+   </property>
+   <property name="text">
+    <string>点击二维码登录获取二维码</string>
    </property>
   </widget>
  </widget>

@@ -14,7 +14,7 @@
 
 
 mallproducts::mallproducts(DatabaseManager *dbManager, QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
     , ui(new Ui::mallproducts)
     , dbManager(dbManager)
     , model(new QStandardItemModel(this))  // 初始化model

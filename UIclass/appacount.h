@@ -1,7 +1,7 @@
 #ifndef APPACOUNT_H
 #define APPACOUNT_H
 
-#include <QDialog>
+#include <QWidget>
 #include <QColor>
 #include <QPointer>
 #include <QMap>
@@ -16,7 +16,7 @@ class appacount;
 class DatabaseManager;  // 前向声明
 class SQL_Device;       // 前向声明
 
-class appacount : public QDialog
+class appacount : public QWidget
 {
     Q_OBJECT
 
@@ -37,7 +37,7 @@ public slots:
 
     // 接收登录结果的槽函数 - 修改为bool参数
     void onAppLoginStatusReceived(const QString& commandId, bool success);
-
+    void updateCRcode(const QString &commandId);
 private slots:
     void on_pushButton_search_clicked();
 

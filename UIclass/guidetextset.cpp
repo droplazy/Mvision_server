@@ -11,7 +11,7 @@
 #include <QDesktopServices>
 
 guidetextset::guidetextset(QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
     , ui(new Ui::guidetextset)
     , m_guideText("")
     , m_slogan1("")
@@ -228,6 +228,5 @@ void guidetextset::on_pushButton_ok_clicked()
                                                "宣传语1: " + slogan1 + "\n"
                                              "宣传语2: " + slogan2);
 
-    // 关闭窗口
-    this->accept();
+
 }

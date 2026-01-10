@@ -1,7 +1,7 @@
 #ifndef MALLPRODUCTS_H
 #define MALLPRODUCTS_H
 
-#include <QDialog>
+#include <QWidget>
 #include <QStandardItemModel>
 #include "publicheader.h"
 class DatabaseManager;
@@ -10,7 +10,7 @@ namespace Ui {
 class mallproducts;
 }
 
-class mallproducts : public QDialog
+class mallproducts : public QWidget
 {
     Q_OBJECT
 

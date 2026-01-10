@@ -69,6 +69,5 @@ private:
     void disconnectMqttClientSignals();
     void connectHttpSignals();
     void enableNetworkControls(bool enable);
-    void insertCommandFromJson(const QString &jsonString);
 };
 #endif // MAINWINDOW_H

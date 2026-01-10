@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>mallproducts</class>
- <widget class="QDialog" name="mallproducts">
+ <widget class="QWidget" name="mallproducts">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1160</width>
-    <height>626</height>
+    <width>1000</width>
+    <height>620</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -54,7 +54,7 @@
     <rect>
      <x>20</x>
      <y>60</y>
-     <width>1121</width>
+     <width>971</width>
      <height>551</height>
     </rect>
    </property>

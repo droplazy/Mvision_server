@@ -6,7 +6,7 @@
 #include <QHeaderView>
 
 mallusermanager::mallusermanager(DatabaseManager *dbManager, QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
     , ui(new Ui::mallusermanager)
     , dbManager(dbManager)
     , model(new QStandardItemModel(this))

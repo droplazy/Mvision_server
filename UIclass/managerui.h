@@ -1,7 +1,7 @@
 #ifndef MANAGERUI_H
 #define MANAGERUI_H
 
-#include <QDialog>
+#include <QWidget>
 
 namespace Ui {
 class ManagerUI;
@@ -9,7 +9,7 @@ class ManagerUI;
 
 class DatabaseManager; // 前向声明
 
-class ManagerUI : public QDialog
+class ManagerUI : public QWidget
 {
     Q_OBJECT
 

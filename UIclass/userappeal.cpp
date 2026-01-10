@@ -15,7 +15,7 @@
 #include <QModelIndex>
 
 userappeal::userappeal(QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
     , ui(new Ui::userappeal)
     , m_currentUser("")
     , m_appealDirPath("")
@@ -349,7 +349,7 @@ void userappeal::on_open_clicked()
 // 添加resizeEvent函数，当窗口大小改变时重新调整图片
 void userappeal::resizeEvent(QResizeEvent *event)
 {
-    QDialog::resizeEvent(event);
+ //   QWidget::resizeEvent(event);
 
     // 如果当前有图片显示，重新加载以调整大小
     if (m_currentImageIndex >= 0 && m_currentImageIndex < m_imageFiles.size()) {

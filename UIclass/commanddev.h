@@ -1,7 +1,7 @@
 #ifndef COMMANDDEV_H
 #define COMMANDDEV_H
 
-#include <QDialog>
+#include <QWidget  >
 #include <QVector>
 #include <QJsonObject>
 #include "publicheader.h"  // 包含DeviceStatus结构体
@@ -10,7 +10,7 @@ namespace Ui {
 class commanddev;
 }
 
-class commanddev : public QDialog
+class commanddev : public QWidget
 {
     Q_OBJECT
 

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>commanddev</class>
- <widget class="QDialog" name="commanddev">
+ <widget class="QWidget" name="commanddev">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>878</width>
-    <height>774</height>
+    <width>950</width>
+    <height>620</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -29,10 +29,10 @@
   <widget class="QTableView" name="tableView_dev">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>10</x>
      <y>340</y>
-     <width>851</width>
-     <height>421</height>
+     <width>931</width>
+     <height>271</height>
     </rect>
    </property>
   </widget>
@@ -51,7 +51,7 @@
     <rect>
      <x>100</x>
      <y>140</y>
-     <width>771</width>
+     <width>831</width>
      <height>20</height>
     </rect>
    </property>
@@ -74,7 +74,7 @@
     <rect>
      <x>100</x>
      <y>170</y>
-     <width>771</width>
+     <width>831</width>
      <height>20</height>
     </rect>
    </property>
@@ -110,7 +110,7 @@
     <rect>
      <x>100</x>
      <y>260</y>
-     <width>771</width>
+     <width>831</width>
      <height>20</height>
     </rect>
    </property>
@@ -232,7 +232,7 @@ color: rgb(170, 0, 0);</string>
     <rect>
      <x>380</x>
      <y>20</y>
-     <width>481</width>
+     <width>401</width>
      <height>111</height>
     </rect>
    </property>
@@ -245,7 +245,7 @@ color: rgb(170, 0, 0);</string>
     <rect>
      <x>100</x>
      <y>193</y>
-     <width>771</width>
+     <width>831</width>
      <height>61</height>
     </rect>
    </property>
@@ -265,7 +265,7 @@ color: rgb(170, 0, 0);</string>
     <rect>
      <x>680</x>
      <y>300</y>
-     <width>71</width>
+     <width>241</width>
      <height>31</height>
     </rect>
    </property>

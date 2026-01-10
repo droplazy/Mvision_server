@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>appacount</class>
- <widget class="QDialog" name="appacount">
+ <widget class="QWidget" name="appacount">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>710</width>
-    <height>511</height>
+    <width>1000</width>
+    <height>620</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,7 +18,7 @@
     <rect>
      <x>20</x>
      <y>20</y>
-     <width>201</width>
+     <width>411</width>
      <height>20</height>
     </rect>
    </property>
@@ -26,10 +26,10 @@
   <widget class="QPushButton" name="pushButton_search">
    <property name="geometry">
     <rect>
-     <x>240</x>
+     <x>440</x>
      <y>20</y>
-     <width>80</width>
-     <height>18</height>
+     <width>91</width>
+     <height>21</height>
     </rect>
    </property>
    <property name="text">
@@ -41,8 +41,8 @@
     <rect>
      <x>20</x>
      <y>60</y>
-     <width>681</width>
-     <height>441</height>
+     <width>971</width>
+     <height>551</height>
     </rect>
    </property>
   </widget>

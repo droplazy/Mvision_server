@@ -8,7 +8,7 @@
 #include <QDateTime>
 
 orderlist::orderlist(QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
     , ui(new Ui::orderlist)
     , m_dbManager(nullptr)
     , m_model(nullptr)

@@ -13,7 +13,7 @@
 #include <QDebug>
 
 commanddev::commanddev(DatabaseManager *db, QVector<DeviceStatus> *devices, QWidget *parent)
-    : QDialog(parent)
+    : QWidget  (parent)
     , ui(new Ui::commanddev)
     , m_db(db)
     , m_devices(devices)

@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 #include "loghandler.h"
 #include <QMessageBox>
+#include <QVBoxLayout>
 /****************************子窗口控件*/
 #include "./UIclass/devicelistdialog.h"
 #include "./UIclass/commandlsit.h"
@@ -30,10 +31,10 @@ MainWindow::MainWindow(QWidget *parent)
     setFixedSize(this->size());
 
     // 设置日志输出到 textEdit_console
-    if (ui->textEdit_console) {
-        LogHandler::instance()->setOutputWidget(ui->textEdit_console);
-        LogHandler::instance()->setMaxLines(500);
-    }
+    // if (ui->textEdit_console) {
+    //     LogHandler::instance()->setOutputWidget(ui->textEdit_console);
+    //     LogHandler::instance()->setMaxLines(500);
+    // }
 
     // 创建定时器用于显示系统时间
     QTimer *timer = new QTimer(this);
@@ -561,48 +562,50 @@ MainWindow::~MainWindow()
 
 void MainWindow::on_pushButton_devlist_clicked()
 {
-    if (!p_db) {
-        qDebug() << "数据库未初始化，无法显示设备列表";
-        QMessageBox::warning(this, "错误", "数据库未初始化，请检查数据库连接");
+
+    if (!p_db || !p_http) {
+        QMessageBox::warning(this, "服务器未打开", "请先打开服务器");
         return;
     }
 
-    qDebug() << "正在打开设备列表对话框...";
 
-    // 创建并显示设备列表对话框
-    devicelistdialog *dialog = new devicelistdialog(p_db,&p_http->deviceVector, this);
-    connect(dialog, &devicelistdialog::deviceUpgrade,
-            p_mqtt_cli, &mqttclient::devUpgrade,
-            Qt::AutoConnection);
+    // 清理并显示
+    if (!ui->sub_widget->layout()) {
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
 
+    QLayout* layout = ui->sub_widget->layout();
+    while (QLayoutItem* item = layout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+
+    // 创建设备列表界面
+    devicelistdialog *devWidget = new devicelistdialog(p_db, &p_http->deviceVector, ui->sub_widget);
+
+    // 连接信号
+    connect(devWidget, &devicelistdialog::deviceUpgrade,
+            p_mqtt_cli, &mqttclient::devUpgrade);
 
     connect(p_http, &HttpServer::updateDev,
-            dialog, &devicelistdialog::updatedeviceinfo,
+            devWidget, &devicelistdialog::updatedeviceinfo,
             Qt::UniqueConnection);
 
-    connect(dialog, &devicelistdialog::NewDeviceCallED,
+    connect(devWidget, &devicelistdialog::NewDeviceCallED,
             p_mqtt_cli, &mqttclient::ADDsubscribeTopic,
             Qt::UniqueConnection);
-    // 设置模态对话框
-    dialog->setModal(true);
 
-    // 设置关闭时自动删除
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    // 更新到页面端
-    // connect(dialog, &devicelistdialog::deviceListUpdated,
-    //         this, &MainWindow::updateHttpDeviceContainer);
-    // 显示对话框（模态方式）
-    dialog->exec();
-
-    qDebug() << "设备列表对话框已关闭";
+    layout->addWidget(devWidget);
+    ui->sub_widget->setVisible(true);
 }
-
 void MainWindow::updateHttpDeviceContainer()
 {
     if (!p_db || !p_http) {
-        qDebug() << "数据库或HTTP服务未初始化";
+        QMessageBox::warning(this, "服务器未打开", "请先打开服务器");
         return;
     }
+
 
     qDebug() << "数据库已更新，开始同步到HTTP容器...";
 
@@ -653,17 +656,25 @@ void MainWindow::updateHttpDeviceContainer()
 
 void MainWindow::on_pushButton_cmdquery_clicked()
 {
-    if (!p_db) {
-        QMessageBox::warning(this, "错误", "数据库未初始化");
-        return;
+    if (!p_db) return;
+
+    // 清理并显示
+    if (!ui->sub_widget->layout()) {
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
     }
 
-    commandlsit *dialog = new commandlsit(p_db, this);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->exec();
+    QLayout* layout = ui->sub_widget->layout();
+    while (QLayoutItem* item = layout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+
+    // 创建指令查询界面
+    commandlsit *cmdWidget = new commandlsit(p_db, ui->sub_widget);
+    layout->addWidget(cmdWidget);
+    ui->sub_widget->setVisible(true);
 }
-
-
 void MainWindow::on_pushButton_firmware_clicked()
 {
     // 创建固件上传对话框
@@ -681,268 +692,260 @@ void MainWindow::on_pushButton_firmware_clicked()
 
 void MainWindow::on_pushButton_malluser_clicked()
 {
-    qDebug() << "打开商城用户管理界面";
+    if (!p_db) return;
 
-    // 创建商城用户管理对话框，传入数据库指针
-    mallusermanager *managerDialog = new mallusermanager(p_db, this);
+    // 清理并显示
+    if (!ui->sub_widget->layout()) {
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
 
-    // 设置模态对话框
-    managerDialog->setModal(true);
+    QLayout* layout = ui->sub_widget->layout();
+    while (QLayoutItem* item = layout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
 
-    // 显示对话框
-    managerDialog->exec();  // 使用exec()确保模态对话框
+    // 创建商城用户管理界面
+    mallusermanager *managerWidget = new mallusermanager(p_db, ui->sub_widget);
+    layout->addWidget(managerWidget);
+    ui->sub_widget->setVisible(true);
 
-    // 对话框关闭后自动删除
-    managerDialog->deleteLater();
+    qDebug() << "商城用户管理界面已嵌入到子窗口";
 }
-
-
 void MainWindow::on_pushButton_products_clicked()
 {
-    // 创建商品管理对话框，传入数据库指针
-    mallproducts *productsDialog = new mallproducts(p_db, this);
+    if (!p_db) return;
 
-    // 设置模态对话框
-    productsDialog->setModal(true);
+    // 清理并显示
+    if (!ui->sub_widget->layout()) {
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
 
-    // 显示对话框
-    productsDialog->exec();  // 使用exec()确保模态对话框
+    QLayout* layout = ui->sub_widget->layout();
+    while (QLayoutItem* item = layout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
 
-    // 对话框关闭后自动删除
-    productsDialog->deleteLater();
+    // 创建商品管理界面
+    mallproducts *productsWidget = new mallproducts(p_db, ui->sub_widget);
+    layout->addWidget(productsWidget);
+    ui->sub_widget->setVisible(true);
 }
-
 
 void MainWindow::on_pushButton_order_clicked()
 {
-    // 创建订单查询窗口
-    orderlist *orderWindow = new orderlist(this);
-    orderWindow->setDatabaseManager(p_db);
+    if (!p_db || !p_http) {
+        QMessageBox::warning(this, "服务器未打开", "请先打开服务器");
+        return;
+    }
 
-    // 设置模态或非模态显示
-    orderWindow->setAttribute(Qt::WA_DeleteOnClose);
-    orderWindow->exec();  // 模态显示
+
+    // 1. 如果sub_widget已有布局，先清空内容
+    if (ui->sub_widget->layout()) {
+        QLayoutItem* item;
+        while ((item = ui->sub_widget->layout()->takeAt(0)) != nullptr) {
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
+        }
+        // 清空后布局还在，但内容是空的
+    } else {
+        // 如果没有布局，创建一个
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
+
+    // 2. 创建订单查询界面（作为子部件）
+    orderlist *orderWidget = new orderlist(ui->sub_widget);  // 父对象改为 ui->sub_widget
+    orderWidget->setDatabaseManager(p_db);  // 设置数据库管理器
+
+    // 3. 添加到现有布局
+    ui->sub_widget->layout()->addWidget(orderWidget);
+
+    // 4. 显示（嵌入模式不需要exec()）
+    ui->sub_widget->setVisible(true);
+
+    qDebug() << "订单查询界面已嵌入到子窗口";
 }
-
 
 void MainWindow::on_pushButton_appeal_clicked()
 {
-    // 创建投诉处理窗口
-    userappeal *appealWindow = new userappeal(this);
+    // 清理并显示
+    if (!ui->sub_widget->layout()) {
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
 
-    // 如果需要设置当前用户（从登录信息获取）
-    // QString currentUser = getCurrentUser(); // 假设有这个函数
-    // appealWindow->setCurrentUser(currentUser);
+    QLayout* layout = ui->sub_widget->layout();
+    while (QLayoutItem* item = layout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
 
-    // 设置窗口属性
-    appealWindow->setAttribute(Qt::WA_DeleteOnClose);
-    appealWindow->setWindowModality(Qt::ApplicationModal);
+    // 创建投诉处理界面
+    userappeal *appealWidget = new userappeal(ui->sub_widget);
 
-    // 显示窗口
-    appealWindow->show();
+    // 如果需要设置当前用户
+    // appealWidget->setCurrentUser(currentUser);
 
+    layout->addWidget(appealWidget);
+    ui->sub_widget->setVisible(true);
 }
-
 
 void MainWindow::on_pushButton_webUI_clicked()
 {
-    // 创建设置窗口
-    guidetextset *setDialog = new guidetextset(this);
+    if (!p_db || !p_http) {
+        QMessageBox::warning(this, "服务器未打开", "请先打开服务器");
+        return;
+    }
+
+
+    // 清理并显示
+    if (!ui->sub_widget->layout()) {
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
+
+    QLayout* layout = ui->sub_widget->layout();
+    while (QLayoutItem* item = layout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+
+    // 创建引导文本设置界面
+    guidetextset *guideWidget = new guidetextset(ui->sub_widget);
 
     // 传递当前的值给设置窗口
-    setDialog->setTextValues(&p_http->LOGIN_GUIDE_TEXT,
-                             &p_http->LOGIN_SLOGAN1,
-                             &p_http->LOGIN_SLOGAN2);
+    if (p_http) {
+        guideWidget->setTextValues(&p_http->LOGIN_GUIDE_TEXT,
+                                   &p_http->LOGIN_SLOGAN1,
+                                   &p_http->LOGIN_SLOGAN2);
+    }
 
-    // 模态显示窗口
-    setDialog->setAttribute(Qt::WA_DeleteOnClose);
-    setDialog->exec();
+    layout->addWidget(guideWidget);
+    ui->sub_widget->setVisible(true);
 }
-
 
 
 void MainWindow::on_pushButton_contorluser_clicked()
 {
-    // 创建ManagerUI对话框，传入数据库指针
-    ManagerUI *managerDialog = new ManagerUI(p_db, this);
-    managerDialog->exec(); // 或者用show()显示非模态对话框
-    delete managerDialog; // 对话框关闭后删除
-}
-
-
-void MainWindow::on_pushButton_cmddispatch_clicked()
-{
-    // 假设p_db和p_http是MainWindow的成员变量
     if (!p_db || !p_http) {
-        qDebug() << "数据库或设备指针为空";
+        QMessageBox::warning(this, "服务器未打开", "请先打开服务器");
         return;
     }
 
-    // 创建指令分发对话框
-    commanddev *dialog = new commanddev(p_db, &p_http->deviceVector, this);
-    // 使用Qt::UniqueConnection避免重复连接
 
-    connect(dialog, &commanddev::dCommadSend,
-            p_mqtt_cli, &mqttclient::CommandMuiltSend);
-    // 显示对话框
-    if (dialog->exec() == QDialog::Accepted) {
-        // 获取生成的指令和选中的设备
-        QJsonObject command = dialog->getGeneratedCommand();
-        QList<QString> selectedDevices = dialog->getSelectedDevices();
-
-        // 这里可以处理指令发送逻辑
-        qDebug() << "指令已生成，选中的设备数:" << selectedDevices.size();
-
-        // 将指令发送给选中的设备
-        for (const QString &serial : selectedDevices) {
-            // 这里添加发送逻辑
-            qDebug() << "发送指令给设备:" << serial;
+    // 1. 如果sub_widget已有布局，先清空内容
+    if (ui->sub_widget->layout()) {
+        QLayoutItem* item;
+        while ((item = ui->sub_widget->layout()->takeAt(0)) != nullptr) {
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
         }
+        // 清空后布局还在，但内容是空的
+    } else {
+        // 如果没有布局，创建一个
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
     }
 
-    delete dialog;
+    // 2. 创建用户管理界面（作为子部件）
+    ManagerUI *managerWidget = new ManagerUI(p_db, ui->sub_widget);  // 父对象改为 ui->sub_widget
+
+    // 3. 添加到现有布局
+    ui->sub_widget->layout()->addWidget(managerWidget);
+
+    // 4. 显示（嵌入模式不需要exec()）
+    ui->sub_widget->setVisible(true);
+
+    qDebug() << "用户管理界面已嵌入到子窗口";
+
+    // 注意：如果ManagerUI需要连接信号，在这里添加connect语句
+    // 例如：connect(managerWidget, &ManagerUI::someSignal, ...);
 }
 
+void MainWindow::on_pushButton_cmddispatch_clicked()
+{
+    if (!p_db || !p_http) {
+        QMessageBox::warning(this, "服务器未打开", "请先打开服务器");
+        return;
+    }
 
+    // 1. 如果sub_widget已有布局，先清空内容
+    if (ui->sub_widget->layout()) {
+        QLayoutItem* item;
+        while ((item = ui->sub_widget->layout()->takeAt(0)) != nullptr) {
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
+        }
+        // 清空后布局还在，但内容是空的
+    } else {
+        // 如果没有布局，创建一个
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
+
+    // 2. 创建指令分发界面（作为子部件）
+    commanddev *cmdWidget = new commanddev(p_db, &p_http->deviceVector, ui->sub_widget);
+
+    // 3. 添加到现有布局（不要重新创建布局！）
+    ui->sub_widget->layout()->addWidget(cmdWidget);  // 关键修改
+
+    // 4. 连接信号 - 当用户点击"发送指令"按钮时会发射此信号
+    connect(cmdWidget, &commanddev::dCommadSend,
+            p_mqtt_cli, &mqttclient::CommandMuiltSend);
+
+    // 5. 显示（嵌入模式不需要exec()）
+    ui->sub_widget->setVisible(true);
+
+    qDebug() << "指令分发界面已嵌入到子窗口";
+}
 void MainWindow::on_pushButton_appcount_clicked()
 {
-    appacount *p_appacount = new appacount(p_db, this);
-    p_appacount->setAttribute(Qt::WA_DeleteOnClose);  // 关闭时自动删除
+    // 1. 如果sub_widget已有布局，先清空内容
+    if (ui->sub_widget->layout()) {
+        QLayoutItem* item;
+        while ((item = ui->sub_widget->layout()->takeAt(0)) != nullptr) {
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
+        }
+        // 重要：清空后布局还在，但内容是空的
+    } else {
+        // 如果没有布局，创建一个
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
 
-    // 连接信号链
+    qDebug() << "adssdad";
+
+    // 2. 创建子界面（不需要WA_DeleteOnClose）
+    appacount *p_appacount = new appacount(p_db, ui->sub_widget);
+
+    // 3. 添加到现有布局（不要重新创建布局！）
+    ui->sub_widget->layout()->addWidget(p_appacount);  // 关键修改
+
+    // 4. 连接信号
     connect(p_appacount, &appacount::forwardJsonToMQTT,
             this, [this](const QString& deviceSerial, const QString& jsonString) {
-                // 直接调用mqttclient的SingleTopicPub函数
-        insertCommandFromJson(jsonString);
                 if (p_mqtt_cli) {
                     p_mqtt_cli->SingleTopicPub(deviceSerial, jsonString);
                 }
             });
-    connect(p_mqtt_cli,&mqttclient::applogginstatus,p_appacount,&appacount::onAppLoginStatusReceived);
-    p_appacount->exec();  // 模态显示
-}
+    connect(p_mqtt_cli, &mqttclient::applogginstatus,
+            p_appacount, &appacount::onAppLoginStatusReceived);
+    connect(p_http, &HttpServer::getCRcodeImg,
+            p_appacount, &appacount::updateCRcode);
 
-// 从JSON中解析命令信息并插入数据库
-void MainWindow::insertCommandFromJson(const QString& jsonString)
-{
-    if (!p_db) {
-        qDebug() << "数据库指针为空，无法插入命令历史";
-        return;
-    }
-
-    QJsonParseError parseError;
-    QJsonDocument jsonDoc = QJsonDocument::fromJson(jsonString.toUtf8(), &parseError);
-
-    if (parseError.error != QJsonParseError::NoError) {
-        qDebug() << "JSON解析错误:" << parseError.errorString();
-        return;
-    }
-
-    if (!jsonDoc.isObject()) {
-        qDebug() << "JSON不是对象";
-        return;
-    }
-
-    QJsonObject jsonObj = jsonDoc.object();
-
-    // 解析command_id，可以从根对象或data对象中获取
-    QString commandId = "";
-    if (jsonObj.contains("command_id")) {
-        commandId = jsonObj["command_id"].toString();
-    } else if (jsonObj.contains("data")) {
-        QJsonObject dataObj = jsonObj["data"].toObject();
-        if (dataObj.contains("command_id")) {
-            commandId = dataObj["command_id"].toString();
-        }
-    }
-
-    if (commandId.isEmpty()) {
-        qDebug() << "未找到command_id，跳过数据库插入";
-        return;
-    }
-
-    // 解析其他字段
-    QString action = "";
-    QString subAction = "";
-    QString startTime = "00:00:00";
-    QString endTime = "23:59:59";
-    QString remark = "";
-    QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
-
-    if (jsonObj.contains("data")) {
-        QJsonObject dataObj = jsonObj["data"].toObject();
-
-        if (dataObj.contains("action")) {
-            action = dataObj["action"].toString();
-        }
-
-        if (dataObj.contains("sub_action")) {
-            subAction = dataObj["sub_action"].toString();
-        }
-
-        if (dataObj.contains("start_time")) {
-            startTime = dataObj["start_time"].toString();
-        }
-
-        if (dataObj.contains("end_time")) {
-            endTime = dataObj["end_time"].toString();
-        }
-
-        if (dataObj.contains("remark")) {
-            remark = dataObj["remark"].toString();
-        }
-    }
-
-    // 如果从data中没找到，尝试从根对象中查找
-    if (action.isEmpty() && jsonObj.contains("action")) {
-        action = jsonObj["action"].toString();
-    }
-
-    if (subAction.isEmpty() && jsonObj.contains("sub_action")) {
-        subAction = jsonObj["sub_action"].toString();
-    }
-
-    // 获取时间戳
-    if (jsonObj.contains("timestamp")) {
-        QString isoTime = jsonObj["timestamp"].toString();
-        // 尝试将ISO时间转换为标准格式
-        QDateTime dt = QDateTime::fromString(isoTime, Qt::ISODate);
-        if (dt.isValid()) {
-            timestamp = dt.toString("yyyy-MM-dd hh:mm:ss");
-        }
-    }
-
-    qDebug() << "=== 解析JSON并准备插入数据库 ===";
-    qDebug() << "命令ID:" << commandId;
-    qDebug() << "动作:" << action;
-    qDebug() << "子动作:" << subAction;
-    qDebug() << "开始时间:" << startTime;
-    qDebug() << "结束时间:" << endTime;
-    qDebug() << "备注:" << remark;
-    qDebug() << "时间戳:" << timestamp;
-    qDebug() << "原始JSON:" << jsonString;
-
-    // 创建SQL_CommandHistory对象
-    SQL_CommandHistory commandHistory;
-    commandHistory.commandId = commandId;
-    commandHistory.status = "执行中";  // 固定为"执行中"
-    commandHistory.action = action;
-    commandHistory.sub_action = subAction;
-    commandHistory.start_time = startTime;
-    commandHistory.end_time = endTime;
-    commandHistory.remark = remark;
-    commandHistory.completeness = "0%";  // 初始完成度
-    commandHistory.completed_url = "";
-    commandHistory.total_tasks = 1;
-    commandHistory.completed_tasks = 0;
-    commandHistory.failed_tasks = 0;
-
-    // 插入数据库
-    bool success = p_db->insertCommandHistory(commandHistory);
-
-    if (success) {
-        qDebug() << "命令历史记录插入成功";
-    } else {
-        qDebug() << "命令历史记录插入失败";
-    }
+    // 5. 显示（不需要exec()）
+    ui->sub_widget->setVisible(true);
 }

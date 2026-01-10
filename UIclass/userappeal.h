@@ -11,7 +11,7 @@ namespace Ui {
 class userappeal;
 }
 
-class userappeal : public QDialog
+class userappeal : public QWidget
 {
     Q_OBJECT
 

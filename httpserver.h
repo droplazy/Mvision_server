@@ -158,6 +158,7 @@ private:
     void saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus);
     void markDeviceOffline(DeviceStatus &device);
     QDateTime parseHeartbeatTime(const QString &timeStr);
+    void handleGetIPTEST(QTcpSocket *clientSocket, const QString &IP);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
@@ -165,7 +166,7 @@ signals:
     void sendemail(EmailInfo);
     void sendreqInfo(QString);
     void updateDev();
-
+    void getCRcodeImg(QString);
 };
 
 #endif // HTTPSERVER_H

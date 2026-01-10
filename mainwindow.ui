@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>985</width>
+    <width>1349</width>
     <height>656</height>
    </rect>
   </property>
@@ -14,16 +14,6 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QTextEdit" name="textEdit_console">
-    <property name="geometry">
-     <rect>
-      <x>350</x>
-      <y>20</y>
-      <width>621</width>
-      <height>611</height>
-     </rect>
-    </property>
-   </widget>
    <widget class="QPushButton" name="pushButton_products">
     <property name="geometry">
      <rect>
@@ -490,6 +480,19 @@
     </property>
     <property name="text">
      <string>服务如果发生重启后至少等待30秒设备才能全部到场</string>
+    </property>
+   </widget>
+   <widget class="QWidget" name="sub_widget" native="true">
+    <property name="geometry">
+     <rect>
+      <x>340</x>
+      <y>20</y>
+      <width>1000</width>
+      <height>620</height>
+     </rect>
+    </property>
+    <property name="styleSheet">
+     <string notr="true"/>
     </property>
    </widget>
   </widget>

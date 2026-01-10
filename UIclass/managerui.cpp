@@ -8,7 +8,7 @@
 #include <QDebug>
 
 ManagerUI::ManagerUI(DatabaseManager *dbManager, QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
     , ui(new Ui::ManagerUI)
     , m_dbManager(dbManager)
 {

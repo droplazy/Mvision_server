@@ -1,14 +1,14 @@
 #ifndef COMMANDLSIT_H
 #define COMMANDLSIT_H
 
-#include <QDialog>
+#include <QWidget>
 #include "DatabaseManager.h"
 
 namespace Ui {
 class commandlsit;
 }
 
-class commandlsit : public QDialog
+class commandlsit : public QWidget
 {
     Q_OBJECT
 

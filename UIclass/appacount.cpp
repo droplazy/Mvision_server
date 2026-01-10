@@ -9,14 +9,17 @@
 
 // 构造函数，接收数据库指针
 appacount::appacount(DatabaseManager* dbManager, QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)  // ✅ 修改3：改为QWidget
     , ui(new Ui::appacount)
-    , m_dbManager(dbManager)  // 保存数据库指针
+    , m_dbManager(dbManager)
 {
     ui->setupUi(this);
 
-    // 设置窗口标题
-    setWindowTitle("设备社交媒体状态管理");
+    // 可选：如果你还想显示标题，可以这样设置
+   // ui->label_title->setText("设备社交媒体状态管理");  // 假设UI中有label_title
+
+    // 或者作为tooltip提示
+    setToolTip("设备社交媒体状态管理");
 
     // 初始化表格
     initTable();
@@ -30,10 +33,9 @@ appacount::appacount(DatabaseManager* dbManager, QWidget *parent)
     // 初始加载所有设备
     if (m_dbManager) {
         loadAllDevices();
-    } else {
-        QMessageBox::critical(this, "错误", "数据库连接无效！");
     }
 }
+
 
 // 析构函数
 appacount::~appacount()
@@ -44,6 +46,7 @@ appacount::~appacount()
 // 初始化表格
 void appacount::initTable()
 {
+     setFixedSize(800,620);
     // 设置表格列数和标题
     ui->tableWidget->setColumnCount(6);
     QStringList headers;
@@ -223,6 +226,11 @@ void appacount::updateDeviceStatus(const QString& deviceSerial, int platformColu
 
 void appacount::on_tableWidget_cellDoubleClicked(int row, int column)
 {
+    // 如果是第一列（设备号列），则不执行任何操作
+    if (column == 0) {
+        return;  // 直接返回，不弹出对话框
+    }
+
     // 获取行名（设备号）
     QTableWidgetItem* rowItem = ui->tableWidget->item(row, 0);
     if (!rowItem) return;
@@ -280,7 +288,7 @@ void appacount::on_tableWidget_cellDoubleClicked(int row, int column)
     // 创建并显示登录对话框
     QString commandId = QString("CMD_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz"));
 
-    currentDialog = new applogin2(deviceSerial, platformName, currentStatus, commandId, this);
+    currentDialog = new applogin2(deviceSerial, platformName, currentStatus, commandId,m_dbManager, this);
     currentDialog->setAttribute(Qt::WA_DeleteOnClose);  // 关闭时自动删除
 
     // 保存对话框指针到映射中
@@ -297,7 +305,6 @@ void appacount::on_tableWidget_cellDoubleClicked(int row, int column)
                 qDebug() << "收到JSON发送信号:";
                 qDebug() << "设备:" << device;
                 qDebug() << "JSON:" << jsonString;
-
                 // 转发信号给MainWindow
                 emit forwardJsonToMQTT(device, jsonString);
             });
@@ -353,5 +360,29 @@ void appacount::onAppLoginStatusReceived(const QString& commandId, bool success)
             m_loginDialogs.remove(commandId);
             m_commandDeviceMap.remove(commandId);
         }
+    }
+}
+
+void appacount::updateCRcode(const QString& commandId)
+{
+    qDebug() << "appacount收到二维码图片 - 命令ID:" << commandId ;
+
+    // 查找对应的登录对话框
+    if (m_loginDialogs.contains(commandId)) {
+        QPointer<applogin2> dialog = m_loginDialogs[commandId];
+        if (dialog) {
+            // 转发给对应的applogin2对话框
+            dialog->onCRcodeImgReceived(commandId);
+
+
+            qDebug() << "已转发二维码图片给applogin2对话框";
+        } else {
+            // 对话框已销毁，从映射中移除
+            m_loginDialogs.remove(commandId);
+            m_commandDeviceMap.remove(commandId);
+            qDebug() << "applogin2对话框已销毁，无法转发二维码图片";
+        }
+    } else {
+        qDebug() << "未找到命令ID对应的applogin2对话框:" << commandId;
     }
 }

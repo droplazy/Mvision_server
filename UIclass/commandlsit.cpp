@@ -7,7 +7,7 @@
 #include <QWidget>
 
 commandlsit::commandlsit(DatabaseManager* dbManager, QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
     , ui(new Ui::commandlsit)
     , m_dbManager(dbManager)
 {

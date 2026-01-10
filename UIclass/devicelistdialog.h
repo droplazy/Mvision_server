@@ -2,13 +2,13 @@
 #ifndef DEVICELISTDIALOG_H
 #define DEVICELISTDIALOG_H
 
-#include <QDialog>
+#include <QWidget>
 #include "DatabaseManager.h"
 namespace Ui {
 class devicelistdialog;
 }
 
-class devicelistdialog : public QDialog
+class devicelistdialog : public QWidget
 {
     Q_OBJECT
 

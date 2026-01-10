@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>commandlsit</class>
- <widget class="QDialog" name="commandlsit">
+ <widget class="QWidget" name="commandlsit">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1179</width>
-    <height>631</height>
+    <width>1000</width>
+    <height>620</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,14 +18,14 @@
     <rect>
      <x>20</x>
      <y>60</y>
-     <width>1151</width>
-     <height>561</height>
+     <width>971</width>
+     <height>551</height>
     </rect>
    </property>
    <property name="minimumSize">
     <size>
-     <width>1151</width>
-     <height>561</height>
+     <width>770</width>
+     <height>490</height>
     </size>
    </property>
    <property name="maximumSize">

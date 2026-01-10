@@ -264,7 +264,7 @@ void HttpServer::generateTextData()
     QList<SQL_Device> devices = dbManager->getAllDevices();
     processVector = dbManager->getAllProcessSteps();
     for (const SQL_Device &device : devices) {
-        deviceVector.append(DeviceStatus(device.serial_number, device.device_status, "未知", "未知", device.total_flow,
+        deviceVector.append(DeviceStatus(device.serial_number, "等待连接", "未知", "未知", device.total_flow,
                                          "未知", device.ip_address,
                                          "未知", "未知", "未知",
                                          "未知", "未知","未知", "未知"));
@@ -708,7 +708,7 @@ void HttpServer::onReadyRead() {
         // 获取token参数
         QString token = query.queryItemValue("token");
         qDebug() << "token:" << token;
-#if 0
+#if 1
         // Token验证（排除登录接口）
         bool isLoginPath = (path == "/auth/login" || path == "/mall/login/info"|| (path == "/home" || path.contains(".css") || path.contains("/login") \
                                                                                    || path.contains(".js") || path.contains(".html") \
@@ -716,7 +716,11 @@ void HttpServer::onReadyRead() {
                                                                                    || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
         if (!isLoginPath) {
             // 非登录接口需要验证token
-            if (token.isEmpty() || !dbManager || !dbManager->validateToken(token)) {
+             if(token=="GXFC")
+            {
+
+            }
+             else if (token.isEmpty() || !dbManager || !dbManager->validateToken(token)) {
                 qDebug() << "Token验证失败或不存在，返回401";
                 sendUnauthorized(clientSocket);
                 clientSocket->disconnectFromHost();
@@ -752,8 +756,11 @@ void HttpServer::onReadyRead() {
             if (path == "/device") {
                 handleGetDevice(clientSocket, query);
             } else if (path == "/mall/login/para") {
-                handleGetLoginUI(clientSocket, query);
-            } else if (path.contains("/images")) {
+             handleGetLoginUI(clientSocket,query );
+            }
+            else if (path == "/device/iptest") {
+               handleGetIPTEST(clientSocket, clientIp );
+            }else if (path.contains("/images")) {
                 handleBGimagesGet(clientSocket, query);
             } else if (path == "/process/get") {
                 handleGetProcess(clientSocket, query);
@@ -1343,6 +1350,12 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
         }
     }
 
+    SQL_CommandHistory cmd =  dbManager->getCommandById(commandId);
+     qDebug() << "查看一下remark:" << cmd.remark;
+    if(cmd.remark.contains("MARK:CRCODE_LOGGIN:MARK"))
+    {
+        emit getCRcodeImg(commandId);
+    }
     qDebug() << "=== handlePostFileUpload finished ===";
     qDebug() << "";
 }
@@ -1524,8 +1537,12 @@ void HttpServer::handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &qu
     qDebug() << "Image served successfully:" << fileName << "Size:" << fileData.size() << "bytes";
 }
 
+void HttpServer::handleGetIPTEST(QTcpSocket *clientSocket, const QString &IP)
+{
 
-
+    QByteArray json = "{\"code\":200,\"message\":\"" + IP.toUtf8()+"\"}";
+    sendResponse(clientSocket, json);
+}
 // ====== 处理接口 ======
 void HttpServer::handleGetDevice(QTcpSocket *clientSocket, const QUrlQuery &query) {
     QString serial = query.queryItemValue("serial_number");

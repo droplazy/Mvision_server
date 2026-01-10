@@ -1,7 +1,7 @@
 #ifndef MALLUSERMANAGER_H
 #define MALLUSERMANAGER_H
 
-#include <QDialog>
+#include <QWidget>
 #include <QStandardItemModel>
 #include <QSortFilterProxyModel>
 
@@ -11,7 +11,7 @@ namespace Ui {
 class mallusermanager;
 }
 
-class mallusermanager : public QDialog
+class mallusermanager : public QWidget
 {
     Q_OBJECT
 

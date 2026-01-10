@@ -1,7 +1,7 @@
 #ifndef ORDERLIST_H
 #define ORDERLIST_H
 
-#include <QDialog>
+#include <QWidget>
 #include <QSqlQueryModel>
 #include <QSortFilterProxyModel>
 #include "DatabaseManager.h"
@@ -10,7 +10,7 @@ namespace Ui {
 class orderlist;
 }
 
-class orderlist : public QDialog
+class orderlist : public QWidget
 {
     Q_OBJECT
 
