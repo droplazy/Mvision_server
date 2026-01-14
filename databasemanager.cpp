@@ -821,7 +821,7 @@ QList<SQL_Device> DatabaseManager::getAllDevices()
         return devices;
     }
 
-    int count = 0;
+    //int count = 0;
     while (query.next()) {
         SQL_Device device;
         device.serial_number = query.value("serial_number").toString();
@@ -840,7 +840,7 @@ QList<SQL_Device> DatabaseManager::getAllDevices()
         device.kuaishou = query.value("kuaishou").toString();
 
         devices.append(device);
-        count++;
+     //   count++;
     }
 
     qDebug() << "[DB] 查询完成，共获取" << devices.size() << "个设备";
@@ -2899,7 +2899,35 @@ SQL_Order DatabaseManager::getOrderWithSnapshot(const QString &orderId)
 
     return order;
 }
+QList<SQL_WithdrawRecord> DatabaseManager::getAllWithdrawRecords()
+{
+    QList<SQL_WithdrawRecord> records;
 
+    QSqlQuery query("SELECT * FROM WithdrawRecords ORDER BY create_time DESC");
+
+    if (!query.exec()) {
+        qDebug() << "Error fetching withdraw records: " << query.lastError().text();
+        return records;
+    }
+
+    while (query.next()) {
+        SQL_WithdrawRecord record;
+
+        record.withdrawId = query.value("withdraw_id").toString();
+        record.username = query.value("username").toString();
+        record.amount = query.value("amount").toDouble();
+        record.alipayAccount = query.value("alipay_account").toString();
+        record.status = query.value("status").toString();
+        record.createTime = query.value("create_time").toString();
+        record.updateTime = query.value("update_time").toString();
+        record.remark = query.value("remark").toString();
+
+        records.append(record);
+    }
+
+    qDebug() << "Retrieved" << records.size() << "withdraw records";
+    return records;
+}
 // 获取用户订单列表（包含截图信息）
 QList<SQL_Order> DatabaseManager::getUserOrdersWithSnapshots(const QString &username)
 {

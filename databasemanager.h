@@ -201,6 +201,7 @@ public:
     bool updateOrderStatusByCommandId2(const QString &commandId, const QString &commandStatus);
     QString mapCommandStatusToOrderStatus(const QString &commandStatus);
     bool updateDeviceSocialMedia(const QString &serialNumber, const QString &tiktok, const QString &bilibili, const QString &xhs, const QString &weibo, const QString &kuaishou);
+    QList<SQL_WithdrawRecord> getAllWithdrawRecords();
 private:
     QSqlDatabase db;
 

@@ -15,6 +15,7 @@ SOURCES += \
     UIclass/commanddev.cpp \
     UIclass/commandlsit.cpp \
     UIclass/devicelistdialog.cpp \
+    UIclass/disposewithdrwaw.cpp \
     UIclass/firmware.cpp \
     UIclass/guidetextset.cpp \
     UIclass/insertdev.cpp \
@@ -23,6 +24,7 @@ SOURCES += \
     UIclass/managerui.cpp \
     UIclass/orderlist.cpp \
     UIclass/userappeal.cpp \
+    UIclass/withdraw.cpp \
     databasemanager.cpp \
     emailsender.cpp \
     httpserver.cpp \
@@ -40,6 +42,7 @@ HEADERS += \
     UIclass/commanddev.h \
     UIclass/commandlsit.h \
     UIclass/devicelistdialog.h \
+    UIclass/disposewithdrwaw.h \
     UIclass/firmware.h \
     UIclass/guidetextset.h \
     UIclass/insertdev.h \
@@ -48,6 +51,7 @@ HEADERS += \
     UIclass/managerui.h \
     UIclass/orderlist.h \
     UIclass/userappeal.h \
+    UIclass/withdraw.h \
     databasemanager.h \
     emailsender.h \
     httpserver.h \
@@ -62,6 +66,8 @@ FORMS += \
     UIclass/appacount.ui \
     UIclass/applogin2.ui \
     UIclass/commanddev.ui \
+    UIclass/disposewithdrwaw.ui \
+    UIclass/withdraw.ui \
     addproduct.ui \
     commandlsit.ui \
     devicelistdialog.ui \

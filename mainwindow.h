@@ -40,17 +40,19 @@ private slots:
     void on_pushButton_cmddispatch_clicked();
     void on_pushButton_appcount_clicked();
 
+    void on_pushButton_withdraw_clicked();
+
 private:
     Ui::MainWindow *ui;
 
     QString IP;
     QString MQTT_PORT;
     QString HTTP_PORT;
-
+    class DatabaseManager *p_db;
     class HttpServer *p_http;
     class mqttclient *p_mqtt_cli;
     class MQTT_server *p_mqttt_ser;
-    class DatabaseManager *p_db;
+
     class EmailSender *p_email;
 
     void updateSystemTime();

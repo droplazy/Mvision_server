@@ -1,6 +1,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-#include "loghandler.h"
+//#include "loghandler.h"
 #include <QMessageBox>
 #include <QVBoxLayout>
 /****************************子窗口控件*/
@@ -15,13 +15,16 @@
 #include "./UIclass/managerui.h"
 #include "./UIclass/commanddev.h"
 #include "./UIclass/appacount.h"
+#include "UIclass/withdraw.h"
+
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , p_db(nullptr)
     , p_http(nullptr)
-    , p_mqttt_ser(nullptr)
     , p_mqtt_cli(nullptr)
+    , p_mqttt_ser(nullptr)
     , p_email(nullptr)
 {
     ui->setupUi(this);
@@ -280,7 +283,7 @@ void MainWindow::on_pushButton_openmqtt_clicked()
 
     } else {
         // 已经有服务在运行，停止所有服务
-        bool allStopped = true;
+        //bool allStopped = true;
 
         // 1. 停止HTTP服务器
         if (p_http && p_http->isListening()) {
@@ -947,5 +950,35 @@ void MainWindow::on_pushButton_appcount_clicked()
             p_appacount, &appacount::updateCRcode);
 
     // 5. 显示（不需要exec()）
+    ui->sub_widget->setVisible(true);
+}
+
+void MainWindow::on_pushButton_withdraw_clicked()
+{
+    // 1. 如果sub_widget已有布局，先清空内容
+    if (ui->sub_widget->layout()) {
+        QLayoutItem* item;
+        while ((item = ui->sub_widget->layout()->takeAt(0)) != nullptr) {
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
+        }
+        // 重要：清空后布局还在，但内容是空的
+    } else {
+        // 如果没有布局，创建一个
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
+
+    qDebug() << "提现管理按钮被点击";
+
+    // 2. 创建提现管理子界面
+    withdraw *p_withdraw = new withdraw(ui->sub_widget, p_db);
+
+    // 3. 添加到现有布局（不要重新创建布局！）
+    ui->sub_widget->layout()->addWidget(p_withdraw);
+
+    // 4. 显示
     ui->sub_widget->setVisible(true);
 }

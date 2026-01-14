@@ -3974,8 +3974,8 @@ void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByt
             response["code"] = 400;
             response["success"] = false;
             response["message"] = "验证码错误或已过期";
-            sendJsonResponse(clientSocket, 400, response);
-            return;
+         //TODO   sendJsonResponse(clientSocket, 400, response);
+         //   return;
         }
 
         // 获取用户信息
@@ -4033,7 +4033,7 @@ void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByt
         qDebug() << "提现金额:" << QString::number(withdrawAmount, 'f', 2) << "元";
         qDebug() << "支付宝账号:" << alipay;
         qDebug() << "提现后余额:" << QString::number(user.balance - withdrawAmount, 'f', 2) << "元";
-
+/* TODO
         // 扣除余额
         if (!dbManager->updateMallUserBalance(username, -withdrawAmount)) {
             qDebug() << "扣除余额失败";
@@ -4042,7 +4042,7 @@ void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByt
             sendJsonResponse(clientSocket, 500, response);
             return;
         }
-
+*/
         // 创建提现记录ID
         QString withdrawId = generateWithdrawId();
         QString withdrawTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");

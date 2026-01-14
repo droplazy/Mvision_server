@@ -33,8 +33,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    qInstallMessageHandler(LogHandler::messageHandler);
-    LogHandler::instance()->setLogFile("app_log.txt");
+    // qInstallMessageHandler(LogHandler::messageHandler);
+    // LogHandler::instance()->setLogFile("app_log.txt");
     MainWindow w;
     w.show();
 
