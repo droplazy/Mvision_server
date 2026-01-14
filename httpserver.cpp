@@ -3887,6 +3887,7 @@ void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByt
         QString username = dataObj.value("username").toString();
         QString password = dataObj.value("passwd").toString();
         QString alipay = dataObj.value("alipay").toString();
+        QString verifyCode =  dataObj.value("verifycode").toString();
         double withdrawAmount = dataObj.value("amount").toDouble();
 
         qDebug() << "提现请求参数:";
@@ -3930,6 +3931,53 @@ void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByt
             return;
         }
 
+        // 验证码验证 - 从容器中查找并验证
+        bool verifySuccess = false;
+        {
+            QMutexLocker locker(&codeMutex);
+
+            for (int i = 0; i < verificationCodes.size(); i++) {
+                VerificationCode &vc = verificationCodes[i];
+
+                if (vc.username == username && vc.code == verifyCode) {
+                    if (vc.isValid()) {
+                        qDebug() << "验证码验证成功:";
+                        qDebug() << "  用户名:" << vc.username;
+                        qDebug() << "  验证码:" << vc.code;
+                        qDebug() << "  邮箱:" << vc.email;
+                        qDebug() << "  创建时间:" << vc.createTime.toString("HH:mm:ss");
+                        qDebug() << "  过期时间:" << vc.expireTime.toString("HH:mm:ss");
+
+                        // 标记为已验证
+                        vc.verified = true;
+                        verifySuccess = true;
+
+                        // 清理该用户的验证码（可以移除或保留已验证状态）
+                        verificationCodes.remove(i);
+                        qDebug() << "已从容器中移除该验证码";
+
+                        break;
+                    } else {
+                        qDebug() << "验证码无效或已过期:";
+                        qDebug() << "  验证码:" << vc.code;
+                        qDebug() << "  是否已验证:" << vc.verified;
+                        qDebug() << "  是否过期:" << vc.isExpired();
+                    }
+                }
+            }
+        }
+
+        if (!verifySuccess) {
+            qDebug() << "验证码错误或不存在:";
+            qDebug() << "  用户名:" << username;
+            qDebug() << "  验证码:" << verifyCode;
+            response["code"] = 400;
+            response["success"] = false;
+            response["message"] = "验证码错误或已过期";
+            sendJsonResponse(clientSocket, 400, response);
+            return;
+        }
+
         // 获取用户信息
         SQL_MallUser user = dbManager->getMallUserByUsername(username);
 
@@ -3958,7 +4006,7 @@ void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByt
         }
 
         // 检查最小提现金额 (10元)
-        double minWithdrawAmount = 10.0;
+        double minWithdrawAmount = 5.0;
         if (withdrawAmount < minWithdrawAmount) {
             qDebug() << "未达到最小提现金额: 最少" << minWithdrawAmount << "元，实际" << withdrawAmount << "元";
             response["success"] = false;
@@ -3968,7 +4016,7 @@ void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByt
         }
 
         // 检查最大提现金额 (50000元)
-        double maxWithdrawAmount = 50000.0;
+        double maxWithdrawAmount = 50.0;
         if (withdrawAmount > maxWithdrawAmount) {
             qDebug() << "超过最大提现金额: 最多" << maxWithdrawAmount << "元，实际" << withdrawAmount << "元";
             response["success"] = false;

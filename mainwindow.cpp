@@ -358,7 +358,7 @@ void MainWindow::initEmailService()
 
         p_email->setSmtpServer("smtp.yeah.net", 465);
 
-        if (p_email->login("zwdz668@yeah.net", "XFaYuyxRWqQXJp7w")) {
+        if (p_email->login("zwdz668@yeah.net", "FDcbqh9sg4Gh9cp8")) {
             qDebug() << "SMTP登录成功";
             ui->label_edit_smtp->setText("就绪");
             ui->label_edit_smtp->setStyleSheet("background-color: green; color: white; padding: 2px;");

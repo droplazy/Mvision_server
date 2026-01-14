@@ -284,7 +284,7 @@ void mqttclient::devUpgrade(QStringList upgradeList)
         QJsonObject dataObj;
 
         // 构建URL，假设服务器地址为192.168.10.103:8080
-        QString url = QString("http://192.168.10.103:8080/download?filename=%1").arg(firmwareFile);
+        QString url = QString("http://"+m_hostname+":8080/download?filename=%1").arg(firmwareFile);
         dataObj["url"] = url;
         dataObj["md5"] = md5String;
 
