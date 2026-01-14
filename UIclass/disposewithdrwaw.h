@@ -40,6 +40,7 @@ private:
     void setupDragDrop();
     bool validateImage(const QString &filePath);
     void updateImagePreview(const QString &filePath);
+    QString backupImage(const QString &originalPath, const QString &withdrawId);
 };
 
 #endif // DISPOSEWITHDRWAW_H

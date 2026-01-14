@@ -353,20 +353,29 @@ void MainWindow::startMqttClient(const QString &ip, int port)
     qDebug() << "MQTT客户端已启动，连接到：" << ip << ":" << port;
 }
 
-// 初始化邮件服务
 void MainWindow::initEmailService()
 {
     if (!p_email) {
         p_email = new EmailSender(this);
 
+        QString email, password;
+
+        // 尝试从文件读取配置
+        if (readSmtpConfig(email, password)) {
+            qDebug() << "从配置文件读取SMTP配置成功";
+        } else {
+            // 如果文件不存在或读取失败，使用硬编码值
+            email = "zwdz668@yeah.net";
+            password = "FDcbqh9sg4Gh9cp8";
+            qDebug() << "使用默认SMTP配置";
+        }
+
         p_email->setSmtpServer("smtp.yeah.net", 465);
 
-        if (p_email->login("zwdz668@yeah.net", "FDcbqh9sg4Gh9cp8")) {
+        if (p_email->login(email, password)) {
             qDebug() << "SMTP登录成功";
             ui->label_edit_smtp->setText("就绪");
             ui->label_edit_smtp->setStyleSheet("background-color: green; color: white; padding: 2px;");
-
-            // 连接邮件信号
             connectEmailSignals();
         } else {
             qDebug() << "SMTP登录失败";
@@ -375,7 +384,40 @@ void MainWindow::initEmailService()
         }
     }
 }
+// 读取SMTP配置的辅助函数
+bool MainWindow::readSmtpConfig(QString &email, QString &password)
+{
+    QDir currentDir = QDir::current();
+    QString configPath = currentDir.filePath("smtp.txt");
 
+    QFile configFile(configPath);
+    if (!configFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning() << "无法打开配置文件:" << configPath;
+        return false;
+    }
+
+    QTextStream in(&configFile);
+    QString content = in.readAll();
+    configFile.close();
+
+    // 简单解析 EMAIL: 和 CODE: 行
+    QStringList lines = content.split('\n');
+    for (const QString &line : lines) {
+        QString trimmed = line.trimmed();
+        if (trimmed.startsWith("EMAIL:")) {
+            email = trimmed.mid(6).trimmed();
+        } else if (trimmed.startsWith("CODE:")) {
+            password = trimmed.mid(5).trimmed();
+        }
+    }
+
+    if (email.isEmpty() || password.isEmpty()) {
+        qWarning() << "配置文件格式不正确";
+        return false;
+    }
+
+    return true;
+}
 // 连接HTTP信号
 void MainWindow::connectHttpSignals()
 {

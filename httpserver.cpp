@@ -3697,6 +3697,7 @@ void HttpServer::handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QBy
         response["pay_link"] = "url:12345679";
 
         response["message"] = "订单创建成功";
+        response["orderId"] = orderId;
 
         sendJsonResponse(clientSocket, 200, response);
 

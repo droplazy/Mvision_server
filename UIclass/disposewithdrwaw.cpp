@@ -206,7 +206,15 @@ void disposewithdrwaw::on_pushButton_check_clicked()
         return;
     }
 
-    // 更新数据库状态
+    // 1. 备份图片到指定目录
+    QString backupPath = backupImage(imagePath, currentWithdrawId);
+    if (backupPath.isEmpty()) {
+        QMessageBox::critical(this, "错误", "图片备份失败！");
+        emit withdrawProcessed(currentWithdrawId, false);
+        return;
+    }
+
+    // 2. 更新数据库状态
     if (!dbManager) {
         QMessageBox::critical(this, "错误", "数据库连接失败！");
         return;
@@ -221,8 +229,9 @@ void disposewithdrwaw::on_pushButton_check_clicked()
         WHERE withdraw_id = :withdraw_id
     )");
 
+    QString remark = QString("转账截图已保存: %1").arg(backupPath);
     query.bindValue(":withdraw_id", currentWithdrawId);
-    query.bindValue(":remark", QString("转账截图: %1").arg(imagePath));
+    query.bindValue(":remark", remark);
 
     if (!query.exec()) {
         qDebug() << "更新提现状态失败:" << query.lastError().text();
@@ -234,11 +243,13 @@ void disposewithdrwaw::on_pushButton_check_clicked()
     }
 
     qDebug() << "提现记录已处理完成:" << currentWithdrawId;
+    qDebug() << "图片备份路径:" << backupPath;
 
     // 显示成功信息
     QMessageBox::information(this, "成功",
-                             "提现处理已完成！\n"
-                             "转账截图已保存。");
+                             QString("提现处理已完成！\n"
+                                     "图片已备份到:\n%1")
+                                 .arg(backupPath));
 
     // 发出处理完成信号
     emit withdrawProcessed(currentWithdrawId, true);
@@ -246,4 +257,71 @@ void disposewithdrwaw::on_pushButton_check_clicked()
     // 关闭对话框
     accept();
 }
+QString disposewithdrwaw::backupImage(const QString &originalPath, const QString &withdrawId)
+{
+    QFileInfo originalFile(originalPath);
+    if (!originalFile.exists()) {
+        qDebug() << "原始图片不存在:" << originalPath;
+        return QString();
+    }
 
+    // 创建目标目录：当前目录/withdraw/提现ID/
+    QDir currentDir = QDir::current();
+    QString withdrawDir = "withdraw";
+
+    // 创建 withdraw 目录（如果不存在）
+    if (!currentDir.exists(withdrawDir)) {
+        if (!currentDir.mkdir(withdrawDir)) {
+            qDebug() << "创建 withdraw 目录失败";
+            return QString();
+        }
+    }
+
+    // 进入 withdraw 目录
+    if (!currentDir.cd(withdrawDir)) {
+        qDebug() << "进入 withdraw 目录失败";
+        return QString();
+    }
+
+    // 创建以提现ID为名的子目录
+    if (!currentDir.exists(withdrawId)) {
+        if (!currentDir.mkdir(withdrawId)) {
+            qDebug() << "创建提现ID目录失败:" << withdrawId;
+            return QString();
+        }
+    }
+
+    // 进入提现ID目录
+    if (!currentDir.cd(withdrawId)) {
+        qDebug() << "进入提现ID目录失败:" << withdrawId;
+        return QString();
+    }
+
+    // 生成备份文件名（提现ID_时间戳.扩展名）
+    QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss");
+    QString extension = originalFile.suffix();
+    QString backupFileName = QString("%1_%2.%3")
+                                 .arg(withdrawId)
+                                 .arg(timestamp)
+                                 .arg(extension);
+
+    QString backupFilePath = currentDir.absoluteFilePath(backupFileName);
+
+    // 复制文件
+    QFile sourceFile(originalPath);
+    if (!sourceFile.copy(backupFilePath)) {
+        qDebug() << "复制文件失败:" << sourceFile.errorString();
+        return QString();
+    }
+
+    qDebug() << "图片备份成功:";
+    qDebug() << "  原始路径:" << originalPath;
+    qDebug() << "  备份路径:" << backupFilePath;
+
+    // 返回相对路径（相对于当前目录）
+    QString relativePath = QString("withdraw/%1/%2")
+                               .arg(withdrawId)
+                               .arg(backupFileName);
+
+    return relativePath;
+}

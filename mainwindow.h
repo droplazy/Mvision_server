@@ -71,5 +71,6 @@ private:
     void disconnectMqttClientSignals();
     void connectHttpSignals();
     void enableNetworkControls(bool enable);
+    bool readSmtpConfig(QString &email, QString &password);
 };
 #endif // MAINWINDOW_H
