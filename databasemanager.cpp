@@ -3537,3 +3537,181 @@ SQL_WithdrawRecord DatabaseManager::getWithdrawRecordById(const QString &withdra
 
     return record;
 }
+bool DatabaseManager::createAppAccountTable()
+{
+    QSqlQuery query;
+    QString createTableQuery = R"(
+        CREATE TABLE IF NOT EXISTS AppAccounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_name TEXT UNIQUE NOT NULL,
+            platform TEXT NOT NULL,
+            username TEXT NOT NULL,
+            create_time TEXT DEFAULT (datetime('now', 'localtime')),
+            status TEXT DEFAULT 'active',
+            remark TEXT,
+            devserial TEXT,
+            update_time TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    )";
+
+    if (!query.exec(createTableQuery)) {
+        qDebug() << "创建AppAccounts表失败: " << query.lastError().text();
+        return false;
+    }
+    qDebug() << "AppAccounts表创建成功";
+    return true;
+}
+
+// 2. 添加App账号
+bool DatabaseManager::insertAppAccount(const SQL_AppAccount &account)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        INSERT INTO AppAccounts (account_name, platform, username, status, remark, devserial)
+        VALUES (:account_name, :platform, :username, :status, :remark, :devserial)
+    )");
+
+    query.bindValue(":account_name", account.accountName);
+    query.bindValue(":platform", account.platform);
+    query.bindValue(":username", account.username);
+    query.bindValue(":status", account.status.isEmpty() ? "active" : account.status);
+    query.bindValue(":remark", account.remark);
+    query.bindValue(":devserial", account.devserial);
+
+    if (!query.exec()) {
+        qDebug() << "添加App账号失败: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "添加App账号成功: " << account.accountName;
+    return true;
+}
+
+// 3. 删除App账号
+bool DatabaseManager::deleteAppAccount(int accountId)
+{
+    QSqlQuery query;
+    query.prepare("DELETE FROM AppAccounts WHERE id = :id");
+    query.bindValue(":id", accountId);
+
+    if (!query.exec()) {
+        qDebug() << "删除App账号失败: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "删除App账号成功，ID: " << accountId;
+    return true;
+}
+
+// 4. 修改App账号
+bool DatabaseManager::updateAppAccount(const SQL_AppAccount &account)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE AppAccounts
+        SET platform = :platform,
+            username = :username,
+            status = :status,
+            remark = :remark,
+            devserial = :devserial,
+            update_time = datetime('now', 'localtime')
+        WHERE id = :id
+    )");
+
+    query.bindValue(":id", account.id);
+    query.bindValue(":platform", account.platform);
+    query.bindValue(":username", account.username);
+    query.bindValue(":status", account.status);
+    query.bindValue(":remark", account.remark);
+    query.bindValue(":devserial", account.devserial);
+
+    if (!query.exec()) {
+        qDebug() << "修改App账号失败: " << query.lastError().text();
+        return false;
+    }
+
+    qDebug() << "修改App账号成功，ID: " << account.id;
+    return true;
+}
+
+// 5. 查询所有App账号
+QList<SQL_AppAccount> DatabaseManager::getAllAppAccounts()
+{
+    QList<SQL_AppAccount> accounts;
+    QSqlQuery query("SELECT * FROM AppAccounts ORDER BY create_time DESC");
+
+    while (query.next()) {
+        SQL_AppAccount account = extractAppAccountFromQuery(query);
+        accounts.append(account);
+    }
+
+    return accounts;
+}
+
+// 6. 查询单个App账号
+SQL_AppAccount DatabaseManager::getAppAccountById(int accountId)
+{
+    SQL_AppAccount account;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM AppAccounts WHERE id = :id");
+    query.bindValue(":id", accountId);
+
+    if (query.exec() && query.next()) {
+        account = extractAppAccountFromQuery(query);
+    }
+
+    return account;
+}
+
+// 7. 搜索App账号（只在platform、username、devserial这三个字段搜索）
+QList<SQL_AppAccount> DatabaseManager::searchAppAccounts(const QString &keyword)
+{
+    QList<SQL_AppAccount> accounts;
+    QSqlQuery query;
+    query.prepare(R"(
+        SELECT * FROM AppAccounts
+        WHERE platform LIKE :keyword
+           OR username LIKE :keyword
+           OR devserial LIKE :keyword
+        ORDER BY create_time DESC
+    )");
+    query.bindValue(":keyword", "%" + keyword + "%");
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_AppAccount account = extractAppAccountFromQuery(query);
+            accounts.append(account);
+        }
+    }
+
+    return accounts;
+}
+
+// 8. 从查询结果中提取数据
+SQL_AppAccount DatabaseManager::extractAppAccountFromQuery(const QSqlQuery &query)
+{
+    SQL_AppAccount account;
+    account.id = query.value("id").toInt();
+    account.accountName = query.value("account_name").toString();
+    account.platform = query.value("platform").toString();
+    account.username = query.value("username").toString();
+    account.createTime = query.value("create_time").toString();
+    account.status = query.value("status").toString();
+    account.remark = query.value("remark").toString();
+    account.devserial = query.value("devserial").toString();
+    return account;
+}
+
+// 9. 检查账号名是否存在
+bool DatabaseManager::checkAppAccountExists(const QString &accountName)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM AppAccounts WHERE account_name = :account_name");
+    query.bindValue(":account_name", accountName);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt() > 0;
+    }
+
+    return false;
+}

@@ -580,7 +580,6 @@ void MainWindow::connectHttpSignals()
             this, &MainWindow::updateNewrqeInfo,
             Qt::UniqueConnection);
 
-    // 连接邮件信号（如果邮件服务已启动）
     if (p_email) {
         connectEmailSignals();
     }
@@ -612,6 +611,20 @@ void MainWindow::connectHttpToMqtt()
             p_http, &HttpServer::onDeviceUpdata,
             Qt::UniqueConnection);
 
+    connect(p_http, &HttpServer::forwardJsonToMQTT,
+            this, [this](const QString& deviceSerial, const QString& jsonString) {
+                if (p_mqtt_cli) {
+                    p_mqtt_cli->SingleTopicPub(deviceSerial, jsonString);
+                }
+            });
+    // 尝试普通连接方式（去掉UniqueConnection测试）
+    bool connected = connect(p_mqtt_cli, &mqttclient::applogginstatus,
+                             p_http, &HttpServer::handleAppLoginStatus,
+                             Qt::AutoConnection);
+
+    qDebug() << "信号槽连接结果:" << connected;
+
+    // 连接邮件信号（如果邮件服务已启动）
     qDebug() << "HTTP与MQTT客户端信号连接成功";
 }
 

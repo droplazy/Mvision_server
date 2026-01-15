@@ -13,33 +13,49 @@
 #include "databasemanager.h"
 #include <QTimer>
 #include <QMutex>
+// 在 HttpServer.h 中添加：
 
+
+#define DEBUG_MODE 1
+
+struct FrontendTask {
+    QString taskId;          // 任务ID
+    QString platform;        // 平台 AAA/BBB/CCC等
+    QString account;         // 账号
+    QString deviceSerial;    // 设备序列号
+    QString status;          // 状态: pending, processing, success, failed
+    QString createTime;      // 创建时间
+    QString updateTime;      // 更新时间
+    QString remark;          // 备注信息
+    QString commandid;
+    QString username;
+};
 class HttpServer : public QTcpServer
 {
     Q_OBJECT
 public:
     explicit HttpServer(DatabaseManager *db, QObject *parent = nullptr);
-
+    
     QString LOGIN_GUIDE_TEXT ="佳荣电子商城";              // 使用宏
     QString LOGIN_SLOGAN1 = "支持软件硬件研发打样一站式服务";               // 使用宏
     QString LOGIN_SLOGAN2 =  "已经服务江浙沪上百家企业";             // 使用宏
-
+    
     void sendResponse(QTcpSocket *clientSocket, const QByteArray &json);
     void sendNotFound(QTcpSocket *clientSocket);
-
+    
     // 创建 DeviceStatus 对象的 QVector
     QVector<DeviceStatus> deviceVector;
     QVector<Machine_Process_Total> processVector;
-
+    
 protected:
     void incomingConnection(qintptr socketDescriptor) override;
-
+    
 private slots:
     void onReadyRead();
     void cleanupExpiredCodes();                    // 清理过期验证码
 public slots:
     void onDeviceUpdata(DeviceStatus updatedDevice);
-    // 十秒定时函数
+    void handleAppLoginStatus(QString commid, bool isSuccess);
     void tenSecondTimerFunction(); //todo 设备上报时间格式有错误
 private:
     void handleGetOrderQuery(QTcpSocket *clientSocket, const QUrlQuery &query);
@@ -54,7 +70,7 @@ private:
     void handlePostAuthLogin(QTcpSocket *clientSocket, const QByteArray &body);
     //void handlePostFileUpload(QTcpSocket *clientSocket,QUrlQuery query, const QByteArray &body);
     void handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query, const QByteArray &body);
-
+    
     QByteArray getContentType( QString& filePath);// 新增的静态文件处理方法
     void printStaticFiles(const QByteArray &htmlContent);
     void send404(QTcpSocket *clientSocket);
@@ -62,13 +78,13 @@ private:
     void handleGetDownload(QTcpSocket *clientSocket, const QUrlQuery &query);
     QJsonObject parseJsonData(const QString &jsonString);
     QJsonObject generateJson(const QString &username, int code, const QString &token = "");
-
+    
     QJsonObject generateDeviceResponse(const QJsonArray &devices);
     QJsonObject generateFailureResponse();
     DeviceStatus *findDeviceBySerialNumber(QVector<DeviceStatus> &devices, const QString &serialNumber);
     QJsonObject generateJsonHearResponse(const QJsonObject &data);
     void generateTextData();
-
+    
     // 初始化定时器
     void initTimer();
     QTimer *m_tenSecondTimer;  // 十秒定时器
@@ -76,11 +92,11 @@ private:
     QJsonObject generateProcessResponse(const QJsonArray &data);
     QJsonObject generateProcessSingleResponse(const QJsonObject &data);
     bool deleteProcessByProcessId(const QString &process_id);
-
+    
     QString parseJsonGenerateNode(const QJsonObject &rootObj, QVector<Machine_Process_Total> &processVector);
     bool parseMachineProcess(const QJsonObject &rootObj, QVector<Machine_Process_Total> &processVector);
     bool processDeleteRequest(const QJsonObject &rootObj);
-
+    
     DatabaseManager *dbManager;
     void sendHttpResponse(QTcpSocket *clientSocket, int statusCode, const QString &statusText, const QByteArray &body);
     void createDownloadDirectoryIfNeeded();
@@ -91,9 +107,9 @@ private:
     void extracted(QString &statusFilter, QString &userFilter,
                    QList<SQL_Order> &orders, QList<SQL_Order> &allOrders);
     void handleGetOrderList(QTcpSocket *clientSocket, const QUrlQuery &query);
-
-
-
+    
+    
+    
     //订单数据库测试接口
     void handleCreateTestOrdersSimple();
     void handleGetLoginUI(QTcpSocket *clientSocket, const QUrlQuery &query);
@@ -111,14 +127,14 @@ private:
     void handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QByteArray &body);
     QString generatePaymentCode();
     QString generateOrderId();
-
-
+    
+    
     // 待支付订单容器（订单ID -> 订单对象）
     QMap<QString, SQL_Order> pendingOrders;
-
+    
     // 订单超时定时器
     QTimer *orderTimeoutTimer;
-
+    QVector<FrontendTask> frontendTasks;  // 前端任务容器
     // 订单过期时间（秒）
     static const int ORDER_EXPIRY_SECONDS = 60; // 30分钟
     bool completeOrderPayment(const QString &orderId);
@@ -140,11 +156,11 @@ private:
     QStringList generateRandomSerialNumbers(int count);
     QString mapStatusToChinese(const QString &status);
     void handleCreateProductDebug();
-   // void handlePostMallProducts(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
+    // void handlePostMallProducts(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
     void handleGetMallProducts(QTcpSocket *clientSocket);
-   // void handlePostVerifyCode(QTcpSocket *clientSocket, const QByteArray &body);
-
-
+    // void handlePostVerifyCode(QTcpSocket *clientSocket, const QByteArray &body);
+    
+    
     void initVerificationSystem();// 初始化验证码系统
     void addVerificationCode(const QString &code, const QString &username, const QString &email); // 添加验证码到容器
     bool verifyCode(const QString &username, const QString &code);// 验证验证码
@@ -153,7 +169,7 @@ private:
     QTimer *cleanupTimer;                         // 清理定时器
     QMutex codeMutex;                             // 线程安全锁
     void printVerificationCodes();
-  //  bool checkVerificationCodeFrequency(const QString &username, const QString &email, int minIntervalSeconds);
+    //  bool checkVerificationCodeFrequency(const QString &username, const QString &email, int minIntervalSeconds);
     void sendUnauthorized(QTcpSocket *clientSocket);
     void saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus);
     void markDeviceOffline(DeviceStatus &device);
@@ -161,6 +177,13 @@ private:
     void handleGetIPTEST(QTcpSocket *clientSocket, const QString &IP);
     void handleGetWithDraw(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handlePostWithDrawPic(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
+    void handleGetidleDev(QTcpSocket *clientSocket);
+    void handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArray &body);
+    QString findAvailableDevice(const QString &platform);
+    void handlePostPlatformReqSendcode(QTcpSocket *clientSocket, const QByteArray &body);
+    void handleGetTaskSta(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void updateTaskStatusByCommandId(const QString &commandid, const QString &sta);
+    void handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &query);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
@@ -169,6 +192,8 @@ signals:
     void sendreqInfo(QString);
     void updateDev();
     void getCRcodeImg(QString);
+    void forwardJsonToMQTT(const QString& deviceSerial, const QString& jsonString);
+    
 };
 
 #endif // HTTPSERVER_H

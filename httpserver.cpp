@@ -755,10 +755,15 @@ void HttpServer::onReadyRead() {
             // GET请求处理...
             if (path == "/device") {
                 handleGetDevice(clientSocket, query);
-            } else if (path == "/mall/login/para") {
+            }else if (path == "/mall/login/para") {
                 handleGetLoginUI(clientSocket,query );
-            }
-            else if (path == "/device/iptest") {
+            }else if (path == "/platform/request_CRcode") {
+                handleGetCRCODE(clientSocket,query );
+            }else if (path == "/platform/taskquery") {
+                handleGetTaskSta(clientSocket,query );
+            }else if (path == "/platform/get_vaild") {
+                handleGetidleDev(clientSocket );
+            }else if (path == "/device/iptest") {
                 handleGetIPTEST(clientSocket, clientIp );
             }else if (path.contains("/images")) {
                 handleBGimagesGet(clientSocket, query);
@@ -866,9 +871,14 @@ void HttpServer::onReadyRead() {
                     handlePostMallOrderCheckout(clientSocket, body);
                 } else if (path == "/order/dispose/Verify") {
                     handlePostOrderVerify(clientSocket, body);
-                } else if (path == "/mall/auth/order/appeal/text") {
+                }else if (path == "/mall/auth/order/appeal/text") {
                     handlePostMallUserAppealtext(clientSocket, body, query);
-                } else if (path == "/mall/auth/order/appeal/picture") {
+                } else if (path == "/platform/request") {
+                    handlePostPlatformReq(clientSocket, body);
+                 }
+                else if (path == "/platform/request_sendcode") {
+                    handlePostPlatformReqSendcode(clientSocket, body);
+                }else if (path == "/mall/auth/order/appeal/picture") {
                     // 如果已经接收的body不完整，继续读取
                     if (contentLength > 0 && body.size() < contentLength) {
                         qDebug() << "Need to read more data. Current:" << body.size()
@@ -1005,6 +1015,85 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
     // // 保存新设备到数据库
     // saveDeviceStatusToDatabase(updatedDevice);
 }
+void HttpServer::updateTaskStatusByCommandId(const QString &commandid, const QString &sta)
+{
+    qDebug() << "开始更新任务状态，commandid:" << commandid << "新状态:" << sta;
+
+    bool found = false;
+
+    // 遍历查找任务
+    for (auto& task : frontendTasks) {
+        if (task.commandid == commandid) {
+            found = true;
+            QString oldStatus = task.status;
+            task.status = sta;
+            task.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+
+            qDebug() << "任务状态更新成功";
+            qDebug() << "任务ID:" << task.taskId;
+            qDebug() << "原状态:" << oldStatus << "-> 新状态:" << sta;
+            break;
+        }
+    }
+
+    if (!found) {
+        qWarning() << "未找到对应commandid的任务:" << commandid;
+    }
+}
+void HttpServer::handleAppLoginStatus(QString commid, bool isSuccess)
+{
+    qDebug() << "收到登录状态信号, commandid:" << commid << "状态:" << (isSuccess ? "成功" : "失败");
+
+    // 遍历查找任务
+    for (int i = 0; i < frontendTasks.size(); i++) {
+        if (frontendTasks[i].commandid == commid) {
+            FrontendTask task = frontendTasks[i];
+
+            // 更新任务状态
+            QString oldStatus = task.status;
+            if (isSuccess) {
+                task.status = "success";
+                qDebug() << "任务" << task.taskId << "状态更新:" << oldStatus << "-> success";
+
+                // 保存账号信息到数据库
+                if (dbManager) {
+                    SQL_AppAccount appAccount;
+                    appAccount.accountName = task.taskId;
+                    appAccount.platform = task.platform;
+                    appAccount.username = task.username.isEmpty() ? task.account : task.username;
+                    appAccount.devserial = task.deviceSerial;
+                    appAccount.remark = task.remark;
+                    appAccount.status = "active";
+
+                    dbManager->insertAppAccount(appAccount);
+                    qDebug() << "账号信息保存到数据库:" << appAccount.accountName;
+                }
+            } else {
+                task.status = "failed";
+                qDebug() << "任务" << task.taskId << "状态更新:" << oldStatus << "-> failed";
+            }
+
+            task.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+
+            // // 移除任务（无论是成功还是失败都移除）
+            // frontendTasks.removeAt(i);
+            // qDebug() << "已移除任务:" << task.taskId << "当前剩余任务数:" << frontendTasks.size();
+
+            // 打印任务详情
+            qDebug() << "任务详情: taskId=" << task.taskId
+                     << ", platform=" << task.platform
+                     << ", account=" << task.account
+                     << ", device=" << task.deviceSerial;
+
+            return; // 找到并处理后直接返回
+        }
+    }
+
+    // 未找到任务
+    qWarning() << "未找到对应commandid的任务:" << commid;
+    qDebug() << "当前frontendTasks容器大小:" << frontendTasks.size();
+}
+
 
 void HttpServer::saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus)
 {
@@ -1386,6 +1475,7 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
     if(cmd.remark.contains("MARK:CRCODE_LOGGIN:MARK"))
     {
         emit getCRcodeImg(commandId);
+      //  updateTaskStatusByCommandId(commandId,"crcode");
     }
     qDebug() << "=== handlePostFileUpload finished ===";
     qDebug() << "";
@@ -1455,6 +1545,248 @@ void HttpServer::sendResponse(QTcpSocket *clientSocket, const QByteArray &json) 
 void HttpServer::sendNotFound(QTcpSocket *clientSocket) {
     QByteArray json = "{\"code\":404,\"message\":\"Not Found\"}";
     sendResponse(clientSocket, json);
+}
+void HttpServer::handleGetidleDev(QTcpSocket *clientSocket)
+{
+    // 检查数据库连接
+    if (!dbManager) {
+        QJsonObject errorJson;
+        errorJson["error"] = "Database connection error";
+        sendJsonResponse(clientSocket, 500, errorJson);
+        return;
+    }
+
+    // 获取所有设备
+    QList<SQL_Device> devices = dbManager->getAllDevices();
+
+    // 初始化计数器
+    int AAA = 0;  // TikTok
+    int BBB = 0;  // Bilibili
+    int CCC = 0;  // XHS (小红书)
+    int DDD = 0;  // Weibo
+    int EEE = 0;  // Kuaishou
+    int FFF = 0;  // 统计未登录任何平台的设备
+
+    // 遍历设备，统计未登录的平台
+    for (const SQL_Device &device : devices) {
+        // 统计各平台未登录的数量
+        if (device.tiktok == "未登录") AAA++;
+        if (device.bilibili == "未登录") BBB++;
+        if (device.xhs == "未登录") CCC++;
+        if (device.weibo == "未登录") DDD++;
+        if (device.kuaishou == "未登录") EEE++;
+
+        // 统计完全未登录任何平台的设备（所有平台都是"未登录"状态）
+        if (device.tiktok == "未登录" &&
+            device.bilibili == "未登录" &&
+            device.xhs == "未登录" &&
+            device.weibo == "未登录" &&
+            device.kuaishou == "未登录") {
+            FFF++;
+        }
+    }
+
+    // 构建响应JSON
+    QJsonObject responseJson;
+    responseJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QJsonObject dataJson;
+    dataJson["AAA"] = AAA;  // TikTok未登录数
+    dataJson["BBB"] = BBB;  // Bilibili未登录数
+    dataJson["CCC"] = CCC;  // 小红书未登录数
+    dataJson["DDD"] = DDD;  // 微博未登录数
+    dataJson["EEE"] = EEE;  // 快手未登录数
+    dataJson["FFF"] = FFF;  // 完全未登录任何平台的设备数
+
+    responseJson["data"] = dataJson;
+
+    // 发送响应
+    sendJsonResponse(clientSocket, 200, responseJson);
+}
+void HttpServer::handleGetTaskSta(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    // 提取taskid参数
+    QString taskId = query.queryItemValue("taskid");
+
+    if (taskId.isEmpty()) {
+        QJsonObject errorResponse;
+        errorResponse["code"] = 400;
+        errorResponse["message"] = "Missing taskid parameter";
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    // 查找任务
+    QString status = "not_found";
+
+    for (const auto& task : frontendTasks) {
+        if (task.taskId == taskId) {
+            status = task.status;
+            break;
+        }
+    }
+
+    // 返回响应
+    QJsonObject response;
+    response["code"] = 200;
+    response["taskid"] = taskId;
+    response["status"] = status;
+
+    sendJsonResponse(clientSocket, 200, response);
+}
+void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    qDebug() << "=== handleGetCRCODE 开始处理 ===";
+
+    // 提取taskid参数
+    QString taskId = query.queryItemValue("taskid");
+
+    if (taskId.isEmpty()) {
+        qWarning() << "缺少taskid参数";
+        QJsonObject errorResponse;
+        errorResponse["code"] = 400;
+        errorResponse["message"] = "Missing taskid parameter";
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    qDebug() << "请求的taskid:" << taskId;
+
+    // 遍历FrontendTask查找对应的commandid
+    QString commandId;
+    bool taskFound = false;
+
+    for (const auto& task : frontendTasks) {
+        if (task.taskId == taskId) {
+            taskFound = true;
+            commandId = task.commandid;
+            qDebug() << "找到任务，commandid:" << commandId;
+            break;
+        }
+    }
+
+    if (!taskFound) {
+        qWarning() << "未找到对应的任务:" << taskId;
+        QJsonObject errorResponse;
+        errorResponse["code"] = 404;
+        errorResponse["message"] = "Task not found";
+        sendJsonResponse(clientSocket, 404, errorResponse);
+        return;
+    }
+
+    if (commandId.isEmpty()) {
+        qWarning() << "任务commandid为空:" << taskId;
+        QJsonObject errorResponse;
+        errorResponse["code"] = 500;
+        errorResponse["message"] = "Task commandid is empty";
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        return;
+    }
+
+
+#ifdef DEBUG_MODE
+    //
+    QDir currentDir = QDir::current();
+    QString imageFilePath = currentDir.filePath("images/debugpic.png");
+    QTimer::singleShot(5000, [this]() {
+                if (!frontendTasks.isEmpty()) {
+                    FrontendTask& task = frontendTasks[QRandomGenerator::global()->bounded(frontendTasks.size())];
+                    task.status = QRandomGenerator::global()->bounded(2) ? "success" : "failed";
+                    qDebug() << "DEBUG: 任务" << task.taskId << "状态设为" << task.status;
+                }
+            });
+#else
+    // 构建Upload目录下对应的文件夹路径
+    QDir currentDir = QDir::current();
+    QString uploadDirPath = currentDir.filePath("Upload");
+    QString commandDirPath = QDir(uploadDirPath).filePath(commandId);
+
+    qDebug() << "检查目录是否存在:";
+    qDebug() << "Upload目录:" << uploadDirPath;
+    qDebug() << "Command目录:" << commandDirPath;
+
+    // 检查Upload目录是否存在
+    if (!QDir(uploadDirPath).exists()) {
+        qWarning() << "Upload目录不存在:" << uploadDirPath;
+        QJsonObject errorResponse;
+        errorResponse["code"] = 404;
+        errorResponse["message"] = "Upload directory not found";
+        sendJsonResponse(clientSocket, 404, errorResponse);
+        return;
+    }
+    // 检查以commandId命名的文件夹是否存在
+    QDir commandDir(commandDirPath);
+    if (!commandDir.exists()) {
+        qWarning() << "Command目录不存在:" << commandDirPath;
+        QJsonObject errorResponse;
+        errorResponse["code"] = 404;
+        errorResponse["message"] = "QR code not generated yet";
+        sendJsonResponse(clientSocket, 404, errorResponse);
+        return;
+    }
+
+    // 查找文件夹中的图片文件（支持常见图片格式）
+    QStringList imageFilters;
+    imageFilters << "*.jpg" << "*.jpeg" << "*.png" << "*.bmp" << "*.gif";
+
+    QStringList imageFiles = commandDir.entryList(imageFilters, QDir::Files);
+
+    if (imageFiles.isEmpty()) {
+        qWarning() << "Command目录中没有图片文件:" << commandDirPath;
+        QJsonObject errorResponse;
+        errorResponse["code"] = 404;
+        errorResponse["message"] = "QR code image not found";
+        sendJsonResponse(clientSocket, 404, errorResponse);
+        return;
+    }
+
+    // 取第一个图片文件
+    QString imageFileName = imageFiles.first();
+    QString imageFilePath = commandDir.filePath(imageFileName);
+
+    qDebug() << "找到图片文件:" << imageFileName;
+    qDebug() << "图片完整路径:" << imageFilePath;
+#endif
+    // 读取图片文件
+    QFile imageFile(imageFilePath);
+    if (!imageFile.open(QIODevice::ReadOnly)) {
+        qWarning() << "无法打开图片文件:" << imageFilePath;
+        QJsonObject errorResponse;
+        errorResponse["code"] = 500;
+        errorResponse["message"] = "Cannot open QR code image";
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        return;
+    }
+
+    QByteArray imageData = imageFile.readAll();
+    imageFile.close();
+
+    if (imageData.isEmpty()) {
+        qWarning() << "图片文件为空:" << imageFilePath;
+        QJsonObject errorResponse;
+        errorResponse["code"] = 500;
+        errorResponse["message"] = "QR code image is empty";
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        return;
+    }
+
+    // 构建成功响应
+    qDebug() << "图片文件大小:" << imageData.size() << "bytes";
+
+    // 直接返回图片数据
+    QString response = QString("HTTP/1.1 200 OK\r\n"
+                              "Content-Type: image/jpeg\r\n"  // 可以根据实际格式调整
+                              "Content-Length: %1\r\n"
+                              "\r\n")
+                      .arg(imageData.size());
+
+    // 写入响应头和图片数据
+    clientSocket->write(response.toUtf8());
+    clientSocket->write(imageData);
+    clientSocket->flush();
+
+    qDebug() << "已返回二维码图片，大小:" << imageData.size() << "bytes";
+    qDebug() << "=== handleGetCRCODE 处理完成 ===";
 }
 
 void HttpServer::handleGetLoginUI(QTcpSocket *clientSocket, const QUrlQuery &query)
@@ -2908,6 +3240,426 @@ void HttpServer::handleGetMallProducts(QTcpSocket *clientSocket)
 
     qDebug() << "返回数据，分类数量:" << categoriesArray.size();
 }
+
+void HttpServer::handlePostPlatformReqSendcode(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    qDebug() << "=== handlePostPlatformReqSendcode 开始处理 ===";
+    qDebug() << "客户端IP:" << clientSocket->peerAddress().toString();
+    qDebug() << "接收到的body长度:" << body.length();
+    qDebug() << "接收到的body内容:" << QString(body);
+
+    QJsonParseError parseError;
+    QJsonDocument jsonDoc = QJsonDocument::fromJson(body, &parseError);
+
+    // 解析JSON
+    if (parseError.error != QJsonParseError::NoError) {
+        qWarning() << "JSON解析失败! 错误:" << parseError.errorString();
+        qWarning() << "错误位置:" << parseError.offset;
+
+        QJsonObject errorResponse;
+        errorResponse["code"] = 400;
+        errorResponse["message"] = "Invalid JSON format";
+        errorResponse["error_detail"] = parseError.errorString();
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        qDebug() << "=== handlePostPlatformReqSendcode 处理结束 (JSON解析失败) ===";
+        return;
+    }
+
+    qDebug() << "JSON解析成功!";
+
+    QJsonObject rootObject = jsonDoc.object();
+    qDebug() << "根对象键值:" << rootObject.keys();
+
+    // 提取data对象
+    QJsonObject dataObject = rootObject.value("data").toObject();
+    qDebug() << "data对象键值:" << dataObject.keys();
+
+    // 提取必要字段
+    QString method = dataObject.value("method").toString();
+    QString code = dataObject.value("code").toString();
+    QString platform = dataObject.value("platform").toString();
+    QString taskId = dataObject.value("taskid").toString();
+
+    qDebug() << "提取的字段值:";
+    qDebug() << "  method:" << method;
+    qDebug() << "  code:" << code;
+//    qDebug() << "  platform:" << platform;
+    qDebug() << "  taskid:" << taskId;
+
+    // 验证必要字段
+    if (method.isEmpty() || code.isEmpty() || platform.isEmpty() || taskId.isEmpty()) {
+        qWarning() << "缺少必要字段!";
+        qDebug() << "method为空:" << method.isEmpty();
+        qDebug() << "code为空:" << code.isEmpty();
+        qDebug() << "platform为空:" << platform.isEmpty();
+        qDebug() << "taskid为空:" << taskId.isEmpty();
+
+        QJsonObject errorResponse;
+        errorResponse["code"] = 400;
+        errorResponse["message"] = "Missing required fields: method, code, platform, or taskid";
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        qDebug() << "=== handlePostPlatformReqSendcode 处理结束 (缺少字段) ===";
+        return;
+    }
+
+    qDebug() << "字段验证通过";
+
+    // 查找并更新任务状态
+    bool taskFound = false;
+    QString device; // 设备序列号
+    QString commandId; // 命令ID
+
+    qDebug() << "开始遍历frontendTasks容器查找任务, taskId:" << taskId;
+    qDebug() << "frontendTasks容器大小:" << frontendTasks.size();
+
+    // 遍历容器查找任务
+    for (auto& task : frontendTasks) {
+        qDebug() << "当前遍历的任务taskId:" << task.taskId;
+        if (task.taskId == taskId) {
+            qDebug() << "找到匹配的任务!";
+            qDebug() << "原状态:" << task.status;
+            task.status = "dispose";  // 更新状态为dispose
+            qDebug() << "新状态:" << task.status;
+
+            device = task.deviceSerial; // 假设任务中有设备序列号字段
+            commandId = task.commandid;
+            taskFound = true;
+
+            qDebug() << "提取的设备序列号:" << device;
+            qDebug() << "提取的命令ID:" << commandId;
+
+            // 记录更新日志（可选）
+            qDebug() << "Task" << taskId << "状态已更新为 dispose";
+            break;
+        }
+    }
+
+    if (!taskFound) {
+        qWarning() << "未找到任务ID:" << taskId;
+        QJsonObject errorResponse;
+        errorResponse["code"] = 404;
+        errorResponse["message"] = QString("Task ID %1 not found").arg(taskId);
+        sendJsonResponse(clientSocket, 404, errorResponse);
+        qDebug() << "=== handlePostPlatformReqSendcode 处理结束 (任务未找到) ===";
+        return;
+    }
+
+    qDebug() << "任务查找完成, 开始构建MQTT JSON";
+
+    // 构建要发送给MQTT的JSON
+    QJsonObject mqttJsonObject;
+
+    // 构建data对象
+    QJsonObject sendDataObject;
+    sendDataObject["command_id"] = commandId;
+    qDebug() << "设置command_id:" << commandId;
+
+    // 根据平台设置action和sub_action
+    QString actionName;
+    if (platform.toUpper() == "AAA") {
+        actionName = "抖音"; // AAA平台对应抖音
+        qDebug() << "平台AAA映射为抖音";
+    } else {
+        actionName = platform; // 其他平台使用原名称
+        qDebug() << "平台使用原名称:" << platform;
+    }
+
+    sendDataObject["action"] = actionName;
+    sendDataObject["sub_action"] = "验证码";
+    sendDataObject["start_time"] = "00:00:00";
+    sendDataObject["end_time"] = "23:59:59";
+
+    // 构建remark字段
+    QString remark = QString("ID:%1:ID  MARK:LOGGIN_APP:MARK").arg(code);
+    sendDataObject["remark"] = remark;
+
+    qDebug() << "构建的sendDataObject:";
+    qDebug() << "  action:" << sendDataObject["action"].toString();
+    qDebug() << "  sub_action:" << sendDataObject["sub_action"].toString();
+    qDebug() << "  remark:" << sendDataObject["remark"].toString();
+
+    // 构建完整JSON
+    mqttJsonObject["data"] = sendDataObject;
+    mqttJsonObject["messageType"] = "command";
+    mqttJsonObject["password"] = "securePassword123";
+    QString timestamp = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    mqttJsonObject["timestamp"] = timestamp;
+    mqttJsonObject["username"] = "user123";
+
+    qDebug() << "生成的timestamp:" << timestamp;
+
+    // 转换为JSON字符串
+    QJsonDocument sendDoc(mqttJsonObject);
+    QString jsonString = sendDoc.toJson(QJsonDocument::Compact);
+    qDebug() << "生成的MQTT JSON字符串:" << jsonString;
+    qDebug() << "JSON字符串长度:" << jsonString.length();
+
+    // 验证设备序列号是否存在
+    if (device.isEmpty()) {
+        qWarning() << "设备序列号为空!";
+        QJsonObject errorResponse;
+        errorResponse["code"] = 500;
+        errorResponse["message"] = "Device serial not found for this task";
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        qDebug() << "=== handlePostPlatformReqSendcode 处理结束 (设备序列号为空) ===";
+        return;
+    }
+
+    qDebug() << "准备发送MQTT消息";
+    qDebug() << "目标设备:" << device;
+
+    // 通过信号发送到MQTT
+#ifdef DEBUG_MODE
+    QTimer::singleShot(5000, [this]() {
+                if (!frontendTasks.isEmpty()) {
+                    FrontendTask& task = frontendTasks[QRandomGenerator::global()->bounded(frontendTasks.size())];
+                    task.status = QRandomGenerator::global()->bounded(2) ? "success" : "failed";
+                    qDebug() << "DEBUG: 任务" << task.taskId << "状态设为" << task.status;
+                }
+            });
+#else
+    emit forwardJsonToMQTT(device, jsonString);
+    qDebug() << "已发射forwardJsonToMQTT信号";
+#endif
+
+
+
+
+
+    // 返回成功响应
+    qDebug() << "构建成功响应";
+    QJsonObject successResponse;
+    successResponse["code"] = 200;
+    successResponse["message"] = "Verification code processed successfully";
+    successResponse["taskid"] = taskId;
+    successResponse["status"] = "dispose";
+    if(platform== "抖音")
+    platform ="AAA";
+    successResponse["platform"] = platform;
+    successResponse["commandId"] = commandId;  // 添加命令ID到响应中
+
+    // // 可选：添加一些处理信息
+    // QJsonObject details;
+    // details["action_sent"] = actionName;
+    // details["device_target"] = device;
+    // details["code_length"] = code.length();
+    // details["timestamp"] = timestamp;
+    // details["db_inserted"] = (dbManager != nullptr);  // 是否插入了数据库
+    // successResponse["details"] = details;
+
+    sendJsonResponse(clientSocket, 200, successResponse);
+
+
+
+
+}
+void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArray &body)
+{
+    // 解析JSON
+    QJsonDocument doc = QJsonDocument::fromJson(body);
+    if (doc.isNull()) {
+        sendJsonResponse(clientSocket, 400, QJsonObject());
+        return;
+    }
+
+    QJsonObject request = doc.object();
+    QJsonObject data = request.value("data").toObject();
+
+    QString method = data.value("method").toString();
+    QString platformCode = data.value("platform").toString();  // 原始代码
+    QString platform;  // 转换后的平台名称
+    QString account = data.value("Account").toString();
+    QString username = data.value("username").toString();
+
+    // 平台代码转换
+    if (platformCode == "AAA") {
+        platform = "抖音";
+    } else if (platformCode == "BBB") {
+        platform = "BILIBILI";
+    } else {
+        platform = platformCode;  // 如果不是AAA/BBB，使用原值
+    }
+
+    if (method.isEmpty() || platformCode.isEmpty() || account.isEmpty()) {
+        sendJsonResponse(clientSocket, 400, QJsonObject());
+        return;
+    }
+
+    // 查找未登录设备
+#ifdef DEBUG_MODE
+    QString deviceSerial = "12345678910"; // findAvailableDevice(platformCode);
+#else
+    QString deviceSerial = findAvailableDevice(platformCode);
+
+#endif
+    if (deviceSerial.isEmpty()) {
+        sendJsonResponse(clientSocket, 404, QJsonObject());
+        return;
+    }
+
+    // 生成命令ID和任务ID
+    QString commandId = QString("CMD_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz"));
+    QString taskId = QString("task_%1").arg(QDateTime::currentMSecsSinceEpoch());
+
+    // 构建MQTT JSON
+    QJsonObject mqttData;
+    mqttData["command_id"] = commandId;
+    mqttData["action"] = platform;
+
+    // 根据method设置sub_action
+    QString subAction;
+    if (method == "message") {
+        subAction = "登录";
+    } else if (method == "crcode") {
+        subAction = "二维码登录";
+    } else {
+        subAction = "退出"; // 默认
+    }
+    mqttData["sub_action"] = subAction;
+
+    mqttData["start_time"] = "00:00:00";
+    mqttData["end_time"] = "23:59:00";
+
+    // 构建remark，根据method添加不同的标记
+    QString remark;
+    if (method == "message") {
+        remark = QString("ID:%1 MARK:LOGGIN_APP:MARK").arg(account);
+    } else if (method == "crcode") {
+        remark = QString("ID:%1 MARK:CRCODE_LOGGIN:MARK").arg(account);
+    } else {
+        remark = QString("ERR").arg(account);
+    }
+    mqttData["remark"] = remark;
+
+    QJsonObject mqttJson;
+    mqttJson["messageType"] = "command";
+    mqttJson["password"] = "securePassword123";
+    mqttJson["username"] = "user123";
+    mqttJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    mqttJson["data"] = mqttData;
+
+    // 发射信号
+    emit forwardJsonToMQTT(deviceSerial, QString::fromUtf8(QJsonDocument(mqttJson).toJson()));
+
+    // 创建任务并添加到容器
+    FrontendTask newTask;
+    newTask.taskId = taskId;
+    newTask.platform = platform;  // 使用转换后的平台名称
+    newTask.account = account;
+    newTask.deviceSerial = deviceSerial;
+    newTask.status = "wait";
+    newTask.username =username;
+    newTask.createTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+    newTask.updateTime = newTask.createTime;
+    newTask.remark = QString("%1 - %2").arg(subAction).arg(remark);
+    newTask.commandid = commandId;
+
+    // 添加到容器
+    frontendTasks.append(newTask);
+
+    // 调试输出
+    qDebug() << "=== 新增前端任务 ===";
+    qDebug() << "任务ID:" << taskId;
+    qDebug() << "命令ID:" << commandId;
+    qDebug() << "平台:" << platform;
+    qDebug() << "账号:" << account;
+    qDebug() << "设备序列号:" << deviceSerial;
+    qDebug() << "方法:" << method;
+    qDebug() << "子动作:" << subAction;
+    qDebug() << "当前容器任务数量:" << frontendTasks.size();
+    if (dbManager) {
+        qDebug() << "数据库管理器可用";
+
+        SQL_CommandHistory commandHistory;
+        commandHistory.commandId = commandId;
+        commandHistory.status = "executing";  // 状态设为执行中
+        commandHistory.action = platform;
+        commandHistory.sub_action = subAction;
+        commandHistory.start_time = "00:00:00";
+        commandHistory.end_time = "23:59:59";
+        commandHistory.remark = remark;
+        commandHistory.completeness = "0%";  // 初始完成度0%
+        commandHistory.completed_url = "";   // 初始为空
+        commandHistory.total_tasks = 1;      // 总任务数设为1
+        commandHistory.completed_tasks = 0;  // 已完成任务数设为0
+        commandHistory.failed_tasks = 0;     // 失败任务数设为0
+
+        qDebug() << "命令历史记录信息:";
+        qDebug() << "  commandId:" << commandHistory.commandId;
+        qDebug() << "  status:" << commandHistory.status;
+        qDebug() << "  action:" << commandHistory.action;
+        qDebug() << "  sub_action:" << commandHistory.sub_action;
+        qDebug() << "  completeness:" << commandHistory.completeness;
+        qDebug() << "  total_tasks:" << commandHistory.total_tasks;
+        qDebug() << "  completed_tasks:" << commandHistory.completed_tasks;
+        qDebug() << "  failed_tasks:" << commandHistory.failed_tasks;
+
+        // 插入数据库
+        bool insertSuccess = dbManager->insertCommandHistory(commandHistory);
+
+        if (insertSuccess) {
+            qDebug() << "命令历史记录插入成功! commandId:" << commandId;
+        } else {
+            qWarning() << "命令历史记录插入失败! commandId:" << commandId;
+        }
+    } else {
+        qWarning() << "数据库管理器不可用，跳过命令历史记录插入";
+    }
+    qDebug() << "数据库操作完成";
+    // ============ 插入命令历史记录结束 ============
+    // 响应
+    QJsonObject response;
+    response["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QJsonObject responseData;
+    responseData["taskId"] = taskId;
+    responseData["commandId"] = commandId;  // 添加命令ID到响应
+    responseData["platform"] = platform;
+    responseData["account"] = account;
+    responseData["deviceSerial"] = deviceSerial;
+    responseData["method"] = method;
+    responseData["subAction"] = subAction;
+    responseData["status"] = "wait";
+
+    response["data"] = responseData;
+
+    sendJsonResponse(clientSocket, 200, response);
+}
+
+
+QString HttpServer::findAvailableDevice(const QString &platform)
+{
+    if (!dbManager) return QString();
+
+    // 获取所有设备
+    QList<SQL_Device> devices = dbManager->getAllDevices();
+
+    // 简单遍历查找
+    for (const SQL_Device &device : devices) {
+        bool isAvailable = false;
+
+        if (platform == "AAA" && device.tiktok == "未登录") {
+            isAvailable = true;
+        } else if (platform == "BBB" && device.bilibili == "未登录") {
+            isAvailable = true;
+        } else if (platform == "CCC" && device.xhs == "未登录") {
+            isAvailable = true;
+        } else if (platform == "DDD" && device.weibo == "未登录") {
+            isAvailable = true;
+        } else if (platform == "EEE" && device.kuaishou == "未登录") {
+            isAvailable = true;
+        }
+
+        if (isAvailable && !device.serial_number.isEmpty()) {
+            qDebug() << "Found device:" << device.serial_number << "for platform:" << platform;
+            return device.serial_number;
+        }
+    }
+
+    qDebug() << "No available device for platform:" << platform;
+    return QString();
+}
+
 void HttpServer::handlePostMallUserAppealtext(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
 {
     qDebug() << "Handling POST user appeal text request";
@@ -5940,6 +6692,7 @@ void HttpServer::tenSecondTimerFunction()
 {
     QDateTime currentTime = QDateTime::currentDateTime();
 
+    // 第一部分：检查设备心跳
     for (int i = 0; i < deviceVector.size(); ++i) {
         DeviceStatus &device = deviceVector[i];
 
@@ -5963,8 +6716,6 @@ void HttpServer::tenSecondTimerFunction()
         // 计算时间差
         int secondsDiff = heartbeatTime.secsTo(currentTime);
 
-
-
         // 超过35秒标记离线
         if (secondsDiff > 35) {
             if (device.status != "离线") {
@@ -5972,7 +6723,43 @@ void HttpServer::tenSecondTimerFunction()
             }
         }
     }
+
+    // 第二部分：检查并清理超时任务（10分钟）
+    int removedCount = 0;
+
+    for (int i = frontendTasks.size() - 1; i >= 0; i--) {
+        FrontendTask &task = frontendTasks[i];
+
+        // 解析创建时间
+        QDateTime createTime = QDateTime::fromString(task.createTime, "yyyy-MM-dd HH:mm:ss");
+        if (!createTime.isValid()) {
+            qDebug() << "任务创建时间格式无效，删除任务:" << task.taskId;
+            frontendTasks.removeAt(i);
+            removedCount++;
+            continue;
+        }
+        // 计算时间差（分钟）
+        int minutesDiff = createTime.secsTo(currentTime) / 60;
+
+        // 超过10分钟则删除
+        if (minutesDiff > 10) {
+            qDebug() << "任务已超时10分钟，删除任务:";
+            qDebug() << "  任务ID:" << task.taskId;
+            qDebug() << "  状态:" << task.status;
+            qDebug() << "  创建时间:" << task.createTime;
+            qDebug() << "  已存在:" << minutesDiff << "分钟";
+
+            frontendTasks.removeAt(i);
+            removedCount++;
+        }
+    }
+
+    if (removedCount > 0) {
+        qDebug() << "定时器清理了" << removedCount << "个超时任务";
+        qDebug() << "当前剩余任务数:" << frontendTasks.size();
+    }
 }
+
 QDateTime HttpServer::parseHeartbeatTime(const QString &timeStr)
 {
     // 处理 "2026-01-09T16:39:27Z" 格式（实际上是本地时间）

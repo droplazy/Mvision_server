@@ -420,7 +420,17 @@ struct SQL_Product {
     SQL_Product() : unitPrice(0.0), stock(0), minOrder(1), maxOrder(9999),
         salesCount(0), rating(0.0), ratingCount(0) {}
 };
-
+// 在DatabaseManager.h中添加结构体定义和函数声明：
+struct SQL_AppAccount {
+    int id;              // 主键，自增
+    QString accountName; // 账号名（唯一标识）
+    QString platform;    // 平台：抖音、B站、小红书、微博、快手等
+    QString username;    // 用户名
+    QString createTime;  // 创建时间
+    QString status;      // 状态：active, inactive, locked
+    QString remark;      // 备注
+    QString devserial;
+};
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）
 // QMap<QString, QString> productNameMap = {
 //     {"PROD001", "iPhone 15 Pro"}, {"PROD002", "MacBook Pro"},

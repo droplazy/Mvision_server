@@ -494,6 +494,7 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
                     dbManager->updateDeviceAppStatus(serialNumber, "快手", account);
                 }
                 emit applogginstatus(commandId,true);
+                qDebug() << "xin hao yijing fashe !!!!!!!!!!!!!!!!!!";
            }
            else if(cmd.remark.contains("MARK:CRCODE_LOGGIN:MARK") )
            {

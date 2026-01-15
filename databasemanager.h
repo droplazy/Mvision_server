@@ -206,6 +206,15 @@ public:
     QString mapCommandStatusToOrderStatus(const QString &commandStatus);
     bool updateDeviceSocialMedia(const QString &serialNumber, const QString &tiktok, const QString &bilibili, const QString &xhs, const QString &weibo, const QString &kuaishou);
     QList<SQL_WithdrawRecord> getAllWithdrawRecords();
+
+    bool insertAppAccount(const SQL_AppAccount &account);
+    bool deleteAppAccount(int accountId);
+    bool updateAppAccount(const SQL_AppAccount &account);
+    QList<SQL_AppAccount> getAllAppAccounts();
+    SQL_AppAccount getAppAccountById(int accountId);
+    QList<SQL_AppAccount> searchAppAccounts(const QString &keyword);
+    SQL_AppAccount extractAppAccountFromQuery(const QSqlQuery &query);
+    bool checkAppAccountExists(const QString &accountName);
 private:
     QSqlDatabase db;
 
@@ -224,6 +233,7 @@ private:
     SQL_AppealRecord extractAppealFromQuery(const QSqlQuery &query);
     bool createTable7();//商品表单
     bool createTokenTable();
+    bool createAppAccountTable();
 };
 
 #endif // DATABASEMANAGER_H
