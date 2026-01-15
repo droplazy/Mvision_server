@@ -1,8 +1,13 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 //#include "loghandler.h"
+#include <QMenu>
+#include <QAction>
 #include <QMessageBox>
 #include <QVBoxLayout>
+#include <QEvent>
+#include <QCloseEvent>
+#include <QSystemTrayIcon>
 /****************************子窗口控件*/
 #include "./UIclass/devicelistdialog.h"
 #include "./UIclass/commandlsit.h"
@@ -29,15 +34,41 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // 禁止窗口拉伸
+    // 调试：检查初始状态
+    qDebug() << "=== MainWindow 初始化开始 ===";
+    qDebug() << "应用程序图标状态（初始化前）:";
+    qDebug() << "  - 是否为空:" << qApp->windowIcon().isNull();
+
+    // 设置窗口标题
     setWindowTitle("后台控制系统");
     setFixedSize(this->size());
 
-    // 设置日志输出到 textEdit_console
-    // if (ui->textEdit_console) {
-    //     LogHandler::instance()->setOutputWidget(ui->textEdit_console);
-    //     LogHandler::instance()->setMaxLines(500);
-    // }
+    // 初始化系统托盘（先创建，但不立即显示）
+    createTrayIcon();
+    createTrayMenu();
+
+    // 连接托盘图标激活信号
+    connect(trayIcon, &QSystemTrayIcon::activated,
+            this, &MainWindow::onTrayIconActivated);
+
+    // 检查图标是否已正确设置，然后才显示
+    if (!trayIcon->icon().isNull()) {
+        trayIcon->show();
+        qDebug() << "托盘图标已显示";
+    } else {
+        qWarning() << "托盘图标未设置，延迟显示...";
+        // 延迟显示，确保图标已加载
+        QTimer::singleShot(100, this, [this]() {
+            if (!trayIcon->icon().isNull()) {
+                trayIcon->show();
+                qDebug() << "延迟显示托盘图标成功";
+            } else {
+                qCritical() << "无法显示托盘图标：图标未设置";
+                // 即使没有图标也显示（系统可能会提供默认图标）
+                trayIcon->show();
+            }
+        });
+    }
 
     // 创建定时器用于显示系统时间
     QTimer *timer = new QTimer(this);
@@ -51,7 +82,125 @@ MainWindow::MainWindow(QWidget *parent)
     // 初始化数据库对象
     initDatabase();
 
-    qDebug() << "MainWindow初始化完成";
+    qDebug() << "=== MainWindow 初始化完成 ===";
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::WindowStateChange) {
+        // 当窗口状态改变时
+        if (isMinimized()) {
+            // 窗口最小化时，可以选择隐藏窗口并显示在托盘
+            hide();
+
+            // 显示提示信息
+            if (trayIcon) {
+                trayIcon->showMessage(
+                    "提示",
+                    "程序已最小化到托盘",
+                    QSystemTrayIcon::Information,
+                    1500
+                    );
+            }
+        }
+    }
+
+    QMainWindow::changeEvent(event);
+}
+void MainWindow::createTrayIcon()
+{
+    trayIcon = new QSystemTrayIcon(this);
+
+
+
+    // 方法1：直接使用应用程序图标
+    QIcon icon = qApp->windowIcon();
+
+    if (icon.isNull()) {
+
+        // 方法2：尝试从文件加载
+        if (QFile::exists("rainbow.ico")) {
+            icon = QIcon("rainbow.ico");
+        }
+        // 方法3：尝试从资源文件加载
+        else if (QFile::exists(":/icons/app_icon.png")) {
+            icon = QIcon(":/icons/app_icon.png");
+        }
+        // 方法4：创建默认图标
+        else {
+            // 创建一个简单的默认图标
+            QPixmap pixmap(32, 32);
+            pixmap.fill(QColor(0, 120, 215));  // 蓝色
+            icon = QIcon(pixmap);
+        }
+    }
+    // 设置图标
+    trayIcon->setIcon(icon);
+
+    // 验证图标是否已设置
+    if (trayIcon->icon().isNull()) {
+        qCritical() << "警告：托盘图标设置失败！";
+        // 创建一个应急图标
+        QPixmap emergencyPixmap(32, 32);
+        emergencyPixmap.fill(Qt::red);
+        trayIcon->setIcon(QIcon(emergencyPixmap));
+    }
+
+    // 设置提示文本
+    trayIcon->setToolTip("后台控制系统");
+
+}
+void MainWindow::createTrayMenu()
+{
+    // 创建托盘菜单
+    trayMenu = new QMenu(this);
+
+    // 创建菜单项
+    restoreAction = new QAction("显示主窗口", this);
+    quitAction = new QAction("退出", this);
+
+    // 连接菜单项信号
+    connect(restoreAction, &QAction::triggered, this, &MainWindow::onRestoreAction);
+    connect(quitAction, &QAction::triggered, this, &MainWindow::onQuitAction);
+
+    // 添加菜单项
+    trayMenu->addAction(restoreAction);
+    trayMenu->addSeparator(); // 分隔线
+    trayMenu->addAction(quitAction);
+
+    // 设置托盘菜单
+    trayIcon->setContextMenu(trayMenu);
+}
+
+void MainWindow::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
+{
+    switch (reason) {
+    case QSystemTrayIcon::DoubleClick:
+        // 双击托盘图标恢复窗口
+        onRestoreAction();
+        break;
+    case QSystemTrayIcon::Trigger:
+        // 单击托盘图标（可选的附加功能）
+        // trayIcon->showMessage("提示", "双击显示主窗口");
+        break;
+    default:
+        break;
+    }
+}
+
+void MainWindow::onRestoreAction()
+{
+    // 恢复窗口显示
+    showNormal();
+    activateWindow();
+    raise();
+}
+
+void MainWindow::onQuitAction()
+{
+    // 退出程序
+    trayIcon->hide(); // 隐藏托盘图标
+    qApp->quit();     // 退出应用程序
 }
 // 初始化数据库
 void MainWindow::initDatabase()
@@ -603,6 +752,29 @@ void MainWindow::DispayMqttclientStatus(bool status)
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+
+    if (trayIcon && trayIcon->isVisible()) {
+        // 隐藏窗口
+        hide();
+
+        // 显示通知消息（可选）
+        trayIcon->showMessage(
+            "应用程序",
+            "程序已最小化到系统托盘，双击图标恢复窗口",
+            QSystemTrayIcon::Information,
+            2000
+            );
+
+        // 忽略关闭事件
+        event->ignore();
+    } else {
+        // 正常关闭
+        event->accept();
+    }
 }
 
 void MainWindow::on_pushButton_devlist_clicked()

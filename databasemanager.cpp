@@ -1566,6 +1566,9 @@ bool DatabaseManager::insertCommandHistory(const SQL_CommandHistory &command)
     qDebug() << "指令ID:" << command.commandId;
     qDebug() << "状态:" << command.status;
 
+    // 构建固定的 completed_url："./Upload/[commandId]/"
+    QString completedUrl = QString("./Upload/%1/").arg(command.commandId);
+
     // 使用简单的SQL语句，添加failed_tasks字段
     QString sql = QString("INSERT INTO CommandHistory (command_id, status, action, sub_action, start_time, end_time, "
                           "remark, completeness, completed_url, total_tasks, completed_tasks, failed_tasks) "
@@ -1578,7 +1581,7 @@ bool DatabaseManager::insertCommandHistory(const SQL_CommandHistory &command)
                       .arg(command.end_time)
                       .arg(command.remark)
                       .arg(command.completeness)
-                      .arg(command.completed_url)
+                      .arg(completedUrl)  // 使用固定的路径格式
                       .arg(command.total_tasks)
                       .arg(command.completed_tasks)
                       .arg(command.failed_tasks);  // 新增failed_tasks
@@ -1591,18 +1594,34 @@ bool DatabaseManager::insertCommandHistory(const SQL_CommandHistory &command)
     }
 
     qDebug() << "插入成功";
+    qDebug() << "completed_url 已设置为:" << completedUrl;
 
     // 立即查询验证
     QSqlQuery verifyQuery;
-    verifyQuery.prepare("SELECT * FROM CommandHistory WHERE command_id = ?");
+    verifyQuery.prepare("SELECT command_id, completed_url FROM CommandHistory WHERE command_id = ?");
     verifyQuery.addBindValue(command.commandId);
 
     if (verifyQuery.exec() && verifyQuery.next()) {
-        qDebug() << "验证成功，找到记录";
+        QString storedCommandId = verifyQuery.value("command_id").toString();
+        QString storedUrl = verifyQuery.value("completed_url").toString();
+        qDebug() << "验证成功:";
+        qDebug() << "  - 指令ID:" << storedCommandId;
+        qDebug() << "  - 存储的URL:" << storedUrl;
+
+        // 验证格式是否正确
+        QString expectedUrl = QString("./Upload/%1/").arg(command.commandId);
+        if (storedUrl == expectedUrl) {
+            qDebug() << "  - URL格式验证: 正确";
+        } else {
+            qDebug() << "  - URL格式验证: 错误 (期望:" << expectedUrl << ")";
+        }
+    } else {
+        qDebug() << "验证失败，未找到记录";
     }
 
     return true;
 }
+
 bool DatabaseManager::updateCommandHistory(const SQL_CommandHistory &command)
 {
     QSqlQuery query;
@@ -3430,4 +3449,91 @@ bool DatabaseManager::updateCommandCompleteness(const QString &commandId, int co
     }
 
     return true;
+}
+// 更新提现记录状态
+bool DatabaseManager::updateWithdrawStatus(const QString &withdrawId, const QString &status)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE WithdrawRecords
+        SET status = :status,
+            update_time = datetime('now', 'localtime')
+        WHERE withdraw_id = :withdraw_id
+    )");
+
+    query.bindValue(":withdraw_id", withdrawId);
+    query.bindValue(":status", status);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating withdraw status: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No withdraw record found with ID:" << withdrawId;
+        return false;
+    }
+
+    qDebug() << "Withdraw status updated successfully. ID:" << withdrawId << "Status:" << status;
+    return true;
+}
+
+// 更新提现记录（完整更新）
+bool DatabaseManager::updateWithdrawRecord(const SQL_WithdrawRecord &record)
+{
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE WithdrawRecords
+        SET amount = :amount,
+            alipay_account = :alipay_account,
+            status = :status,
+            remark = :remark,
+            update_time = datetime('now', 'localtime')
+        WHERE withdraw_id = :withdraw_id
+    )");
+
+    query.bindValue(":withdraw_id", record.withdrawId);
+    query.bindValue(":amount", record.amount);
+    query.bindValue(":alipay_account", record.alipayAccount);
+    query.bindValue(":status", record.status);
+    query.bindValue(":remark", record.remark);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating withdraw record: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No withdraw record found with ID:" << record.withdrawId;
+        return false;
+    }
+
+    qDebug() << "Withdraw record updated successfully. ID:" << record.withdrawId;
+    return true;
+}
+
+// 根据ID获取提现记录
+SQL_WithdrawRecord DatabaseManager::getWithdrawRecordById(const QString &withdrawId)
+{
+    SQL_WithdrawRecord record;
+
+    QSqlQuery query;
+    query.prepare("SELECT * FROM WithdrawRecords WHERE withdraw_id = :withdraw_id");
+    query.bindValue(":withdraw_id", withdrawId);
+
+    if (query.exec() && query.next()) {
+        record.withdrawId = query.value("withdraw_id").toString();
+        record.username = query.value("username").toString();
+        record.amount = query.value("amount").toDouble();
+        record.alipayAccount = query.value("alipay_account").toString();
+        record.status = query.value("status").toString();
+        record.createTime = query.value("create_time").toString();
+        record.updateTime = query.value("update_time").toString();
+        record.remark = query.value("remark").toString();
+    } else {
+        qDebug() << "Error fetching withdraw record by ID:" << withdrawId
+                 << "Error:" << query.lastError().text();
+    }
+
+    return record;
 }

@@ -159,6 +159,8 @@ private:
     void markDeviceOffline(DeviceStatus &device);
     QDateTime parseHeartbeatTime(const QString &timeStr);
     void handleGetIPTEST(QTcpSocket *clientSocket, const QString &IP);
+    void handleGetWithDraw(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void handlePostWithDrawPic(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

@@ -526,16 +526,16 @@ void commanddev::on_pushButton_command_clicked()
     }
 
     // 8. 输出详细信息
-    qDebug() << "=== 指令详细信息 ===";
-    qDebug() << "指令ID:" << commandId;
-    qDebug() << "动作:" << (action.isEmpty() ? "default" : action);
-    qDebug() << "子动作:" << (subAction.isEmpty() ? "default" : subAction);
-    qDebug() << "开始时间:" << start_time;
-    qDebug() << "结束时间:" << end_time;
-    qDebug() << "备注:" << remark;
-    qDebug() << "总任务数:" << totalTasks;
-    qDebug() << "已完成任务数: 0";
-    qDebug() << "序列号列表:";
+    // qDebug() << "=== 指令详细信息 ===";
+    // qDebug() << "指令ID:" << commandId;
+    // qDebug() << "动作:" << (action.isEmpty() ? "default" : action);
+    // qDebug() << "子动作:" << (subAction.isEmpty() ? "default" : subAction);
+    // qDebug() << "开始时间:" << start_time;
+    // qDebug() << "结束时间:" << end_time;
+    // qDebug() << "备注:" << remark;
+    // qDebug() << "总任务数:" << totalTasks;
+    // qDebug() << "已完成任务数: 0";
+    // qDebug() << "序列号列表:";
     for (int i = 0; i < m_selectedDevices.size(); i++) {
         qDebug() << QString("  %1. %2").arg(i+1).arg(m_selectedDevices[i]);
     }

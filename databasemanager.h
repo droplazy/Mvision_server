@@ -44,6 +44,10 @@ public:
     bool createTables();// 订单表
     bool openDatabase(const QString &dbName);
 
+    bool updateCommandCompleteness(const QString &commandId, int completeness);
+    SQL_WithdrawRecord getWithdrawRecordById(const QString &withdrawId);
+    bool updateWithdrawRecord(const SQL_WithdrawRecord &record);
+    bool updateWithdrawStatus(const QString &withdrawId, const QString &status);
     //设备增删改查
     SQL_Device getDeviceBySerialNumber(const QString &serial_number);
     QList<SQL_Device> getAllDevices();
@@ -220,7 +224,6 @@ private:
     SQL_AppealRecord extractAppealFromQuery(const QSqlQuery &query);
     bool createTable7();//商品表单
     bool createTokenTable();
-    bool updateCommandCompleteness(const QString &commandId, int completeness);
 };
 
 #endif // DATABASEMANAGER_H

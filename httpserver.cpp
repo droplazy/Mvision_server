@@ -35,7 +35,7 @@ void HttpServer::createDownloadDirectoryIfNeeded()
 {
     QDir currentDir(QDir::currentPath());
     QString downloadPath = currentDir.filePath("Download");
-  //  qDebug() << downloadPath << " is created ! ... ";
+    //  qDebug() << downloadPath << " is created ! ... ";
     if (!QDir(downloadPath).exists()) {
         QDir().mkdir(downloadPath);
     }
@@ -66,12 +66,12 @@ void HttpServer::cleanupExpiredCodes()
 
     // 移除过期验证码
     verificationCodes.erase(
-        std::remove_if(verificationCodes.begin(), verificationCodes.end(),
-                       [](const VerificationCode &vc) {
-                           return vc.isExpired();
-                       }),
-        verificationCodes.end()
-        );
+                std::remove_if(verificationCodes.begin(), verificationCodes.end(),
+                               [](const VerificationCode &vc) {
+        return vc.isExpired();
+    }),
+                verificationCodes.end()
+                );
 
     int newSize = verificationCodes.size();
     int removed = oldSize - newSize;
@@ -88,12 +88,12 @@ void HttpServer::addVerificationCode(const QString &code, const QString &usernam
 
     // 先清理用户旧的验证码
     verificationCodes.erase(
-        std::remove_if(verificationCodes.begin(), verificationCodes.end(),
-                       [username](const VerificationCode &vc) {
-                           return vc.username == username;
-                       }),
-        verificationCodes.end()
-        );
+                std::remove_if(verificationCodes.begin(), verificationCodes.end(),
+                               [username](const VerificationCode &vc) {
+        return vc.username == username;
+    }),
+                verificationCodes.end()
+                );
 
     // 添加新验证码
     VerificationCode vc(code, username, email);
@@ -403,12 +403,12 @@ void HttpServer::handlePostMallSendMailCode(QTcpSocket *clientSocket, const QByt
                 QMutexLocker locker(&codeMutex);
                 // 清理该用户的所有验证码
                 verificationCodes.erase(
-                    std::remove_if(verificationCodes.begin(), verificationCodes.end(),
-                                   [username](const VerificationCode &vc) {
-                                       return vc.username == username;
-                                   }),
-                    verificationCodes.end()
-                    );
+                            std::remove_if(verificationCodes.begin(), verificationCodes.end(),
+                                           [username](const VerificationCode &vc) {
+                    return vc.username == username;
+                }),
+                            verificationCodes.end()
+                            );
                 qDebug() << "已清理用户" << username << "的旧验证码";
             }
 
@@ -426,11 +426,11 @@ void HttpServer::handlePostMallSendMailCode(QTcpSocket *clientSocket, const QByt
         emailInfo.toEmail = email;
         emailInfo.subject = "验证码通知";
         emailInfo.message = QString(
-                                "尊敬的 %1：\n\n"
-                                "您的验证码是：%2\n\n"
-                                "验证码有效期为5分钟，请尽快使用。\n\n"
-                                "如非本人操作，请忽略此邮件。\n"
-                                ).arg(username).arg(verificationCode);
+                    "尊敬的 %1：\n\n"
+                    "您的验证码是：%2\n\n"
+                    "验证码有效期为5分钟，请尽快使用。\n\n"
+                    "如非本人操作，请忽略此邮件。\n"
+                    ).arg(username).arg(verificationCode);
 
         // 发送邮件信号（如果是新验证码才发送邮件）
         if (isNewCode) {
@@ -451,7 +451,7 @@ void HttpServer::handlePostMallSendMailCode(QTcpSocket *clientSocket, const QByt
         response["success"] = true;
         response["message"] = "验证码已发送";
 
-// 调试模式下返回验证码
+        // 调试模式下返回验证码
 #if 1
         response["debug_verification_code"] = verificationCode;
         response["debug_is_new_code"] = isNewCode;
@@ -490,7 +490,7 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
         path = "/index.html";
     }
     // 使用绝对路径返回文件
-  //  QString basePath = "E:/qtpro/MuiltiControlSer/www/";
+    //  QString basePath = "E:/qtpro/MuiltiControlSer/www/";
 
     QDir currentDir(QDir::currentPath());
     QString basePath = currentDir.filePath("www/");
@@ -612,7 +612,7 @@ void HttpServer::handleGetDownload(QTcpSocket *clientSocket, const QUrlQuery &qu
     headers += QString("Content-Length: %1\r\n").arg(fileSize);
     headers += QString("Content-Disposition: attachment; filename=\"%1\"\r\n").arg(baseName);
     headers += QString("Last-Modified: %1\r\n")
-                   .arg(lastModified.toString("ddd, dd MMM yyyy HH:mm:ss 'GMT'"));
+            .arg(lastModified.toString("ddd, dd MMM yyyy HH:mm:ss 'GMT'"));
     headers += "Accept-Ranges: bytes\r\n";
     headers += "Cache-Control: no-cache\r\n";
     headers += "Connection: close\r\n";
@@ -716,11 +716,11 @@ void HttpServer::onReadyRead() {
                                                                                    || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
         if (!isLoginPath) {
             // 非登录接口需要验证token
-             if(token=="GXFC")
+            if(token=="GXFC")
             {
 
             }
-             else if (token.isEmpty() || !dbManager || !dbManager->validateToken(token)) {
+            else if (token.isEmpty() || !dbManager || !dbManager->validateToken(token)) {
                 qDebug() << "Token验证失败或不存在，返回401";
                 sendUnauthorized(clientSocket);
                 clientSocket->disconnectFromHost();
@@ -756,10 +756,10 @@ void HttpServer::onReadyRead() {
             if (path == "/device") {
                 handleGetDevice(clientSocket, query);
             } else if (path == "/mall/login/para") {
-             handleGetLoginUI(clientSocket,query );
+                handleGetLoginUI(clientSocket,query );
             }
             else if (path == "/device/iptest") {
-               handleGetIPTEST(clientSocket, clientIp );
+                handleGetIPTEST(clientSocket, clientIp );
             }else if (path.contains("/images")) {
                 handleBGimagesGet(clientSocket, query);
             } else if (path == "/process/get") {
@@ -774,7 +774,9 @@ void HttpServer::onReadyRead() {
                 handleGetAuthInfo(clientSocket, query);
             } else if (path == "/debug/orderPaid") {
                 handleGetpaidOK(clientSocket, query);
-            } else if (path == "/mall/product/item") {
+            }else if (path == "/withdraw_list") {
+                handleGetWithDraw(clientSocket, query);
+            }else if (path == "/mall/product/item") {
                 handleGetMallProducts(clientSocket);
             } else if (path == "/mall/auth/promot") {
                 handleGetAuthPromote(clientSocket, query);
@@ -806,7 +808,7 @@ void HttpServer::onReadyRead() {
                 // 如果已经接收的body不完整，继续读取
                 if (contentLength > 0 && body.size() < contentLength) {
                     qDebug() << "Need to read more data. Current:" << body.size()
-                    << "Expected:" << contentLength;
+                             << "Expected:" << contentLength;
 
                     // 设置读取超时
                     int timeout = 5000; // 5秒
@@ -870,7 +872,7 @@ void HttpServer::onReadyRead() {
                     // 如果已经接收的body不完整，继续读取
                     if (contentLength > 0 && body.size() < contentLength) {
                         qDebug() << "Need to read more data. Current:" << body.size()
-                        << "Expected:" << contentLength;
+                                 << "Expected:" << contentLength;
 
                         // 设置读取超时
                         int timeout = 5000; // 5秒
@@ -895,7 +897,36 @@ void HttpServer::onReadyRead() {
                     qDebug() << "Before calling handlePostMallUserAppealPic, body size:" << body.size();
                     handlePostMallUserAppealPic(clientSocket, body, query);
                     qDebug() << "After handlePostFileUpload";
-                } else {
+                }else if (path == "/withdraw_dispose") {
+                            // 如果已经接收的body不完整，继续读取
+                            if (contentLength > 0 && body.size() < contentLength) {
+                                qDebug() << "Need to read more data. Current:" << body.size()
+                                         << "Expected:" << contentLength;
+
+                                // 设置读取超时
+                                int timeout = 5000; // 5秒
+                                qint64 remaining = contentLength - body.size();
+
+                                while (remaining > 0 && clientSocket->waitForReadyRead(timeout)) {
+                                    QByteArray moreData = clientSocket->readAll();
+                                    if (!moreData.isEmpty()) {
+                                        body.append(moreData);
+                                        remaining = contentLength - body.size();
+                                    } else {
+                                        break;
+                                    }
+                                }
+
+                                if (body.size() != contentLength) {
+                                    qDebug() << "Warning: Body incomplete! Expected:" << contentLength
+                                             << "Actual:" << body.size();
+                                }
+                            }
+
+                            qDebug() << "Before calling handlePostWithDrawPic, body size:" << body.size();
+                            handlePostWithDrawPic(clientSocket, body, query);
+                            qDebug() << "After handlePostWithDrawPic";
+                        } else {
                     qDebug() << path << "[POST /process/create] body =" << body;
                     sendNotFound(clientSocket);
                 }
@@ -921,12 +952,12 @@ void HttpServer::sendUnauthorized(QTcpSocket *clientSocket)
     QByteArray jsonData = doc.toJson();
 
     QString responseStr = QString(
-        "HTTP/1.1 401 Unauthorized\r\n"
-        "Content-Type: application/json\r\n"
-        "Content-Length: %1\r\n"
-        "\r\n"
-        "%2"
-    ).arg(jsonData.size()).arg(QString::fromUtf8(jsonData));
+                "HTTP/1.1 401 Unauthorized\r\n"
+                "Content-Type: application/json\r\n"
+                "Content-Length: %1\r\n"
+                "\r\n"
+                "%2"
+                ).arg(jsonData.size()).arg(QString::fromUtf8(jsonData));
 
     clientSocket->write(responseStr.toUtf8());
     clientSocket->flush();
@@ -937,10 +968,10 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
     for (int i = 0; i < deviceVector.size(); ++i) {
         if (deviceVector[i].serialNumber == updatedDevice.serialNumber) {
             // 更新设备信息
-          //  updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+            //  updatedDevice.lastHeartbeat = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
             updatedDevice.status = "在线";
-           // updatedDevice.location = "杭州";
-           // updatedDevice.printInfo();
+            // updatedDevice.location = "杭州";
+            // updatedDevice.printInfo();
             // 更新设备向量中的各个字段
             deviceVector[i].usedProcessID = updatedDevice.usedProcessID;
             deviceVector[i].usedProcess = updatedDevice.usedProcess;
@@ -980,7 +1011,7 @@ void HttpServer::saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus)
 
     // 将 DeviceStatus 转换为 SQL_Device
     SQL_Device sqlDevice;
-  //  sqlDevice =
+    //  sqlDevice =
     sqlDevice.serial_number = deviceStatus.serialNumber;
     sqlDevice.checksum = deviceStatus.checksum;
 
@@ -1288,7 +1319,7 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
 
     if (bytesWritten != fileContent.size()) {
         qDebug() << "Warning: Incomplete write! Expected:" << fileContent.size()
-        << "Actual:" << bytesWritten;
+                 << "Actual:" << bytesWritten;
     }
 
     // 验证文件大小
@@ -1320,7 +1351,7 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
                                "Content-Type: application/json\r\n"
                                "Content-Length: %1\r\n"
                                "Connection: close\r\n\r\n")
-                           .arg(jsonData.size());
+            .arg(jsonData.size());
 
     qDebug() << "Writing HTTP response header...";
 
@@ -1351,7 +1382,7 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
     }
 
     SQL_CommandHistory cmd =  dbManager->getCommandById(commandId);
-     qDebug() << "查看一下remark:" << cmd.remark;
+    qDebug() << "查看一下remark:" << cmd.remark;
     if(cmd.remark.contains("MARK:CRCODE_LOGGIN:MARK"))
     {
         emit getCRcodeImg(commandId);
@@ -1496,7 +1527,7 @@ void HttpServer::handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &qu
                                    "Content-Type: text/html\r\n\r\n"
                                    "<h1>404 Not Found</h1>"
                                    "<p>Image '%1' not found in images directory.</p>")
-                               .arg(fileName);
+                .arg(fileName);
         clientSocket->write(response.toUtf8());
         return;
     }
@@ -1527,8 +1558,8 @@ void HttpServer::handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &qu
                              "Content-Type: %1\r\n"
                              "Content-Length: %2\r\n"
                              "Connection: close\r\n\r\n")
-                         .arg(mimeType)
-                         .arg(fileData.size());
+            .arg(mimeType)
+            .arg(fileData.size());
 
     clientSocket->write(header.toUtf8());
     clientSocket->write(fileData);
@@ -1699,10 +1730,10 @@ void HttpServer::handleGetAuthPromote(QTcpSocket *clientSocket, const QUrlQuery 
             for (int i = 0; i < count; i++) {
                 const SQL_MallUser &invitedUser = invitedUsers[i];
                 qDebug() << QString("  %1. %2 (等级:%3, 注册时间:%4)")
-                                .arg(i+1)
-                                .arg(invitedUser.username)
-                                .arg(invitedUser.userLevel)
-                                .arg(invitedUser.createTime);
+                            .arg(i+1)
+                            .arg(invitedUser.username)
+                            .arg(invitedUser.userLevel)
+                            .arg(invitedUser.createTime);
             }
 
             // 统计用户等级
@@ -1766,6 +1797,39 @@ void HttpServer::handleGetAuthPromote(QTcpSocket *clientSocket, const QUrlQuery 
         sendJsonResponse(clientSocket, 500, response);
     }
 }
+void HttpServer::handleGetWithDraw(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    // 从数据库获取提现记录列表
+    QList<SQL_WithdrawRecord> withdrawRecords;
+    if (dbManager) {
+        withdrawRecords = dbManager->getAllWithdrawRecords();
+    }
+    // 构建返回的JSON
+    QJsonObject responseJson;
+    responseJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    // 构建data数组
+    QJsonArray dataArray;
+    for (const SQL_WithdrawRecord &record : withdrawRecords) {
+        QJsonObject recordJson;
+        recordJson["withdrawId"] = record.withdrawId;
+        recordJson["username"] = record.username;
+        recordJson["amount"] = record.amount;
+        recordJson["alipayAccount"] = record.alipayAccount;
+        recordJson["status"] = record.status;
+        recordJson["createTime"] = record.createTime;
+        recordJson["updateTime"] = record.updateTime;
+        recordJson["remark"] = record.remark;
+        dataArray.append(recordJson);
+    }
+
+    QJsonObject dataObject;
+    dataObject["list"] = dataArray;
+    responseJson["data"] = dataObject;
+
+    // 发送响应
+    sendJsonResponse(clientSocket, 200,  responseJson);
+}
+
 void HttpServer::handleGetpaidOK(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     qDebug() << "[GET /debug/orderPaid] query =" << query.toString();
@@ -1996,7 +2060,7 @@ void HttpServer::handleGetAuthInfo(QTcpSocket *clientSocket, const QUrlQuery &qu
         qDebug() << "积分:" << user.points << "分";
         qDebug() << "创建时间:" << user.createTime;
         qDebug() << "最后登录:" << user.lastLoginTime;
-  //      qDebug() << "状态:" << user.status;
+        //      qDebug() << "状态:" << user.status;
         qDebug() << "密码:" << user.password;
 
         if (!user.inviterUsername.isEmpty()) {
@@ -2193,8 +2257,8 @@ void HttpServer::handleGetOrderQuery(QTcpSocket *clientSocket, const QUrlQuery &
 
                 // 如果筛选条件已经是中文，直接比较
                 if (orderStatus.contains("待支付") || orderStatus.contains("已支付") ||
-                    orderStatus.contains("执行中") || orderStatus.contains("已完成") ||
-                    orderStatus.contains("已取消")) {
+                        orderStatus.contains("执行中") || orderStatus.contains("已完成") ||
+                        orderStatus.contains("已取消")) {
                     // 筛选条件已经是中文
                     if (chineseStatus == orderStatus) {
                         filteredOrders.append(order);
@@ -2202,7 +2266,7 @@ void HttpServer::handleGetOrderQuery(QTcpSocket *clientSocket, const QUrlQuery &
                 } else {
                     // 筛选条件是英文，需要转换后比较
                     if (chineseStatus == chineseFilterStatus ||
-                        order.status.toLower() == orderStatus.toLower()) {
+                            order.status.toLower() == orderStatus.toLower()) {
                         filteredOrders.append(order);
                     }
                 }
@@ -2399,10 +2463,10 @@ void HttpServer::sendJsonResponse(QTcpSocket *clientSocket, int statusCode, cons
     QByteArray responseData = doc.toJson(QJsonDocument::Indented);
 
     QString response = QString("HTTP/1.1 %1 OK\r\n")
-                           .arg(statusCode);
+            .arg(statusCode);
     response += "Content-Type: application/json; charset=utf-8\r\n";
     response += QString("Content-Length: %1\r\n")
-                    .arg(responseData.size());
+            .arg(responseData.size());
     response += "Connection: close\r\n";
     response += "Access-Control-Allow-Origin: *\r\n";
     response += "\r\n";
@@ -2488,8 +2552,8 @@ void HttpServer::handleGetOrderList(QTcpSocket *clientSocket, const QUrlQuery &q
     for (const SQL_Order &order : pagedOrders) {
         // 获取产品名称 - 直接从数据库获取
         QString productName = order.productName.isEmpty() ?
-                                  QString("商品%1").arg(order.productId) :
-                                  order.productName;
+                    QString("商品%1").arg(order.productId) :
+                    order.productName;
 
         // 将数据库状态映射为中文显示状态
         QString displayStatus = mapStatusToChinese(order.status);
@@ -2499,10 +2563,10 @@ void HttpServer::handleGetOrderList(QTcpSocket *clientSocket, const QUrlQuery &q
 
         // 构建content文本（单行格式）
         QString content = QString("订单详情：商品名称：%1，下单单价：%2元，下单总数：%3，客户备注：%4")
-                              .arg(productName) // 使用数据库中的productName
-                              .arg(QString::number(order.unitPrice, 'f', 2))
-                              .arg(order.quantity)
-                              .arg(order.note.isEmpty() ? "无" : order.note);
+                .arg(productName) // 使用数据库中的productName
+                .arg(QString::number(order.unitPrice, 'f', 2))
+                .arg(order.quantity)
+                .arg(order.note.isEmpty() ? "无" : order.note);
 
         // 将createTime转换为ISO格式
         QString isoOrderTime = order.createTime;
@@ -2788,8 +2852,8 @@ void HttpServer::handleGetMallProducts(QTcpSocket *clientSocket)
     // 尝试从数据库获取商品
     QList<SQL_Product> allProducts;
     try {
-            allProducts = dbManager->getAllProducts();
-            hasData = !allProducts.isEmpty();
+        allProducts = dbManager->getAllProducts();
+        hasData = !allProducts.isEmpty();
     } catch (...) {
         // 数据库错误，继续返回空数据
         qDebug() << "数据库查询失败，返回空数据";
@@ -2953,6 +3017,170 @@ void HttpServer::handlePostMallUserAppealtext(QTcpSocket *clientSocket, const QB
              << "User:" << username << "File:" << filePath;
 }
 
+void HttpServer::handlePostWithDrawPic(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
+{
+    qDebug() << "=== 开始处理提现截图上传请求 ===";
+
+    // 解析参数
+    QString withdrawId = query.queryItemValue("withdrawId");
+
+    if (withdrawId.isEmpty()) {
+        QJsonObject errorJson;
+        errorJson["error"] = "Missing withdrawId parameter";
+        sendJsonResponse(clientSocket, 400, errorJson);
+        return;
+    }
+
+    qDebug() << "提现ID:" << withdrawId;
+    qDebug() << "原始body大小:" << body.size() << "字节";
+
+    // 检查body是否为空
+    if (body.isEmpty()) {
+        QJsonObject errorJson;
+        errorJson["error"] = "Empty request body";
+        sendJsonResponse(clientSocket, 400, errorJson);
+        return;
+    }
+
+    // 检查数据库连接
+    if (!dbManager) {
+        QJsonObject errorJson;
+        errorJson["error"] = "Database connection error";
+        sendJsonResponse(clientSocket, 500, errorJson);
+        return;
+    }
+
+    // 首先检查提现记录是否存在
+    SQL_WithdrawRecord record = dbManager->getWithdrawRecordById(withdrawId);
+    if (record.withdrawId.isEmpty()) {
+        QJsonObject errorJson;
+        errorJson["error"] = "Withdraw record not found";
+        sendJsonResponse(clientSocket, 404, errorJson);
+        return;
+    }
+
+    // 解析multipart/form-data数据，提取图片二进制数据
+    QByteArray imageData;
+    QString format = "png"; // 默认格式
+
+    // 查找Content-Type中的格式信息
+    int contentTypePos = body.indexOf("Content-Type: image/");
+    if (contentTypePos != -1) {
+        int start = contentTypePos + 20; // "Content-Type: image/"长度
+        int end = body.indexOf("\r\n", start);
+        if (end != -1) {
+            format = QString::fromLatin1(body.mid(start, end - start));
+            qDebug() << "检测到图片格式:" << format;
+        }
+    }
+
+    // 查找图片数据的开始位置（两个连续的换行符之后）
+    QByteArray boundaryPattern = "\r\n\r\n";
+    int dataStart = body.indexOf(boundaryPattern);
+    if (dataStart != -1) {
+        dataStart += boundaryPattern.length();
+
+        // 查找数据的结束位置（下一个boundary或结尾）
+        int dataEnd = body.indexOf("\r\n--", dataStart);
+        if (dataEnd == -1) {
+            dataEnd = body.length();
+        }
+
+        imageData = body.mid(dataStart, dataEnd - dataStart);
+        qDebug() << "提取的图片数据大小:" << imageData.size() << "字节";
+
+        // 验证提取的数据是否有效
+        if (imageData.isEmpty()) {
+            QJsonObject errorJson;
+            errorJson["error"] = "Failed to extract image data from multipart form";
+            sendJsonResponse(clientSocket, 400, errorJson);
+            return;
+        }
+    } else {
+        // 如果没有找到multipart分隔符，可能客户端直接发送了图片数据
+        imageData = body;
+        qDebug() << "未找到multipart分隔符，使用原始body作为图片数据";
+    }
+
+    // 创建保存目录
+    QString saveDir = QString("./withdraw/%1/").arg(withdrawId);
+    QDir dir;
+    if (!dir.exists(saveDir)) {
+        if (!dir.mkpath(saveDir)) {
+            QJsonObject errorJson;
+            errorJson["error"] = "Failed to create directory";
+            sendJsonResponse(clientSocket, 500, errorJson);
+            return;
+        }
+    }
+
+    // 构建保存路径
+    QString filename = QString("%1.%2").arg(withdrawId).arg(format);
+    QString filepath = saveDir + filename;
+
+    // 保存图片文件
+    QFile file(filepath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QJsonObject errorJson;
+        errorJson["error"] = "Failed to open file for writing";
+        sendJsonResponse(clientSocket, 500, errorJson);
+        return;
+    }
+
+    qint64 bytesWritten = file.write(imageData);
+    file.close();
+
+    if (bytesWritten <= 0) {
+        QJsonObject errorJson;
+        errorJson["error"] = "Failed to write image data";
+        sendJsonResponse(clientSocket, 500, errorJson);
+        return;
+    }
+
+    qDebug() << "图片保存成功:" << filepath << "大小:" << bytesWritten << "字节";
+
+    // 验证图片是否有效
+    QImage image;
+    if (!image.load(filepath)) {
+        // 保留文件用于调试
+        qDebug() << "图片格式无效，文件已保存至:" << filepath;
+        QJsonObject errorJson;
+        errorJson["error"] = "Invalid image format";
+        errorJson["filepath"] = filepath;
+        errorJson["size"] = bytesWritten;
+        sendJsonResponse(clientSocket, 400, errorJson);
+        return;
+    }
+
+    // 更新提现记录
+    record.status = "completed";
+    record.remark = QString("转账截图已上传，路径：%1").arg(filepath);
+    record.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+
+    if (!dbManager->updateWithdrawRecord(record)) {
+        QJsonObject errorJson;
+        errorJson["error"] = "Failed to update withdraw record";
+        errorJson["filepath"] = filepath;
+        sendJsonResponse(clientSocket, 500, errorJson);
+        return;
+    }
+
+    // 构建成功响应
+    QJsonObject responseJson;
+    responseJson["withdrawId"] = withdrawId;
+    responseJson["filepath"] = filepath;
+    responseJson["filename"] = filename;
+    responseJson["format"] = format;
+    responseJson["size"] = bytesWritten;
+    responseJson["width"] = image.width();
+    responseJson["height"] = image.height();
+    responseJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    responseJson["status"] = "completed";
+    responseJson["remark"] = record.remark;
+
+    sendJsonResponse(clientSocket, 200, responseJson);
+    qDebug() << "处理完成";
+}
 void HttpServer::handlePostMallUserAppealPic(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
 {
     qDebug() << "Handling POST user appeal picture request";
@@ -3134,7 +3362,7 @@ void HttpServer::handlePostMallUserAppealPic(QTcpSocket *clientSocket, const QBy
     qDebug() << "Wrote" << bytesWritten << "bytes to file:" << filePath;
 
 
-   dbManager->insertUserAppeal(username, orderId, "picture", filePath, "", "normal", 1);
+    dbManager->insertUserAppeal(username, orderId, "picture", filePath, "", "normal", 1);
 
     // 构建成功响应
     QJsonObject response;
@@ -3288,10 +3516,10 @@ void HttpServer::handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArra
         for (const DeviceStatus &device : deviceVector) {
             QString currentAction = device.currentAction.trimmed().toLower();
             bool isIdle = currentAction.isEmpty() ||
-                         currentAction == "idle" ||
-                         currentAction == "空闲" ||
-                         currentAction.contains("idle") ||
-                         currentAction.contains("空闲");
+                    currentAction == "idle" ||
+                    currentAction == "空闲" ||
+                    currentAction.contains("idle") ||
+                    currentAction.contains("空闲");
 
             if (isIdle) {
                 idleDevices.append(device.serialNumber);
@@ -3492,12 +3720,12 @@ QStringList HttpServer::generateRandomSerialNumbers(int count)
         if (prefix == "YDAT") {
             // YDAT格式：YDAT + 12位数字
             serialNumber = QString("YDAT%1")
-                               .arg(generator->bounded(100000000000, 999999999999), 12, 10, QChar('0'));
+                    .arg(generator->bounded(100000000000, 999999999999), 12, 10, QChar('0'));
         } else {
             // SN或DEV格式：前缀 + 6位数字
             serialNumber = QString("%1%2")
-                               .arg(prefix)
-                               .arg(generator->bounded(100000, 999999));
+                    .arg(prefix)
+                    .arg(generator->bounded(100000, 999999));
         }
 
         serialNumbers.append(serialNumber);
@@ -3975,8 +4203,8 @@ void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByt
             response["code"] = 400;
             response["success"] = false;
             response["message"] = "验证码错误或已过期";
-         //TODO   sendJsonResponse(clientSocket, 400, response);
-         //   return;
+            //TODO   sendJsonResponse(clientSocket, 400, response);
+            //   return;
         }
 
         // 获取用户信息
@@ -4034,7 +4262,7 @@ void HttpServer::handlePostMallSendwithdraw(QTcpSocket *clientSocket, const QByt
         qDebug() << "提现金额:" << QString::number(withdrawAmount, 'f', 2) << "元";
         qDebug() << "支付宝账号:" << alipay;
         qDebug() << "提现后余额:" << QString::number(user.balance - withdrawAmount, 'f', 2) << "元";
-/* TODO
+        /* TODO
         // 扣除余额
         if (!dbManager->updateMallUserBalance(username, -withdrawAmount)) {
             qDebug() << "扣除余额失败";
@@ -4199,12 +4427,12 @@ void HttpServer::handlePostMallPasswdReset(QTcpSocket *clientSocket, const QByte
             int count = 0;
             for (const auto &vc : verificationCodes) {
                 qDebug() << QString("  [%1] 用户名: %2, 验证码: %3, 邮箱: %4, 有效: %5, 过期时间: %6")
-                    .arg(++count)
-                    .arg(vc.username)
-                    .arg(vc.code)
-                    .arg(vc.email)
-                    .arg(vc.isValid() ? "是" : "否")
-                    .arg(vc.expireTime.toString("HH:mm:ss"));
+                            .arg(++count)
+                            .arg(vc.username)
+                            .arg(vc.code)
+                            .arg(vc.email)
+                            .arg(vc.isValid() ? "是" : "否")
+                            .arg(vc.expireTime.toString("HH:mm:ss"));
             }
             qDebug() << "=== 总共" << count << "个验证码 ===";
         }
@@ -4359,12 +4587,12 @@ void HttpServer::printVerificationCodes()
         }
 
         qDebug() << QString("  [%1] 用户名: %2, 验证码: %3, 邮箱: %4, 状态: %5, 过期时间: %6")
-                        .arg(i + 1)
-                        .arg(vc.username)
-                        .arg(vc.code)
-                        .arg(vc.email)
-                        .arg(status)
-                        .arg(vc.expireTime.toString("HH:mm:ss"));
+                    .arg(i + 1)
+                    .arg(vc.username)
+                    .arg(vc.code)
+                    .arg(vc.email)
+                    .arg(status)
+                    .arg(vc.expireTime.toString("HH:mm:ss"));
     }
 
     qDebug() << "=== 统计 ===";
@@ -4792,7 +5020,7 @@ void HttpServer::handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray 
                 // 获取用户信息用于调试
                 SQL_MallUser user = dbManager->getMallUserByUsername(username);
                 qDebug() << "数据库中的密码:" << user.password;
-              //  qDebug() << "用户状态:" << user.status;
+                //  qDebug() << "用户状态:" << user.status;
                 qDebug() << "=========================";
             }
 
@@ -4833,9 +5061,9 @@ QString HttpServer::generateToken(const QString &username)
 
     // 创建一个简单的token
     QString token = QString("%1_%2_%3")
-                        .arg(username)
-                        .arg(timestamp)
-                        .arg(random);
+            .arg(username)
+            .arg(timestamp)
+            .arg(random);
 
     // 计算MD5哈希（可选，增加安全性）
     QByteArray hash = QCryptographicHash::hash(token.toUtf8(), QCryptographicHash::Md5);
@@ -5355,7 +5583,7 @@ void HttpServer::handleCreateTestOrdersSimple()
     for (int i = 1; i <= 10; i++) {
         SQL_Order order;
         order.orderId = QString("TEST%1").arg(now.toString("yyyyMMdd")) +
-                        QString::number(i).rightJustified(3, '0');
+                QString::number(i).rightJustified(3, '0');
         order.productId = QString("PROD%1").arg(QRandomGenerator::global()->bounded(1, 6), 3, 10, QChar('0'));
         order.unitPrice = QRandomGenerator::global()->bounded(100, 1001);
         order.quantity = QRandomGenerator::global()->bounded(1, 6);

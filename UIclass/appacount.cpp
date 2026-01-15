@@ -46,11 +46,11 @@ appacount::~appacount()
 // 初始化表格
 void appacount::initTable()
 {
-     setFixedSize(800,620);
+     setFixedSize(1000,620);
     // 设置表格列数和标题
-    ui->tableWidget->setColumnCount(6);
+    ui->tableWidget->setColumnCount(10);
     QStringList headers;
-    headers << "设备号" << "TikTok" << "Bilibili" << "小红书" << "微博" << "快手";
+    headers << "设备号" << "TikTok" << "Bilibili" << "小红书" << "微博" << "快手"<<"预留"<<"预留"<<"预留"<<"预留";
     ui->tableWidget->setHorizontalHeaderLabels(headers);
 
     // 设置表格属性

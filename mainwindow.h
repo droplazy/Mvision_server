@@ -5,7 +5,8 @@
 #include "httpserver.h"
 #include "mqtt_server.h"
 #include "emailsender.h"
-
+#include <QSystemTrayIcon>
+#include <QCloseEvent>
 
 
 QT_BEGIN_NAMESPACE
@@ -21,7 +22,8 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-
+protected:
+    void closeEvent(QCloseEvent *event) override;
 public slots:
     void DispayMqttclientStatus(bool status);
     void updateNewrqeInfo(QString info);
@@ -54,7 +56,10 @@ private:
     class MQTT_server *p_mqttt_ser;
 
     class EmailSender *p_email;
-
+    QSystemTrayIcon *trayIcon;
+    QMenu *trayMenu;
+    QAction *restoreAction;
+    QAction *quitAction;
     void updateSystemTime();
   //  void initDatabaseAndServices();
     void initUIStatus();
@@ -72,5 +77,11 @@ private:
     void connectHttpSignals();
     void enableNetworkControls(bool enable);
     bool readSmtpConfig(QString &email, QString &password);
+    void onQuitAction();
+    void onRestoreAction();
+    void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
+    void createTrayMenu();
+    void createTrayIcon();
+    void changeEvent(QEvent *event);
 };
 #endif // MAINWINDOW_H

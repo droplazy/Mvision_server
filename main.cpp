@@ -10,6 +10,15 @@
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+    // 检查系统是否支持托盘
+    a.setApplicationName("后台控制系统");
+    a.setOrganizationName("MyCompany");
+
+
+    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+        QMessageBox::critical(nullptr, "错误",
+                              "您的系统不支持系统托盘功能！程序将以普通模式运行。");
+    }
 
     // 检查管理员权限
     if (!PrivilegeHelper::requireAdministrator()) {
@@ -33,8 +42,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    qInstallMessageHandler(LogHandler::messageHandler);
-    LogHandler::instance()->setLogFile("app_log.txt");
+    // qInstallMessageHandler(LogHandler::messageHandler);
+    // LogHandler::instance()->setLogFile("app_log.txt");
     MainWindow w;
     w.show();
 
