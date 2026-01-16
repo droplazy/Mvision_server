@@ -757,12 +757,21 @@ void HttpServer::onReadyRead() {
                 handleGetDevice(clientSocket, query);
             }else if (path == "/mall/login/para") {
                 handleGetLoginUI(clientSocket,query );
+            }else if (path.startsWith("/product_images/")) {
+                QString imagePath = path.mid(16); // 去掉 "/product_images/" 这16个字符
+                   QUrlQuery newQuery;
+                   newQuery.addQueryItem("path", imagePath);
+                   handleGetProductsPic(clientSocket, newQuery);
             }else if (path == "/platform/request_CRcode") {
                 handleGetCRCODE(clientSocket,query );
             }else if (path == "/platform/taskquery") {
                 handleGetTaskSta(clientSocket,query );
+            }else if (path == "/platform/info") {
+                handleGetPersonInfo(clientSocket, query);
+            }else if (path == "/platform/cancel_dev") {
+                handleGetCancelDev(clientSocket, query);
             }else if (path == "/platform/get_vaild") {
-                handleGetidleDev(clientSocket );
+                            handleGetidleDev(clientSocket );
             }else if (path == "/device/iptest") {
                 handleGetIPTEST(clientSocket, clientIp );
             }else if (path.contains("/images")) {
@@ -1603,6 +1612,50 @@ void HttpServer::handleGetidleDev(QTcpSocket *clientSocket)
     // 发送响应
     sendJsonResponse(clientSocket, 200, responseJson);
 }
+void HttpServer::handleGetCancelDev(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    // 提取 username 和 platform 参数
+    QString username = query.queryItemValue("username");
+    QString platform = query.queryItemValue("platform");
+
+    // 打印参数
+    qDebug() << "取消设备请求参数:";
+    qDebug() << "  username:" << username;
+    qDebug() << "  platform:" << platform;
+
+    // 构建JSON响应
+    QJsonObject json;
+    json["status"] = "OK";
+    json["message"] = "取消设备请求已接收";
+    json["username"] = username;
+    json["platform"] = platform;
+    json["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QByteArray jsonData = QJsonDocument(json).toJson(QJsonDocument::Compact);
+
+    sendJsonResponse(clientSocket, 200, json);
+
+}
+void HttpServer::handleGetPersonInfo(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    // 提取 username 参数
+    QString username = query.queryItemValue("username");
+
+    // 构建JSON响应
+    QJsonObject json;
+    json["timestamp"] = "2025-11-25T12:00:00Z";
+
+    QJsonObject data;
+    data["platform"] = "AAA";
+    data["keeptime"] = "65000";
+    data["earned"] = "5.00￥";
+    data["username"] = username;  // 返回传入的用户名
+
+    json["data"] = data;
+
+    sendJsonResponse(clientSocket, 200, json);
+
+}
 void HttpServer::handleGetTaskSta(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     // 提取taskid参数
@@ -1788,7 +1841,100 @@ void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &quer
     qDebug() << "已返回二维码图片，大小:" << imageData.size() << "bytes";
     qDebug() << "=== handleGetCRCODE 处理完成 ===";
 }
+void HttpServer::handleGetProductsPic(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    QDir currentDir(QDir::currentPath());
 
+    // 获取图片路径 - 这里假设query中已经有完整的路径
+    QString imagePath = query.queryItemValue("path");
+
+    // 如果path参数为空，尝试从其他方式获取
+    if (imagePath.isEmpty()) {
+        // 或者如果您有其他方式传递路径，可以在这里处理
+        imagePath = query.queryItemValue("file");
+    }
+
+    if (imagePath.isEmpty()) {
+        QByteArray response = "HTTP/1.1 400 Bad Request\r\n"
+                              "Content-Type: text/plain\r\n"
+                              "Content-Length: 25\r\n"
+                              "Connection: close\r\n"
+                              "\r\n"
+                              "Missing 'path' parameter";
+        clientSocket->write(response);
+        clientSocket->close();
+        return;
+    }
+
+    // 打印调试信息
+    qDebug() << "Requested image path:" << imagePath;
+    qDebug() << "Current directory:" << currentDir.absolutePath();
+    qDebug() << "Full file path:" << currentDir.absoluteFilePath(imagePath);
+
+    // 构建完整文件路径
+    QString fullFilePath = currentDir.absoluteFilePath(imagePath);
+
+    // 检查文件是否存在
+    if (!QFile::exists(fullFilePath)) {
+        qDebug() << "File does not exist:" << fullFilePath;
+        QByteArray response = "HTTP/1.1 404 Not Found\r\n"
+                              "Content-Type: text/plain\r\n"
+                              "Content-Length: 13\r\n"
+                              "Connection: close\r\n"
+                              "\r\n"
+                              "File not found";
+        clientSocket->write(response);
+        clientSocket->close();
+        return;
+    }
+
+    // 打开文件
+    QFile file(fullFilePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QByteArray response = "HTTP/1.1 500 Internal Error\r\n"
+                              "Content-Type: text/plain\r\n"
+                              "Content-Length: 21\r\n"
+                              "Connection: close\r\n"
+                              "\r\n"
+                              "Cannot open file";
+        clientSocket->write(response);
+        clientSocket->close();
+        return;
+    }
+
+    // 读取文件内容
+    QByteArray fileData = file.readAll();
+    file.close();
+
+    qDebug() << "File size:" << fileData.size() << "bytes";
+
+    // 根据文件扩展名确定Content-Type
+    QString contentType = "application/octet-stream";
+    QString suffix = QFileInfo(fullFilePath).suffix().toLower();
+
+    if (suffix == "png") contentType = "image/png";
+    else if (suffix == "jpg" || suffix == "jpeg") contentType = "image/jpeg";
+    else if (suffix == "gif") contentType = "image/gif";
+    else if (suffix == "bmp") contentType = "image/bmp";
+    else if (suffix == "webp") contentType = "image/webp";
+    else if (suffix == "svg") contentType = "image/svg+xml";
+
+    // 构建并发送HTTP响应
+    QString header = QString(
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: %1\r\n"
+        "Content-Length: %2\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+    ).arg(contentType).arg(fileData.size());
+
+    clientSocket->write(header.toUtf8());
+    clientSocket->write(fileData);
+    clientSocket->flush();
+
+    qDebug() << "Image sent successfully";
+    clientSocket->close();
+}
 void HttpServer::handleGetLoginUI(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     Q_UNUSED(query); // 这个接口可能不需要查询参数
@@ -1798,6 +1944,9 @@ void HttpServer::handleGetLoginUI(QTcpSocket *clientSocket, const QUrlQuery &que
 
     // 时间戳
     jsonResponse["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    // 生成token
+    QString token = generateToken("UI");
+    dbManager->saveUserToken("UI", token);
 
     // 构建data对象
     QJsonObject dataObj;
@@ -1805,6 +1954,7 @@ void HttpServer::handleGetLoginUI(QTcpSocket *clientSocket, const QUrlQuery &que
     dataObj["guide"] = LOGIN_GUIDE_TEXT;              // 使用宏
     dataObj["Slogan1"] = LOGIN_SLOGAN1;               // 使用宏
     dataObj["Slogan2"] = LOGIN_SLOGAN2;               // 使用宏
+    dataObj["token"] = token;               // 使用宏
 
     jsonResponse["data"] = dataObj;
 
@@ -3222,7 +3372,27 @@ void HttpServer::handleGetMallProducts(QTcpSocket *clientSocket)
             productObj["minOrder"] = product.minOrder;
             productObj["maxOrder"] = product.maxOrder;
             productObj["status"] = product.status;
-            productObj["imageUrl"] = product.imageUrl;
+
+            // 修改部分：将imageUrl改为数组，遍历文件夹下的图片
+            QDir currentDir(QDir::currentPath());
+            QString imageFolderPath = currentDir.absoluteFilePath(product.imageUrl);
+            QDir imageDir(imageFolderPath);
+
+            QJsonArray imageUrlsArray;
+            if (imageDir.exists()) {
+                // 获取文件夹下所有图片文件
+                QStringList imageFilters;
+                imageFilters << "*.jpg" << "*.jpeg" << "*.png" << "*.gif" << "*.bmp" << "*.webp";
+                QStringList imageFiles = imageDir.entryList(imageFilters, QDir::Files, QDir::Name);
+
+                // 构建完整的图片URL路径
+                for (const QString& imageFile : imageFiles) {
+                    QString fullImagePath = "/product_images/" + product.imageUrl + imageFile;
+                    imageUrlsArray.append(fullImagePath);
+                }
+            }
+
+            productObj["imageUrl"] = imageUrlsArray; // 改为数组
             productObj["description"] = product.description;
             productArray.append(productObj);
         }
@@ -3240,7 +3410,6 @@ void HttpServer::handleGetMallProducts(QTcpSocket *clientSocket)
 
     qDebug() << "返回数据，分类数量:" << categoriesArray.size();
 }
-
 void HttpServer::handlePostPlatformReqSendcode(QTcpSocket *clientSocket, const QByteArray &body)
 {
     qDebug() << "=== handlePostPlatformReqSendcode 开始处理 ===";
@@ -3613,10 +3782,10 @@ void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArra
 
     QJsonObject responseData;
     responseData["taskId"] = taskId;
-    responseData["commandId"] = commandId;  // 添加命令ID到响应
-    responseData["platform"] = platform;
+  //  responseData["commandId"] = commandId;  // 添加命令ID到响应
+   // responseData["platform"] = platform;
     responseData["account"] = account;
-    responseData["deviceSerial"] = deviceSerial;
+ //   responseData["deviceSerial"] = deviceSerial;
     responseData["method"] = method;
     responseData["subAction"] = subAction;
     responseData["status"] = "wait";

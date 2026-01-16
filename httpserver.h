@@ -184,6 +184,9 @@ private:
     void handleGetTaskSta(QTcpSocket *clientSocket, const QUrlQuery &query);
     void updateTaskStatusByCommandId(const QString &commandid, const QString &sta);
     void handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void handleGetProductsPic(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void handleGetPersonInfo(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void handleGetCancelDev(QTcpSocket *clientSocket, const QUrlQuery &query);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
