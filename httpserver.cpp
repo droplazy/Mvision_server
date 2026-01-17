@@ -15,7 +15,8 @@
 #include <QCryptographicHash>
 #include <QSslServer>  // 修改：使用QSslServer
 #include <QSslSocket>  // 修改：使用QSslSocket
-HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
+HttpServer::
+HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
     //handleCreateTestOrdersSimple();
     handleCreateProductDebug();
@@ -29,6 +30,17 @@ HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent)
     // 初始化定时器
     initTimer();
     qDebug() << "HttpServer initialized with pending order container";
+
+
+    //QTimer *debugTimer;
+    // 添加调试定时器 - 每500ms触发一次
+    // debugTimer = new QTimer(this);
+    // connect(debugTimer, &QTimer::timeout, this, [this]() {
+    //     for ( auto& task : frontendTasks) {
+    //         task.print();
+    //     }
+    // });
+    // debugTimer->start(500);
 }
 
 void HttpServer::createDownloadDirectoryIfNeeded()
@@ -1056,13 +1068,17 @@ void HttpServer::handleAppLoginStatus(QString commid, bool isSuccess)
     // 遍历查找任务
     for (int i = 0; i < frontendTasks.size(); i++) {
         if (frontendTasks[i].commandid == commid) {
-            FrontendTask task = frontendTasks[i];
+            // 使用引用，直接修改容器中的对象
+            FrontendTask &task = frontendTasks[i];
 
             // 更新任务状态
             QString oldStatus = task.status;
             if (isSuccess) {
-                task.status = "success";
+                task.status = "success";  // 直接修改容器中的对象
                 qDebug() << "任务" << task.taskId << "状态更新:" << oldStatus << "-> success";
+
+                // 打印更新后的任务
+                task.print();
 
                 // 保存账号信息到数据库
                 if (dbManager) {
@@ -1082,17 +1098,19 @@ void HttpServer::handleAppLoginStatus(QString commid, bool isSuccess)
                 qDebug() << "任务" << task.taskId << "状态更新:" << oldStatus << "-> failed";
             }
 
+            // 直接修改容器中的更新时间
             task.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-
-            // // 移除任务（无论是成功还是失败都移除）
-            // frontendTasks.removeAt(i);
-            // qDebug() << "已移除任务:" << task.taskId << "当前剩余任务数:" << frontendTasks.size();
 
             // 打印任务详情
             qDebug() << "任务详情: taskId=" << task.taskId
                      << ", platform=" << task.platform
                      << ", account=" << task.account
-                     << ", device=" << task.deviceSerial;
+                     << ", device=" << task.deviceSerial
+                     << ", status=" << task.status;
+
+            // 可选：移除任务
+            // frontendTasks.removeAt(i);
+            // qDebug() << "已移除任务:" << task.taskId << "当前剩余任务数:" << frontendTasks.size();
 
             return; // 找到并处理后直接返回
         }
@@ -1101,8 +1119,13 @@ void HttpServer::handleAppLoginStatus(QString commid, bool isSuccess)
     // 未找到任务
     qWarning() << "未找到对应commandid的任务:" << commid;
     qDebug() << "当前frontendTasks容器大小:" << frontendTasks.size();
-}
 
+    // 调试：打印所有任务的commandid
+    qDebug() << "当前所有任务的commandid:";
+    for (const auto& task : frontendTasks) {
+        qDebug() << "  taskId:" << task.taskId << ", commandid:" << task.commandid;
+    }
+}
 
 void HttpServer::saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus)
 {
@@ -1539,16 +1562,27 @@ void HttpServer::printStaticFiles(const QByteArray &htmlContent) {
         qDebug() << "Found image file:" << imgFile;
     }
 }
-void HttpServer::sendResponse(QTcpSocket *clientSocket, const QByteArray &json) {
-    QByteArray responseHeader = "HTTP/1.1 200 OK\r\n";
-    responseHeader += "Content-Type: application/json\r\n";
-    responseHeader += "Content-Length: " + QByteArray::number(json.size()) + "\r\n";
-    responseHeader += "Connection: close\r\n\r\n";
+void HttpServer::sendResponse(QTcpSocket *clientSocket, const QByteArray &data)
+{
+    QByteArray response;
+    response.append("HTTP/1.1 200 OK\r\n");
 
-    clientSocket->write(responseHeader);
-    clientSocket->write(json);
-    clientSocket->flush();
-    clientSocket->disconnectFromHost();
+    // 写死Content-Type为JSON
+    response.append("Content-Type: application/json; charset=utf-8\r\n");
+
+    // 必须的CORS头部
+    response.append("Access-Control-Allow-Origin: *\r\n");
+    response.append("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n");
+    response.append("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With\r\n");
+    response.append("Access-Control-Max-Age: 86400\r\n");
+    response.append("Access-Control-Allow-Credentials: true\r\n");
+
+    response.append("Content-Length: " + QByteArray::number(data.size()) + "\r\n");
+    response.append("\r\n");
+    response.append(data);
+
+    clientSocket->write(response);
+    clientSocket->close();
 }
 
 void HttpServer::sendNotFound(QTcpSocket *clientSocket) {
@@ -1672,7 +1706,9 @@ void HttpServer::handleGetTaskSta(QTcpSocket *clientSocket, const QUrlQuery &que
     // 查找任务
     QString status = "not_found";
 
-    for (const auto& task : frontendTasks) {
+    for ( auto& task : frontendTasks) {
+        task.print();
+
         if (task.taskId == taskId) {
             status = task.status;
             break;
@@ -3658,7 +3694,8 @@ void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArra
 #ifdef DEBUG_MODE
     QString deviceSerial = "12345678910"; // findAvailableDevice(platformCode);
 #else
-    QString deviceSerial = findAvailableDevice(platformCode);
+   // QString deviceSerial = findAvailableDevice(platformCode);
+    QString deviceSerial ="JMCR202601050002";// findAvailableDevice(platformCode);
 
 #endif
     if (deviceSerial.isEmpty()) {

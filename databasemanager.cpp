@@ -114,7 +114,7 @@ bool DatabaseManager::createTables()
 {
     return createTable1() && createTable2() && createTable3() && createAppealTable()&&
            createTable4() && createTable5() && createTable6() && createTable7() &&  // 添加商品表
-           createWithdrawTable()&& createTokenTable();
+           createWithdrawTable()&& createTokenTable()&& createAppAccountTable();
 }
 // 保存token
 bool DatabaseManager::saveUserToken(const QString &username, const QString &token)

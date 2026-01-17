@@ -16,7 +16,7 @@
 // 在 HttpServer.h 中添加：
 
 
-#define DEBUG_MODE 1
+//#define DEBUG_MODE 0
 
 struct FrontendTask {
     QString taskId;          // 任务ID
@@ -29,6 +29,20 @@ struct FrontendTask {
     QString remark;          // 备注信息
     QString commandid;
     QString username;
+
+    void print() {
+        qDebug() << "FrontendTask:";
+        qDebug() << "  taskId:" << taskId;
+        qDebug() << "  platform:" << platform;
+        qDebug() << "  account:" << account;
+        qDebug() << "  deviceSerial:" << deviceSerial;
+        qDebug() << "  status:" << status;
+        qDebug() << "  createTime:" << createTime;
+        qDebug() << "  updateTime:" << updateTime;
+        qDebug() << "  remark:" << remark;
+        qDebug() << "  commandid:" << commandid;
+        qDebug() << "  username:" << username;
+    }
 };
 class HttpServer : public QTcpServer
 {

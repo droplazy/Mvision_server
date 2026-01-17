@@ -494,7 +494,6 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
                     dbManager->updateDeviceAppStatus(serialNumber, "快手", account);
                 }
                 emit applogginstatus(commandId,true);
-                qDebug() << "xin hao yijing fashe !!!!!!!!!!!!!!!!!!";
            }
            else if(cmd.remark.contains("MARK:CRCODE_LOGGIN:MARK") )
            {
@@ -527,7 +526,7 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
             if (failedIncremented) {
                 qDebug() << "指令失败任务数增加成功";
                 SQL_CommandHistory cmd =  dbManager->getCommandById(commandId);
-                if(cmd.remark.contains("MARK:LOGGIN_APP:MARK"))
+                if(cmd.remark.contains("MARK:LOGGIN_APP:MARK") || cmd.remark.contains("MARK:CRCODE_LOGGIN:MARK") )
                 {
                     emit applogginstatus(commandId,false);
 
