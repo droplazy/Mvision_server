@@ -288,6 +288,8 @@ struct SQL_Order {
     QString status;
     QString createTime;
     QString updateTime;
+    QString verifier;
+
  QString snapshot;
        QString productName;
     // 计算总价的方法

@@ -451,8 +451,23 @@ void HttpServer::sendHttpResponse(QTcpSocket *clientSocket,
     clientSocket->write(body);
     clientSocket->disconnectFromHost();
 }
+void HttpServer::handlecmdSnap(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    // 简单打印query
+    qDebug() << "[cmdSnap调试] Query参数:";
+    foreach (const auto &item, query.queryItems()) {
+        qDebug() << "  " << item.first << "=" << item.second;
+    }
 
+    // 最简单的响应
+    QString response = "HTTP/1.1 200 OK\r\n"
+                       "Content-Type: text/plain\r\n"
+                       "Connection: close\r\n\r\n"
+                       "OK - cmdSnap接口调试中";
 
+    clientSocket->write(response.toUtf8());
+    clientSocket->close();
+}
 void HttpServer::handleGetDownload(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     QString filename = query.queryItemValue("filename");
@@ -693,7 +708,12 @@ void HttpServer::onReadyRead() {
                 handleGetProcess(clientSocket, query);
             } else if (path == "/download") {
                 handleGetDownload(clientSocket, query);
-            } else if (path == "/command/history") {
+            }else if (path.startsWith("/cmdsnap")) {
+                QString imagePath = path.mid(8); // 去掉 "/product_images/" 这16个字符
+                   QUrlQuery newQuery;
+                   newQuery.addQueryItem("path", imagePath);
+                handlecmdSnap(clientSocket, newQuery);
+            }else if (path == "/command/history") {
                 handleGetCommandList(clientSocket, query);
             } else if (path == "/order/dispose/list") {
                 handleGetOrderList(clientSocket, query);
@@ -1767,6 +1787,9 @@ void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &quer
             qDebug() << "DEBUG: 任务" << task.taskId << "状态设为" << task.status;
         }
     });
+    QString imageFileName = "debugpic.png";
+    //QString imageFilePath = commandDir.filePath(imageFileName);
+
 #else
     // ... 原查找图片逻辑 ...
     QDir currentDir = QDir::current();
@@ -1793,10 +1816,11 @@ void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &quer
         sendErrorResponse(clientSocket, 404, "QR image not found");
         return;
     }
-
     QString imageFileName = imageFiles.first();
     QString imageFilePath = commandDir.filePath(imageFileName);
 
+
+#endif
     // 读取图片
     QFile imageFile(imageFilePath);
     if (!imageFile.open(QIODevice::ReadOnly)) {
@@ -1806,7 +1830,6 @@ void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &quer
 
     QByteArray imageData = imageFile.readAll();
     imageFile.close();
-#endif
 
     if (imageData.isEmpty()) {
         sendErrorResponse(clientSocket, 500, "Image is empty");
@@ -2387,7 +2410,7 @@ void HttpServer::handleGetpaidOK(QTcpSocket *clientSocket, const QUrlQuery &quer
         qDebug() << "  Amount:" << order.totalPrice;
         qDebug() << "  Status:" << order.status;
         qDebug() << "  Created:" << order.createTime;
-
+        order.verifier ="unverified";
         // 模拟支付成功，将订单保存到数据库
         if (!dbManager) {
             QJsonObject errorResp;
@@ -3053,7 +3076,7 @@ void HttpServer::handleGetOrderList(QTcpSocket *clientSocket, const QUrlQuery &q
         QString displayStatus = mapStatusToChinese(order.status);
 
         // 获取验证人 - 标记为待做接口
-        QString verifier = "待做接口获取验证人";
+        QString verifier =order.verifier;
 
         // 构建content文本（单行格式）
         QString content = QString("订单详情：商品名称：%1，下单单价：%2元，下单总数：%3，客户备注：%4")
@@ -3087,8 +3110,6 @@ void HttpServer::handleGetOrderList(QTcpSocket *clientSocket, const QUrlQuery &q
         // 使用映射后的中文状态
         orderObj["status"] = displayStatus;
 
-        // 只有当有验证人时才添加verifier字段（匹配D00005的示例）
-        // 修改：总是添加verifier字段，值为"待做接口获取验证人"
         orderObj["verifier"] = verifier;
 
         // 构建defaultParams对象
@@ -4521,6 +4542,8 @@ void HttpServer::handlePostOrderVerify(QTcpSocket *clientSocket, const QByteArra
         SQL_Order updatedOrder = existingOrder;
         updatedOrder.commandId = commandId;
         updatedOrder.status = "execing";
+        updatedOrder.verifier = verifier;
+
         dbManager->updateOrder(updatedOrder);
 
         // 9. 更新数据库中的设备状态

@@ -1342,7 +1342,7 @@ bool DatabaseManager::createTable5()
 {
     QSqlQuery query;
 
-    // 创建订单表 - 添加必要的字段
+    // 创建订单表 - 添加verifier字段
     QString createTableQuery = R"(
         CREATE TABLE IF NOT EXISTS Orders (
             order_id TEXT PRIMARY KEY,
@@ -1355,6 +1355,7 @@ bool DatabaseManager::createTable5()
             note TEXT,
             user TEXT NOT NULL,
             contact_info TEXT,
+            verifier TEXT,                      -- 新增：核对人
             snapshot TEXT,                      -- 新增：截图URL（可从指令表获取）
             status TEXT DEFAULT 'pending',
             create_time TEXT DEFAULT (datetime('now', 'localtime')),
@@ -1368,10 +1369,9 @@ bool DatabaseManager::createTable5()
         return false;
     }
 
-    // 更新插入订单函数，支持新字段
+    qDebug() << "Table Orders created successfully.";
     return true;
 }
-
 bool DatabaseManager::insertOrder(const SQL_Order &order)
 {
     QMutexLocker locker(&m_mutex);
@@ -1390,6 +1390,7 @@ bool DatabaseManager::insertOrder(const SQL_Order &order)
     qDebug() << "  note:" << order.note;
     qDebug() << "  user:" << order.user;
     qDebug() << "  contact_info:" << order.contactInfo;
+    qDebug() << "  verifier:" << order.verifier;  // 新增
     qDebug() << "  snapshot:" << order.snapshot;
     qDebug() << "  status:" << order.status;
 
@@ -1397,10 +1398,10 @@ bool DatabaseManager::insertOrder(const SQL_Order &order)
     QString sql = R"(
         INSERT INTO Orders
         (order_id, command_id, product_id, product_name, unit_price,
-         quantity, total_price, note, user, contact_info, snapshot, status)
+         quantity, total_price, note, user, contact_info, verifier, snapshot, status)
         VALUES
         (:order_id, :command_id, :product_id, :product_name, :unit_price,
-         :quantity, :total_price, :note, :user, :contact_info, :snapshot, :status)
+         :quantity, :total_price, :note, :user, :contact_info, :verifier, :snapshot, :status)
     )";
 
     query.prepare(sql);
@@ -1416,6 +1417,7 @@ bool DatabaseManager::insertOrder(const SQL_Order &order)
     query.bindValue(":note", order.note);
     query.bindValue(":user", order.user);
     query.bindValue(":contact_info", order.contactInfo);
+    query.bindValue(":verifier", order.verifier);  // 新增绑定
     query.bindValue(":snapshot", order.snapshot);
     query.bindValue(":status", order.status.isEmpty() ? "pending" : order.status);
 
@@ -1439,7 +1441,7 @@ bool DatabaseManager::updateOrder(const SQL_Order &order)
     QSqlQuery query;
     query.prepare(R"(
         UPDATE Orders
-        SET command_id = :command_id,           -- 新增
+        SET command_id = :command_id,
             product_id = :product_id,
             unit_price = :unit_price,
             quantity = :quantity,
@@ -1447,13 +1449,14 @@ bool DatabaseManager::updateOrder(const SQL_Order &order)
             note = :note,
             user = :user,
             contact_info = :contact_info,
+            verifier = :verifier,  -- 新增
             status = :status,
             update_time = datetime('now', 'localtime')
         WHERE order_id = :order_id
     )");
 
     query.bindValue(":order_id", order.orderId);
-    query.bindValue(":command_id", order.commandId);  // 新增绑定
+    query.bindValue(":command_id", order.commandId);
     query.bindValue(":product_id", order.productId);
     query.bindValue(":unit_price", order.unitPrice);
     query.bindValue(":quantity", order.quantity);
@@ -1461,6 +1464,7 @@ bool DatabaseManager::updateOrder(const SQL_Order &order)
     query.bindValue(":note", order.note);
     query.bindValue(":user", order.user);
     query.bindValue(":contact_info", order.contactInfo);
+    query.bindValue(":verifier", order.verifier);  // 新增绑定
     query.bindValue(":status", order.status);
 
     if (!query.exec()) {
@@ -1476,7 +1480,34 @@ bool DatabaseManager::updateOrder(const SQL_Order &order)
     qDebug() << "Order updated successfully. ID:" << order.orderId;
     return true;
 }
+bool DatabaseManager::updateOrderVerifier(const QString &orderId, const QString &verifier)
+{
+    QMutexLocker locker(&m_mutex);
 
+    QSqlQuery query;
+    query.prepare(R"(
+        UPDATE Orders
+        SET verifier = :verifier,
+            update_time = datetime('now', 'localtime')
+        WHERE order_id = :order_id
+    )");
+
+    query.bindValue(":order_id", orderId);
+    query.bindValue(":verifier", verifier);
+
+    if (!query.exec()) {
+        qDebug() << "Error updating order verifier: " << query.lastError().text();
+        return false;
+    }
+
+    if (query.numRowsAffected() == 0) {
+        qDebug() << "No order found with ID:" << orderId;
+        return false;
+    }
+
+    qDebug() << "Order verifier updated successfully. ID:" << orderId << "Verifier:" << verifier;
+    return true;
+}
 // 更新订单状态
 bool DatabaseManager::updateOrderStatus(const QString &orderId, const QString &status)
 {
@@ -2315,7 +2346,7 @@ SQL_Order DatabaseManager::extractOrderFromQuery(const QSqlQuery &query)
 {
     SQL_Order order;
     order.orderId = query.value("order_id").toString();
-    order.commandId = query.value("command_id").toString();  // 新增
+    order.commandId = query.value("command_id").toString();
     order.productId = query.value("product_id").toString();
     order.unitPrice = query.value("unit_price").toDouble();
     order.quantity = query.value("quantity").toInt();
@@ -2323,11 +2354,48 @@ SQL_Order DatabaseManager::extractOrderFromQuery(const QSqlQuery &query)
     order.note = query.value("note").toString();
     order.user = query.value("user").toString();
     order.contactInfo = query.value("contact_info").toString();
+    order.verifier = query.value("verifier").toString();  // 新增
     order.status = query.value("status").toString();
     order.createTime = query.value("create_time").toString();
     order.updateTime = query.value("update_time").toString();
+    order.snapshot = query.value("snapshot").toString();  // 确保snapshot字段也提取
+    order.productName = query.value("product_name").toString();  // 确保productName字段也提取
 
     return order;
+}
+QList<SQL_Order> DatabaseManager::getOrdersByVerifier(const QString &verifier)
+{
+    QMutexLocker locker(&m_mutex);
+
+    QList<SQL_Order> orders;
+    QSqlQuery query;
+    query.prepare("SELECT * FROM Orders WHERE verifier = :verifier ORDER BY create_time DESC");
+    query.bindValue(":verifier", verifier);
+
+    if (query.exec()) {
+        while (query.next()) {
+            SQL_Order order = extractOrderFromQuery(query);
+            orders.append(order);
+        }
+    } else {
+        qDebug() << "Error fetching orders by verifier:" << query.lastError().text();
+    }
+
+    return orders;
+}
+int DatabaseManager::getOrderCountByVerifier(const QString &verifier)
+{
+    QMutexLocker locker(&m_mutex);
+
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM Orders WHERE verifier = :verifier");
+    query.bindValue(":verifier", verifier);
+
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+
+    return 0;
 }
 // 从查询结果中提取投诉记录数据
 SQL_AppealRecord DatabaseManager::extractAppealFromQuery(const QSqlQuery &query)

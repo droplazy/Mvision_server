@@ -220,6 +220,9 @@ public:
     SQL_AppAccount extractAppAccountFromQuery(const QSqlQuery &query);
     bool checkAppAccountExists(const QString &accountName);
     bool clearAllCommandHistory();
+    bool updateOrderVerifier(const QString &orderId, const QString &verifier);
+    QList<SQL_Order> getOrdersByVerifier(const QString &verifier);
+    int getOrderCountByVerifier(const QString &verifier);
 private:
     QSqlDatabase db;
     mutable QRecursiveMutex m_mutex;  // 只改这里：QRecursiveMutex    // 私有辅助函数，内部使用

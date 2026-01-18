@@ -16,7 +16,7 @@
 // 在 HttpServer.h 中添加：
 
 
-//#define DEBUG_MODE 0
+#define DEBUG_MODE 0
 
 struct FrontendTask {
     QString taskId;          // 任务ID
@@ -204,6 +204,7 @@ private:
     void sendErrorImage(QTcpSocket *clientSocket, int errorCode, const QString &errorMsg);
     void sendErrorResponse(QTcpSocket *clientSocket, int errorCode, const QString &errorMsg);
     QString getHttpStatusText(int code);
+    void handlecmdSnap(QTcpSocket *clientSocket, const QUrlQuery &query);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
