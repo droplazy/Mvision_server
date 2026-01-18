@@ -17,7 +17,7 @@ addproduct::addproduct(DatabaseManager *dbManager, QWidget *parent)
 
     // 设置窗口属性
     setWindowTitle("添加商品");
-    setFixedSize(this->size());
+    setFixedSize(1000,620);
 
     if (!dbManager) {
         QMessageBox::critical(this, "错误", "数据库管理器为空！");

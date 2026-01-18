@@ -8,6 +8,7 @@
 DatabaseManager::DatabaseManager(QObject *parent)
     : QObject(parent), db(QSqlDatabase::addDatabase("QSQLITE"))
 {
+
 }
 
 DatabaseManager::~DatabaseManager()
@@ -38,6 +39,8 @@ bool DatabaseManager::createDatabase(const QString &dbName)
 // 验证token是否有效
 bool DatabaseManager::validateToken(const QString &token)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     query.prepare(R"(
@@ -61,6 +64,8 @@ bool DatabaseManager::validateToken(const QString &token)
 // 根据token获取用户名
 QString DatabaseManager::getUsernameByToken(const QString &token)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     query.prepare(R"(
@@ -81,6 +86,8 @@ QString DatabaseManager::getUsernameByToken(const QString &token)
 // 删除用户token（退出登录时使用）
 bool DatabaseManager::deleteUserToken(const QString &username)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     query.prepare("DELETE FROM UserTokens WHERE username = :username");
@@ -98,6 +105,8 @@ bool DatabaseManager::deleteUserToken(const QString &username)
 // 清理过期token
 bool DatabaseManager::cleanExpiredTokens()
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     query.prepare("DELETE FROM UserTokens WHERE expire_time <= datetime('now', 'localtime')");
@@ -119,6 +128,8 @@ bool DatabaseManager::createTables()
 // 保存token
 bool DatabaseManager::saveUserToken(const QString &username, const QString &token)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     // 设置token过期时间（24小时后）
@@ -236,6 +247,8 @@ bool DatabaseManager::createTable7()
 
 bool DatabaseManager::insertProduct(const SQL_Product &product)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     query.prepare(R"(
@@ -281,6 +294,8 @@ bool DatabaseManager::insertProduct(const SQL_Product &product)
 
 bool DatabaseManager::updateProduct(const SQL_Product &product)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     query.prepare(R"(
@@ -335,6 +350,8 @@ bool DatabaseManager::updateProduct(const SQL_Product &product)
 
 bool DatabaseManager::deleteProduct(const QString &productId)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("DELETE FROM Products WHERE product_id = :product_id");
     query.bindValue(":product_id", productId);
@@ -350,6 +367,7 @@ bool DatabaseManager::deleteProduct(const QString &productId)
 
 SQL_Product DatabaseManager::getProductById(const QString &productId)
 {
+
     SQL_Product product;
     QSqlQuery query;
     query.prepare("SELECT * FROM Products WHERE product_id = :product_id");
@@ -367,7 +385,12 @@ SQL_Product DatabaseManager::getProductById(const QString &productId)
 
 QList<SQL_Product> DatabaseManager::getAllProducts()
 {
+
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Product> products;
+    qDebug() << "1231231231323products";
+
     QSqlQuery query("SELECT * FROM Products ORDER BY create_time DESC");
 
     while (query.next()) {
@@ -380,6 +403,9 @@ QList<SQL_Product> DatabaseManager::getAllProducts()
 }
 QList<SQL_Product> DatabaseManager::getProductsByCategory(const QString &categoryId)
 {
+
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Product> products;
     QSqlQuery query;
     query.prepare("SELECT * FROM Products WHERE category_id = :category_id ORDER BY create_time DESC");
@@ -399,6 +425,8 @@ QList<SQL_Product> DatabaseManager::getProductsByCategory(const QString &categor
 
 QList<SQL_Product> DatabaseManager::searchProducts(const QString &keyword)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Product> products;
     QSqlQuery query;
     query.prepare(R"(
@@ -425,6 +453,8 @@ QList<SQL_Product> DatabaseManager::searchProducts(const QString &keyword)
 
 bool DatabaseManager::updateProductStock(const QString &productId, int quantity, bool increment = true)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     if (increment) {
@@ -452,6 +482,8 @@ bool DatabaseManager::updateProductStock(const QString &productId, int quantity,
 
 bool DatabaseManager::updateProductSales(const QString &productId, int quantity)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE Products
@@ -477,6 +509,8 @@ bool DatabaseManager::updateProductSales(const QString &productId, int quantity)
 
 bool DatabaseManager::updateProductRating(const QString &productId, double newRating)
 {
+    QMutexLocker locker(&m_mutex);
+
     // 先获取当前评分信息
     SQL_Product product = getProductById(productId);
     if (product.productId.isEmpty()) {
@@ -512,6 +546,8 @@ bool DatabaseManager::updateProductRating(const QString &productId, double newRa
 
 bool DatabaseManager::batchInsertProducts(const QList<SQL_Product> &products)
 {
+    QMutexLocker locker(&m_mutex);
+
     if (products.isEmpty()) {
         return true;
     }
@@ -532,6 +568,8 @@ bool DatabaseManager::batchInsertProducts(const QList<SQL_Product> &products)
 
 bool DatabaseManager::batchUpdateProducts(const QList<SQL_Product> &products)
 {
+    QMutexLocker locker(&m_mutex);
+
     if (products.isEmpty()) {
         return true;
     }
@@ -552,6 +590,8 @@ bool DatabaseManager::batchUpdateProducts(const QList<SQL_Product> &products)
 
 QList<SQL_Product> DatabaseManager::getNewProducts(int limit)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Product> products;
     QSqlQuery query;
     query.prepare(QString("SELECT * FROM Products ORDER BY create_time DESC LIMIT %1").arg(limit));
@@ -598,6 +638,8 @@ SQL_Product DatabaseManager::extractProductFromQuery(const QSqlQuery &query)
 
 QList<SQL_Product> DatabaseManager::getHotProducts(int limit)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Product> products;
     QSqlQuery query;
     query.prepare(QString("SELECT * FROM Products ORDER BY sales_count DESC LIMIT %1").arg(limit));
@@ -616,6 +658,8 @@ QList<SQL_Product> DatabaseManager::getHotProducts(int limit)
 
 QList<SQL_Product> DatabaseManager::getProductsByStatus(const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Product> products;
     QSqlQuery query;
     query.prepare("SELECT * FROM Products WHERE status = :status ORDER BY create_time DESC");
@@ -716,6 +760,8 @@ bool DatabaseManager::createTable3()
 
 bool DatabaseManager::insertDevice(const SQL_Device &device)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         INSERT INTO Devices (serial_number, checksum, total_flow, ip_address,
@@ -752,6 +798,8 @@ bool DatabaseManager::insertDevice(const SQL_Device &device)
 
 bool DatabaseManager::updateDevice(const SQL_Device &device)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE Devices
@@ -793,6 +841,8 @@ bool DatabaseManager::updateDevice(const SQL_Device &device)
 }
 bool DatabaseManager::deleteDevice(const QString &serial_number)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         DELETE FROM Devices WHERE serial_number = :serial_number
@@ -811,6 +861,8 @@ bool DatabaseManager::deleteDevice(const QString &serial_number)
 
 QList<SQL_Device> DatabaseManager::getAllDevices()
 {
+    QMutexLocker locker(&m_mutex);
+
     qDebug() << "[DB] 开始查询所有设备...";
 
     QList<SQL_Device> devices;
@@ -858,6 +910,8 @@ QList<SQL_Device> DatabaseManager::getAllDevices()
 }
 SQL_Device DatabaseManager::getDeviceBySerialNumber(const QString &serial_number)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_Device device;
     QSqlQuery query;
     query.prepare("SELECT * FROM Devices WHERE serial_number = :serial_number");
@@ -888,6 +942,8 @@ bool DatabaseManager::updateDeviceSocialMedia(const QString &serialNumber,
                                               const QString &tiktok, const QString &bilibili,
                                               const QString &xhs, const QString &weibo, const QString &kuaishou)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE Devices
@@ -925,6 +981,8 @@ bool DatabaseManager::updateDeviceSocialMedia(const QString &serialNumber,
 
 QMap<QString, QString> DatabaseManager::getDeviceSocialMedia(const QString &serialNumber)
 {
+    QMutexLocker locker(&m_mutex);
+
     QMap<QString, QString> socialMedia;
 
     QSqlQuery query;
@@ -946,6 +1004,8 @@ QMap<QString, QString> DatabaseManager::getDeviceSocialMedia(const QString &seri
 
 bool DatabaseManager::insertUser(const SQL_User &user)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         INSERT INTO Users (username, password, phone_number, email)
@@ -968,6 +1028,8 @@ bool DatabaseManager::insertUser(const SQL_User &user)
 
 bool DatabaseManager::updateUser(const SQL_User &user)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE Users
@@ -993,6 +1055,8 @@ bool DatabaseManager::updateUser(const SQL_User &user)
 
 bool DatabaseManager::deleteUser(const QString &username)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         DELETE FROM Users WHERE username = :username
@@ -1011,6 +1075,8 @@ bool DatabaseManager::deleteUser(const QString &username)
 
 QList<SQL_User> DatabaseManager::getAllUsers()
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_User> users;
     QSqlQuery query("SELECT * FROM Users");
 
@@ -1029,6 +1095,8 @@ QList<SQL_User> DatabaseManager::getAllUsers()
 
 SQL_User DatabaseManager::getUserByUsername(const QString &username)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_User user;
     QSqlQuery query;
     query.prepare("SELECT * FROM Users WHERE username = :username");
@@ -1048,6 +1116,8 @@ SQL_User DatabaseManager::getUserByUsername(const QString &username)
 
 bool DatabaseManager:: insertProcessSteps(const Machine_Process_Total &process)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         INSERT INTO ProcessSteps (process_id, process_name, creation_time, remark,
@@ -1115,6 +1185,8 @@ bool DatabaseManager:: insertProcessSteps(const Machine_Process_Total &process)
 
 bool DatabaseManager::deleteProcessSteps(const QString &process_id)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("DELETE FROM ProcessSteps WHERE process_id = :process_id");
     query.bindValue(":process_id", process_id);
@@ -1129,6 +1201,8 @@ bool DatabaseManager::deleteProcessSteps(const QString &process_id)
 }
 bool DatabaseManager::updateProcessSteps(const Machine_Process_Total &process)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE ProcessSteps SET
@@ -1186,6 +1260,8 @@ bool DatabaseManager::updateProcessSteps(const Machine_Process_Total &process)
 
 QList<Machine_Process_Total> DatabaseManager::getAllProcessSteps()
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<Machine_Process_Total> processes;
     QSqlQuery query("SELECT * FROM ProcessSteps");
 
@@ -1298,6 +1374,8 @@ bool DatabaseManager::createTable5()
 
 bool DatabaseManager::insertOrder(const SQL_Order &order)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     // 调试输出查看字段值
@@ -1356,6 +1434,8 @@ bool DatabaseManager::insertOrder(const SQL_Order &order)
 // 更新订单
 bool DatabaseManager::updateOrder(const SQL_Order &order)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE Orders
@@ -1400,6 +1480,8 @@ bool DatabaseManager::updateOrder(const SQL_Order &order)
 // 更新订单状态
 bool DatabaseManager::updateOrderStatus(const QString &orderId, const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE Orders
@@ -1428,6 +1510,8 @@ bool DatabaseManager::updateOrderStatus(const QString &orderId, const QString &s
 // 删除订单
 bool DatabaseManager::deleteOrder(const QString &orderId)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("DELETE FROM Orders WHERE order_id = :order_id");
     query.bindValue(":order_id", orderId);
@@ -1444,6 +1528,7 @@ bool DatabaseManager::deleteOrder(const QString &orderId)
 // 获取所有订单
 QList<SQL_Order> DatabaseManager::getAllOrders()
 {
+
     QList<SQL_Order> orders;
     QSqlQuery query("SELECT * FROM Orders ORDER BY create_time DESC");
 
@@ -1459,6 +1544,7 @@ QList<SQL_Order> DatabaseManager::getAllOrders()
 // 根据ID获取订单
 SQL_Order DatabaseManager::getOrderById(const QString &orderId)
 {
+
     SQL_Order order;
     QSqlQuery query;
     query.prepare("SELECT * FROM Orders WHERE order_id = :order_id");
@@ -1497,6 +1583,8 @@ QList<SQL_Order> DatabaseManager::getOrdersByUser(const QString &user)
 // 根据状态获取订单
 QList<SQL_Order> DatabaseManager::getOrdersByStatus(const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Order> orders;
     QSqlQuery query;
     query.prepare("SELECT * FROM Orders WHERE status = :status ORDER BY create_time DESC");
@@ -1517,6 +1605,8 @@ QList<SQL_Order> DatabaseManager::getOrdersByStatus(const QString &status)
 // 根据产品获取订单
 QList<SQL_Order> DatabaseManager::getOrdersByProduct(const QString &productId)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Order> orders;
     QSqlQuery query;
     query.prepare("SELECT * FROM Orders WHERE product_id = :product_id ORDER BY create_time DESC");
@@ -1537,6 +1627,8 @@ QList<SQL_Order> DatabaseManager::getOrdersByProduct(const QString &productId)
 // 根据时间范围获取订单
 QList<SQL_Order> DatabaseManager::getOrdersByTimeRange(const QString &startTime, const QString &endTime)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Order> orders;
     QSqlQuery query;
     query.prepare(R"(
@@ -1560,14 +1652,15 @@ QList<SQL_Order> DatabaseManager::getOrdersByTimeRange(const QString &startTime,
 }
 bool DatabaseManager::insertCommandHistory(const SQL_CommandHistory &command)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     qDebug() << "=== 开始插入指令历史记录 ===";
     qDebug() << "指令ID:" << command.commandId;
     qDebug() << "状态:" << command.status;
 
-    // 构建固定的 completed_url："./Upload/[commandId]/"
-    QString completedUrl = QString("./Upload/%1/").arg(command.commandId);
+    QString completedUrl = QString("Upload/%1/").arg(command.commandId);
 
     // 使用简单的SQL语句，添加failed_tasks字段
     QString sql = QString("INSERT INTO CommandHistory (command_id, status, action, sub_action, start_time, end_time, "
@@ -1609,7 +1702,7 @@ bool DatabaseManager::insertCommandHistory(const SQL_CommandHistory &command)
         qDebug() << "  - 存储的URL:" << storedUrl;
 
         // 验证格式是否正确
-        QString expectedUrl = QString("./Upload/%1/").arg(command.commandId);
+        QString expectedUrl = QString("Upload/%1/").arg(command.commandId);
         if (storedUrl == expectedUrl) {
             qDebug() << "  - URL格式验证: 正确";
         } else {
@@ -1622,8 +1715,29 @@ bool DatabaseManager::insertCommandHistory(const SQL_CommandHistory &command)
     return true;
 }
 
+bool DatabaseManager::clearAllCommandHistory()
+{
+    QMutexLocker locker(&m_mutex);
+
+    QSqlQuery query;
+    QString sql = "DELETE FROM CommandHistory";
+
+    if (!query.exec(sql)) {
+        qDebug() << "清空指令历史失败:" << query.lastError().text();
+        return false;
+    }
+
+    // 重置自增ID（如果使用SQLite）
+    query.exec("DELETE FROM sqlite_sequence WHERE name='CommandHistory'");
+
+    qDebug() << "已清空所有指令历史记录";
+    return true;
+}
+
 bool DatabaseManager::updateCommandHistory(const SQL_CommandHistory &command)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE CommandHistory
@@ -1670,6 +1784,8 @@ bool DatabaseManager::updateCommandHistory(const SQL_CommandHistory &command)
 }
 bool DatabaseManager::deleteCommandHistory(const QString &commandId)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("DELETE FROM CommandHistory WHERE command_id = :command_id");
     query.bindValue(":command_id", commandId);
@@ -1685,6 +1801,8 @@ bool DatabaseManager::deleteCommandHistory(const QString &commandId)
 
 bool DatabaseManager::deleteCommandHistoryByStatus(const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("DELETE FROM CommandHistory WHERE status = :status");
     query.bindValue(":status", status);
@@ -1701,6 +1819,8 @@ bool DatabaseManager::deleteCommandHistoryByStatus(const QString &status)
 
 bool DatabaseManager::deleteCommandHistoryByTimeRange(const QString &startTime, const QString &endTime)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         DELETE FROM CommandHistory
@@ -1721,6 +1841,8 @@ bool DatabaseManager::deleteCommandHistoryByTimeRange(const QString &startTime, 
 // 获取所有指令
 QList<SQL_CommandHistory> DatabaseManager::getAllCommands()
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_CommandHistory> commands;
     QSqlQuery query("SELECT * FROM CommandHistory ORDER BY start_time DESC");
 
@@ -1755,6 +1877,7 @@ QList<SQL_CommandHistory> DatabaseManager::getAllCommands()
 // 根据ID获取指令
 SQL_CommandHistory DatabaseManager::getCommandById(const QString &commandId)
 {
+
     SQL_CommandHistory command;
     QSqlQuery query;
     query.prepare("SELECT * FROM CommandHistory WHERE command_id = :command_id");
@@ -1773,6 +1896,8 @@ SQL_CommandHistory DatabaseManager::getCommandById(const QString &commandId)
 // 根据状态获取指令
 QList<SQL_CommandHistory> DatabaseManager::getCommandsByStatus(const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_CommandHistory> commands;
     QSqlQuery query;
     query.prepare("SELECT * FROM CommandHistory WHERE status = :status ORDER BY start_time DESC");
@@ -1793,6 +1918,8 @@ QList<SQL_CommandHistory> DatabaseManager::getCommandsByStatus(const QString &st
 // 根据动作获取指令
 QList<SQL_CommandHistory> DatabaseManager::getCommandsByAction(const QString &action)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_CommandHistory> commands;
     QSqlQuery query;
     query.prepare("SELECT * FROM CommandHistory WHERE action = :action ORDER BY start_time DESC");
@@ -1813,6 +1940,8 @@ QList<SQL_CommandHistory> DatabaseManager::getCommandsByAction(const QString &ac
 // 根据时间范围获取指令
 QList<SQL_CommandHistory> DatabaseManager::getCommandsByTimeRange(const QString &startTime, const QString &endTime)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_CommandHistory> commands;
     QSqlQuery query;
     query.prepare(R"(
@@ -1854,6 +1983,8 @@ SQL_CommandHistory DatabaseManager::extractCommandFromQuery(const QSqlQuery &que
 }
 bool DatabaseManager::incrementCommandFailedTasks(const QString &commandId)
 {
+    QMutexLocker locker(&m_mutex);
+
     qDebug() << "=== 增加指令失败任务数 ===";
     qDebug() << "指令ID:" << commandId;
 
@@ -1905,6 +2036,8 @@ bool DatabaseManager::incrementCommandFailedTasks(const QString &commandId)
 // 更新指令任务统计信息
 bool DatabaseManager::updateCommandTaskStatistics(const QString &commandId)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_CommandHistory command = getCommandById(commandId);
     if (command.commandId.isEmpty()) {
         return false;
@@ -1962,6 +2095,8 @@ bool DatabaseManager::updateCommandTaskStatistics(const QString &commandId)
 // 更新指令的任务数量
 bool DatabaseManager::updateCommandTasks(const QString &commandId, int total_tasks, int completed_tasks)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE CommandHistory
@@ -1992,6 +2127,8 @@ bool DatabaseManager::updateCommandTasks(const QString &commandId, int total_tas
 // 统计不同状态的指令数量
 int DatabaseManager::getCommandCountByStatus(const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM CommandHistory WHERE status = :status");
     query.bindValue(":status", status);
@@ -2006,6 +2143,8 @@ int DatabaseManager::getCommandCountByStatus(const QString &status)
 // 获取所有不同的动作类型
 QList<QString> DatabaseManager::getDistinctActions()
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<QString> actions;
     QSqlQuery query("SELECT DISTINCT action FROM CommandHistory WHERE action IS NOT NULL");
 
@@ -2021,6 +2160,8 @@ QList<QString> DatabaseManager::getDistinctActions()
 // 批量插入指令
 bool DatabaseManager::batchInsertCommands(const QList<SQL_CommandHistory> &commands)
 {
+    QMutexLocker locker(&m_mutex);
+
     if (commands.isEmpty()) {
         return true;
     }
@@ -2042,6 +2183,8 @@ bool DatabaseManager::batchInsertCommands(const QList<SQL_CommandHistory> &comma
 // 批量更新指令
 bool DatabaseManager::batchUpdateCommands(const QList<SQL_CommandHistory> &commands)
 {
+    QMutexLocker locker(&m_mutex);
+
     if (commands.isEmpty()) {
         return true;
     }
@@ -2063,6 +2206,8 @@ bool DatabaseManager::batchUpdateCommands(const QList<SQL_CommandHistory> &comma
 // 根据状态统计订单数量
 int DatabaseManager::getOrderCountByStatus(const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM Orders WHERE status = :status");
     query.bindValue(":status", status);
@@ -2077,6 +2222,8 @@ int DatabaseManager::getOrderCountByStatus(const QString &status)
 // 获取总销售额
 double DatabaseManager::getTotalSales()
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query("SELECT SUM(total_price) FROM Orders WHERE status = 'completed'");
 
     if (query.exec() && query.next()) {
@@ -2089,6 +2236,8 @@ double DatabaseManager::getTotalSales()
 // 获取指定产品的销售额
 double DatabaseManager::getTotalSalesByProduct(const QString &productId)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT SUM(total_price) FROM Orders WHERE product_id = :product_id AND status = 'completed'");
     query.bindValue(":product_id", productId);
@@ -2103,6 +2252,8 @@ double DatabaseManager::getTotalSalesByProduct(const QString &productId)
 // 按状态统计订单
 QMap<QString, int> DatabaseManager::getOrderStatistics()
 {
+    QMutexLocker locker(&m_mutex);
+
     QMap<QString, int> statistics;
     QSqlQuery query("SELECT status, COUNT(*) FROM Orders GROUP BY status");
 
@@ -2117,6 +2268,8 @@ QMap<QString, int> DatabaseManager::getOrderStatistics()
 // 批量插入订单
 bool DatabaseManager::batchInsertOrders(const QList<SQL_Order> &orders)
 {
+    QMutexLocker locker(&m_mutex);
+
     if (orders.isEmpty()) {
         return true;
     }
@@ -2138,6 +2291,8 @@ bool DatabaseManager::batchInsertOrders(const QList<SQL_Order> &orders)
 // 批量更新订单
 bool DatabaseManager::batchUpdateOrders(const QList<SQL_Order> &orders)
 {
+    QMutexLocker locker(&m_mutex);
+
     if (orders.isEmpty()) {
         return true;
     }
@@ -2199,6 +2354,8 @@ SQL_AppealRecord DatabaseManager::extractAppealFromQuery(const QSqlQuery &query)
 // 新增：根据指令ID获取订单
 QList<SQL_Order> DatabaseManager::getOrdersByCommandId(const QString &commandId)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Order> orders;
     QSqlQuery query;
     query.prepare("SELECT * FROM Orders WHERE command_id = :command_id ORDER BY create_time DESC");
@@ -2218,6 +2375,8 @@ QList<SQL_Order> DatabaseManager::getOrdersByCommandId(const QString &commandId)
 // 新增：根据指令ID获取第一个订单（如果有多个订单）
 SQL_Order DatabaseManager::getFirstOrderByCommandId(const QString &commandId)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_Order order;
     QSqlQuery query;
     query.prepare("SELECT * FROM Orders WHERE command_id = :command_id ORDER BY create_time LIMIT 1");
@@ -2235,6 +2394,8 @@ SQL_Order DatabaseManager::getFirstOrderByCommandId(const QString &commandId)
 // 新增：检查指令是否已有关联订单
 bool DatabaseManager::hasOrdersForCommand(const QString &commandId)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM Orders WHERE command_id = :command_id");
     query.bindValue(":command_id", commandId);
@@ -2249,6 +2410,8 @@ bool DatabaseManager::hasOrdersForCommand(const QString &commandId)
 // 新增：获取订单数量统计（包含command_id统计）
 int DatabaseManager::getOrderCountByCommandId(const QString &commandId)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM Orders WHERE command_id = :command_id");
     query.bindValue(":command_id", commandId);
@@ -2315,6 +2478,8 @@ bool DatabaseManager::createTable6()
 // 插入商城用户
 bool DatabaseManager::insertMallUser(const SQL_MallUser &user)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         INSERT INTO MallUsers
@@ -2349,6 +2514,8 @@ bool DatabaseManager::insertMallUser(const SQL_MallUser &user)
 // 修改updateMallUser函数，添加inviter_username字段
 bool DatabaseManager::updateMallUser(const SQL_MallUser &user)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE MallUsers
@@ -2390,6 +2557,7 @@ bool DatabaseManager::updateMallUser(const SQL_MallUser &user)
 // 删除商城用户
 bool DatabaseManager::deleteMallUser(const QString &username)
 {
+    QMutexLocker locker(&m_mutex);
     QSqlQuery query;
     query.prepare("DELETE FROM MallUsers WHERE username = :username");
     query.bindValue(":username", username);
@@ -2406,6 +2574,8 @@ bool DatabaseManager::deleteMallUser(const QString &username)
 // 更新密码
 bool DatabaseManager::updateMallUserPassword(const QString &username, const QString &newPassword)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("UPDATE MallUsers SET password = :password WHERE username = :username");
     query.bindValue(":username", username);
@@ -2423,6 +2593,8 @@ bool DatabaseManager::updateMallUserPassword(const QString &username, const QStr
 // 更新最后登录时间
 bool DatabaseManager::updateMallUserLastLogin(const QString &username)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("UPDATE MallUsers SET last_login_time = datetime('now', 'localtime') WHERE username = :username");
     query.bindValue(":username", username);
@@ -2438,7 +2610,9 @@ bool DatabaseManager::updateMallUserLastLogin(const QString &username)
 
 // 更新余额
 bool DatabaseManager::updateMallUserBalance(const QString &username, double amount)
-{
+{    QMutexLocker locker(&m_mutex);
+
+
     QSqlQuery query;
     query.prepare("UPDATE MallUsers SET balance = balance + :amount WHERE username = :username");
     query.bindValue(":username", username);
@@ -2456,6 +2630,8 @@ bool DatabaseManager::updateMallUserBalance(const QString &username, double amou
 // 更新积分
 bool DatabaseManager::updateMallUserPoints(const QString &username, int points)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("UPDATE MallUsers SET points = points + :points WHERE username = :username");
     query.bindValue(":username", username);
@@ -2472,7 +2648,8 @@ bool DatabaseManager::updateMallUserPoints(const QString &username, int points)
 
 // 获取所有商城用户
 QList<SQL_MallUser> DatabaseManager::getAllMallUsers()
-{
+{    QMutexLocker locker(&m_mutex);
+
     QList<SQL_MallUser> users;
     QSqlQuery query("SELECT * FROM MallUsers ORDER BY create_time DESC");
 
@@ -2488,6 +2665,8 @@ QList<SQL_MallUser> DatabaseManager::getAllMallUsers()
 // 根据用户名获取商城用户
 SQL_MallUser DatabaseManager::getMallUserByUsername(const QString &username)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_MallUser user;
     QSqlQuery query;
     query.prepare("SELECT * FROM MallUsers WHERE username = :username");
@@ -2506,7 +2685,9 @@ SQL_MallUser DatabaseManager::getMallUserByUsername(const QString &username)
 // 根据邮箱获取商城用户
 SQL_MallUser DatabaseManager::getMallUserByEmail(const QString &email)
 {
-    SQL_MallUser user;
+    QMutexLocker locker(&m_mutex);
+
+     SQL_MallUser user;
     QSqlQuery query;
     query.prepare("SELECT * FROM MallUsers WHERE email = :email");
     query.bindValue(":email", email);
@@ -2523,6 +2704,8 @@ SQL_MallUser DatabaseManager::getMallUserByEmail(const QString &email)
 // 根据手机号获取商城用户
 SQL_MallUser DatabaseManager::getMallUserByPhone(const QString &phone)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_MallUser user;
     QSqlQuery query;
     query.prepare("SELECT * FROM MallUsers WHERE phone = :phone");
@@ -2540,6 +2723,8 @@ SQL_MallUser DatabaseManager::getMallUserByPhone(const QString &phone)
 // 根据邀请码获取商城用户
 SQL_MallUser DatabaseManager::getMallUserByInviteCode(const QString &inviteCode)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_MallUser user;
     QSqlQuery query;
     query.prepare("SELECT * FROM MallUsers WHERE invite_code = :invite_code");
@@ -2557,6 +2742,8 @@ SQL_MallUser DatabaseManager::getMallUserByInviteCode(const QString &inviteCode)
 // 验证用户登录
 bool DatabaseManager::validateMallUserLogin(const QString &username, const QString &password)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM MallUsers WHERE username = :username AND password = :password AND status = 'active'");
     query.bindValue(":username", username);
@@ -2577,6 +2764,8 @@ bool DatabaseManager::validateMallUserLogin(const QString &username, const QStri
 // 检查用户名是否存在
 bool DatabaseManager::checkMallUserExists(const QString &username)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM MallUsers WHERE username = :username");
     query.bindValue(":username", username);
@@ -2591,6 +2780,8 @@ bool DatabaseManager::checkMallUserExists(const QString &username)
 // 检查邮箱是否存在
 bool DatabaseManager::checkEmailExists(const QString &email)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM MallUsers WHERE email = :email");
     query.bindValue(":email", email);
@@ -2605,6 +2796,8 @@ bool DatabaseManager::checkEmailExists(const QString &email)
 // 检查手机号是否存在
 bool DatabaseManager::checkPhoneExists(const QString &phone)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM MallUsers WHERE phone = :phone");
     query.bindValue(":phone", phone);
@@ -2619,6 +2812,8 @@ bool DatabaseManager::checkPhoneExists(const QString &phone)
 // 检查邀请码是否存在
 bool DatabaseManager::checkInviteCodeExists(const QString &inviteCode)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM MallUsers WHERE invite_code = :invite_code");
     query.bindValue(":invite_code", inviteCode);
@@ -2633,7 +2828,9 @@ bool DatabaseManager::checkInviteCodeExists(const QString &inviteCode)
 // 获取用户数量
 int DatabaseManager::getMallUserCount()
 {
-    QSqlQuery query("SELECT COUNT(*) FROM MallUsers");
+    QMutexLocker locker(&m_mutex);
+
+     QSqlQuery query("SELECT COUNT(*) FROM MallUsers");
 
     if (query.exec() && query.next()) {
         return query.value(0).toInt();
@@ -2645,6 +2842,8 @@ int DatabaseManager::getMallUserCount()
 // 获取按等级统计的用户数量
 int DatabaseManager::getMallUserCountByLevel(int level)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM MallUsers WHERE user_level = :level");
     query.bindValue(":level", level);
@@ -2659,6 +2858,8 @@ int DatabaseManager::getMallUserCountByLevel(int level)
 // 获取按状态统计的用户数量
 int DatabaseManager::getMallUserCountByStatus(const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM MallUsers WHERE status = :status");
     query.bindValue(":status", status);
@@ -2673,6 +2874,8 @@ int DatabaseManager::getMallUserCountByStatus(const QString &status)
 // 获取总余额
 double DatabaseManager::getTotalMallUserBalance()
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query("SELECT SUM(balance) FROM MallUsers WHERE status = 'active'");
 
     if (query.exec() && query.next()) {
@@ -2685,6 +2888,8 @@ double DatabaseManager::getTotalMallUserBalance()
 // 获取总积分
 int DatabaseManager::getTotalMallUserPoints()
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query("SELECT SUM(points) FROM MallUsers WHERE status = 'active'");
 
     if (query.exec() && query.next()) {
@@ -2697,6 +2902,8 @@ int DatabaseManager::getTotalMallUserPoints()
 // 批量插入用户
 bool DatabaseManager::batchInsertMallUsers(const QList<SQL_MallUser> &users)
 {
+    QMutexLocker locker(&m_mutex);
+
     if (users.isEmpty()) {
         return true;
     }
@@ -2718,6 +2925,8 @@ bool DatabaseManager::batchInsertMallUsers(const QList<SQL_MallUser> &users)
 // 批量更新用户
 bool DatabaseManager::batchUpdateMallUsers(const QList<SQL_MallUser> &users)
 {
+    QMutexLocker locker(&m_mutex);
+
     if (users.isEmpty()) {
         return true;
     }
@@ -2758,6 +2967,8 @@ SQL_MallUser DatabaseManager::extractMallUserFromQuery(const QSqlQuery &query)
 // 新增：根据邀请人获取用户列表
 QList<SQL_MallUser> DatabaseManager::getMallUsersByInviter(const QString &inviterUsername)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_MallUser> users;
     QSqlQuery query;
     query.prepare("SELECT * FROM MallUsers WHERE inviter_username = :inviter_username ORDER BY create_time DESC");
@@ -2778,6 +2989,8 @@ QList<SQL_MallUser> DatabaseManager::getMallUsersByInviter(const QString &invite
 // 新增：获取用户邀请的下级用户数量
 int DatabaseManager::getInvitedUserCount(const QString &inviterUsername)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM MallUsers WHERE inviter_username = :inviter_username AND status = 'active'");
     query.bindValue(":inviter_username", inviterUsername);
@@ -2792,6 +3005,8 @@ int DatabaseManager::getInvitedUserCount(const QString &inviterUsername)
 // 新增：获取用户邀请的下级用户总消费（通过关联订单表）
 double DatabaseManager::getInvitedUsersTotalConsumption(const QString &inviterUsername)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         SELECT SUM(o.total_price)
@@ -2812,6 +3027,8 @@ bool DatabaseManager::createWithdrawRecord(const QString &withdrawId, const QStr
                                            double amount, const QString &alipayAccount,
                                            const QString &remark)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
 
     query.prepare(R"(
@@ -2875,6 +3092,8 @@ bool DatabaseManager::createWithdrawTable()
 }
 QList<SQL_WithdrawRecord> DatabaseManager::getWithdrawRecordsByUsername(const QString &username)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_WithdrawRecord> records;
 
     QSqlQuery query;
@@ -2906,6 +3125,8 @@ QList<SQL_WithdrawRecord> DatabaseManager::getWithdrawRecordsByUsername(const QS
 // 获取订单详情（包含截图信息）
 SQL_Order DatabaseManager::getOrderWithSnapshot(const QString &orderId)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_Order order = getOrderById(orderId);
 
     if (!order.commandId.isEmpty()) {
@@ -2920,6 +3141,8 @@ SQL_Order DatabaseManager::getOrderWithSnapshot(const QString &orderId)
 }
 QList<SQL_WithdrawRecord> DatabaseManager::getAllWithdrawRecords()
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_WithdrawRecord> records;
 
     QSqlQuery query("SELECT * FROM WithdrawRecords ORDER BY create_time DESC");
@@ -2950,6 +3173,8 @@ QList<SQL_WithdrawRecord> DatabaseManager::getAllWithdrawRecords()
 // 获取用户订单列表（包含截图信息）
 QList<SQL_Order> DatabaseManager::getUserOrdersWithSnapshots(const QString &username)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_Order> orders = getOrdersByUser(username);
 
     // 为每个订单获取截图信息
@@ -3082,6 +3307,8 @@ bool DatabaseManager::insertUserAppeal(const QString &username, const QString &o
                                        const QString &priority,  // 这里不要加 = "normal"
                                        int appealLevel)          // 这里不要加 = 1
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         INSERT INTO UserAppeals
@@ -3114,6 +3341,8 @@ bool DatabaseManager::insertUserAppeal(const QString &username, const QString &o
 // 更新处理状态
 bool DatabaseManager::updateAppealProcessingStatus(int appealId, const QString &processingStatus)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE UserAppeals
@@ -3137,6 +3366,8 @@ bool DatabaseManager::updateAppealProcessingStatus(int appealId, const QString &
 // 更新优先级
 bool DatabaseManager::updateAppealPriority(int appealId, const QString &priority)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE UserAppeals
@@ -3160,6 +3391,8 @@ bool DatabaseManager::updateAppealPriority(int appealId, const QString &priority
 // 获取特定处理状态的投诉列表
 QList<SQL_AppealRecord> DatabaseManager::getAppealsByProcessingStatus(const QString &processingStatus)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_AppealRecord> appeals;
     QSqlQuery query;
     query.prepare("SELECT * FROM UserAppeals WHERE processing_status = :processing_status ORDER BY appeal_time DESC");
@@ -3180,6 +3413,8 @@ QList<SQL_AppealRecord> DatabaseManager::getAppealsByProcessingStatus(const QStr
 // 根据优先级获取投诉列表
 QList<SQL_AppealRecord> DatabaseManager::getAppealsByPriority(const QString &priority)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_AppealRecord> appeals;
     QSqlQuery query;
     query.prepare("SELECT * FROM UserAppeals WHERE priority = :priority ORDER BY appeal_time DESC");
@@ -3200,6 +3435,8 @@ QList<SQL_AppealRecord> DatabaseManager::getAppealsByPriority(const QString &pri
 // DatabaseManager.cpp 中实现
 bool DatabaseManager::updateDeviceAppStatus(const QString &serialNumber, const QString &appName, const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     qDebug() << "=== 更新设备应用状态 ===";
     qDebug() << "设备序列号:" << serialNumber;
     qDebug() << "应用名称:" << appName;
@@ -3252,6 +3489,8 @@ bool DatabaseManager::updateDeviceAppStatus(const QString &serialNumber, const Q
 }
 bool DatabaseManager::incrementCommandCompletedTasks(const QString &commandId)
 {
+    QMutexLocker locker(&m_mutex);
+
     qDebug() << "=== 增加指令完成数 ===";
     qDebug() << "指令ID:" << commandId;
 
@@ -3309,6 +3548,7 @@ bool DatabaseManager::incrementCommandCompletedTasks(const QString &commandId)
 // 新增：根据指令状态更新关联的订单状态
 bool DatabaseManager::updateCommandStatus(const QString &commandId)
 {
+
     SQL_CommandHistory command = getCommandById(commandId);
     if (command.commandId.isEmpty()) {
         qDebug() << "指令不存在，无法更新状态:" << commandId;
@@ -3376,6 +3616,7 @@ bool DatabaseManager::updateCommandStatus(const QString &commandId)
 // 新增：根据指令状态更新关联的订单状态
 bool DatabaseManager::updateOrderStatusByCommandId(const QString &commandId, const QString &commandStatus)
 {
+
     qDebug() << "=== 同步更新订单状态 ===";
     qDebug() << "指令ID:" << commandId;
     qDebug() << "指令状态:" << commandStatus;
@@ -3411,6 +3652,7 @@ bool DatabaseManager::updateOrderStatusByCommandId(const QString &commandId, con
 // 新增：映射指令状态到订单状态
 QString DatabaseManager::mapCommandStatusToOrderStatus(const QString &commandStatus)
 {
+
     // 指令状态到订单状态的映射
     static QMap<QString, QString> statusMapping = {
         {"success", "completed"},     // 指令成功 -> 订单已完成
@@ -3433,6 +3675,8 @@ QString DatabaseManager::mapCommandStatusToOrderStatus(const QString &commandSta
 // 如果需要，可以添加一个更新完成度的方法
 bool DatabaseManager::updateCommandCompleteness(const QString &commandId, int completeness)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE CommandHistory
@@ -3453,6 +3697,8 @@ bool DatabaseManager::updateCommandCompleteness(const QString &commandId, int co
 // 更新提现记录状态
 bool DatabaseManager::updateWithdrawStatus(const QString &withdrawId, const QString &status)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE WithdrawRecords
@@ -3481,6 +3727,8 @@ bool DatabaseManager::updateWithdrawStatus(const QString &withdrawId, const QStr
 // 更新提现记录（完整更新）
 bool DatabaseManager::updateWithdrawRecord(const SQL_WithdrawRecord &record)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE WithdrawRecords
@@ -3515,6 +3763,8 @@ bool DatabaseManager::updateWithdrawRecord(const SQL_WithdrawRecord &record)
 // 根据ID获取提现记录
 SQL_WithdrawRecord DatabaseManager::getWithdrawRecordById(const QString &withdrawId)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_WithdrawRecord record;
 
     QSqlQuery query;
@@ -3565,6 +3815,8 @@ bool DatabaseManager::createAppAccountTable()
 // 2. 添加App账号
 bool DatabaseManager::insertAppAccount(const SQL_AppAccount &account)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         INSERT INTO AppAccounts (account_name, platform, username, status, remark, devserial)
@@ -3590,6 +3842,8 @@ bool DatabaseManager::insertAppAccount(const SQL_AppAccount &account)
 // 3. 删除App账号
 bool DatabaseManager::deleteAppAccount(int accountId)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("DELETE FROM AppAccounts WHERE id = :id");
     query.bindValue(":id", accountId);
@@ -3606,6 +3860,8 @@ bool DatabaseManager::deleteAppAccount(int accountId)
 // 4. 修改App账号
 bool DatabaseManager::updateAppAccount(const SQL_AppAccount &account)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare(R"(
         UPDATE AppAccounts
@@ -3651,6 +3907,8 @@ QList<SQL_AppAccount> DatabaseManager::getAllAppAccounts()
 // 6. 查询单个App账号
 SQL_AppAccount DatabaseManager::getAppAccountById(int accountId)
 {
+    QMutexLocker locker(&m_mutex);
+
     SQL_AppAccount account;
     QSqlQuery query;
     query.prepare("SELECT * FROM AppAccounts WHERE id = :id");
@@ -3666,6 +3924,8 @@ SQL_AppAccount DatabaseManager::getAppAccountById(int accountId)
 // 7. 搜索App账号（只在platform、username、devserial这三个字段搜索）
 QList<SQL_AppAccount> DatabaseManager::searchAppAccounts(const QString &keyword)
 {
+    QMutexLocker locker(&m_mutex);
+
     QList<SQL_AppAccount> accounts;
     QSqlQuery query;
     query.prepare(R"(
@@ -3690,6 +3950,7 @@ QList<SQL_AppAccount> DatabaseManager::searchAppAccounts(const QString &keyword)
 // 8. 从查询结果中提取数据
 SQL_AppAccount DatabaseManager::extractAppAccountFromQuery(const QSqlQuery &query)
 {
+    QMutexLocker locker(&m_mutex);
     SQL_AppAccount account;
     account.id = query.value("id").toInt();
     account.accountName = query.value("account_name").toString();
@@ -3705,6 +3966,8 @@ SQL_AppAccount DatabaseManager::extractAppAccountFromQuery(const QSqlQuery &quer
 // 9. 检查账号名是否存在
 bool DatabaseManager::checkAppAccountExists(const QString &accountName)
 {
+    QMutexLocker locker(&m_mutex);
+
     QSqlQuery query;
     query.prepare("SELECT COUNT(*) FROM AppAccounts WHERE account_name = :account_name");
     query.bindValue(":account_name", accountName);

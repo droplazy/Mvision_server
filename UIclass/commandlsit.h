@@ -20,6 +20,8 @@ private slots:
     void on_pushButton_clicked();
     void onDeleteButtonClicked(const QString &commandId);
 
+    void on_pushButton_clear_clicked();
+
 private:
     Ui::commandlsit *ui;
     DatabaseManager* m_dbManager;
@@ -28,6 +30,8 @@ private:
     void setupTableWidget();
     void addDeleteButtonToRow(int row, const QString &commandId);
     void filterCommands(const QString &keyword);
+    void onViewButtonClicked(const QString &imagePath);
+    void addViewButtonToRow(int row, const QString &imagePath);
 };
 
 #endif // COMMANDLSIT_H

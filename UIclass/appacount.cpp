@@ -48,7 +48,7 @@ void appacount::initTable()
 {
      setFixedSize(1000,620);
     // 设置表格列数和标题
-    ui->tableWidget->setColumnCount(10);
+    ui->tableWidget->setColumnCount(9);
     QStringList headers;
     headers << "设备号" << "TikTok" << "Bilibili" << "小红书" << "微博" << "快手"<<"预留"<<"预留"<<"预留"<<"预留";
     ui->tableWidget->setHorizontalHeaderLabels(headers);
@@ -62,7 +62,7 @@ void appacount::initTable()
 
     // 设置列宽
     ui->tableWidget->setColumnWidth(0, 150);  // 设备号列宽
-    for (int i = 1; i < 6; i++) {
+    for (int i = 1; i < 8; i++) {
         ui->tableWidget->setColumnWidth(i, 100);
     }
 }

@@ -201,6 +201,9 @@ private:
     void handleGetProductsPic(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handleGetPersonInfo(QTcpSocket *clientSocket, const QUrlQuery &query);
     void handleGetCancelDev(QTcpSocket *clientSocket, const QUrlQuery &query);
+    void sendErrorImage(QTcpSocket *clientSocket, int errorCode, const QString &errorMsg);
+    void sendErrorResponse(QTcpSocket *clientSocket, int errorCode, const QString &errorMsg);
+    QString getHttpStatusText(int code);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

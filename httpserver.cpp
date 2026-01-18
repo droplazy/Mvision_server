@@ -173,106 +173,7 @@ void HttpServer::createAppealDirectoryIfNeeded()
 
 void HttpServer::generateTextData()
 {
-#if 0
-    deviceVector.append(DeviceStatus("SN999321", "在线", "杭州", "休息", "56841.12MB",
-                                     "2025-11-25T12:31:00Z", "192.168.10.111",
-                                     "2025-10-25T13:00:12Z", "2025-10-25T14:00:12Z", "吃饭",
-                                     "2025-10-25T15:00:12Z", "2025-10-25T16:00:12Z"));
-    deviceVector.append(DeviceStatus("SN999322", "离线", "上海", "休息", "67234.98MB",
-                                     "2025-11-25T12:35:00Z", "192.168.10.112",
-                                     "2025-10-25T13:02:12Z", "2025-10-25T14:05:12Z", "洗澡",
-                                     "2025-10-25T15:15:12Z", "2025-10-25T16:25:12Z"));
-    deviceVector.append(DeviceStatus("SN999323", "在线", "广州", "休息", "78453.67MB",
-                                     "2025-11-25T12:40:00Z", "192.168.10.113",
-                                     "2025-10-25T13:10:12Z", "2025-10-25T14:20:12Z", "看电视",
-                                     "2025-10-25T15:30:12Z", "2025-10-25T16:40:12Z"));
-    deviceVector.append(DeviceStatus("SN999324", "离线", "北京", "休息", "91000.25MB",
-                                     "2025-11-25T12:45:00Z", "192.168.10.114",
-                                     "2025-10-25T13:20:12Z", "2025-10-25T14:30:12Z", "听音乐",
-                                     "2025-10-25T15:40:12Z", "2025-10-25T16:50:12Z"));
-    deviceVector.append(DeviceStatus("SN999325", "在线", "深圳", "休息", "12345.78MB",
-                                     "2025-11-25T12:50:00Z", "192.168.10.115",
-                                     "2025-10-25T13:30:12Z", "2025-10-25T14:40:12Z", "读书",
-                                     "2025-10-25T15:50:12Z", "2025-10-25T16:55:12Z"));
-    deviceVector.append(DeviceStatus("SN999326", "离线", "天津", "休息", "56789.99MB",
-                                     "2025-11-25T12:55:00Z", "192.168.10.116",
-                                     "2025-10-25T13:40:12Z", "2025-10-25T14:50:12Z", "打游戏",
-                                     "2025-10-25T15:55:12Z", "2025-10-25T17:00:12Z"));
-    deviceVector.append(DeviceStatus("SN999327", "在线", "成都", "休息", "23456.12MB",
-                                     "2025-11-25T13:00:00Z", "192.168.10.117",
-                                     "2025-10-25T13:50:12Z", "2025-10-25T14:55:12Z", "散步",
-                                     "2025-10-25T16:00:12Z", "2025-10-25T17:05:12Z"));
 
-    // 第一条流程
-    Machine_Process_Total process1;
-    process1.process_id = "1";
-    process1.process_name = "小明创建的流程";
-    process1.creation_time = "2025-11-11T12:00:00Z";
-    process1.remark = "这个流程是给狗用的";
-
-    // 添加子流程，调整action、sub_action等内容
-    process1.Processes.append(Machine_Process_Single{"吃饭", "江边", "2025-11-11T12:00:00Z", "2025-11-11T12:30:00Z", "中午吃炒饭"});
-    process1.Processes.append(Machine_Process_Single{"休息", "江边", "2025-11-11T12:40:00Z", "2025-11-11T13:00:00Z", "休息时间玩球"});
-    process1.Processes.append(Machine_Process_Single{"洗澡", "江边", "2025-11-11T13:10:00Z", "2025-11-11T13:20:00Z", "准备洗澡，调节水温"});
-    process1.Processes.append(Machine_Process_Single{"洗澡", "江边", "2025-11-11T13:30:00Z", "2025-11-11T14:00:00Z", "洗澡后擦干，准备穿衣服"});
-    process1.Processes.append(Machine_Process_Single{"吃饭", "江边", "2025-11-11T14:30:00Z", "2025-11-11T14:50:00Z", "吃些零食"});
-    process1.Processes.append(Machine_Process_Single{"散步", "江边", "2025-11-11T15:00:00Z", "2025-11-11T15:30:00Z", "带狗去附近散步"});
-    process1.Processes.append(Machine_Process_Single{"游戏", "江边", "2025-11-11T16:00:00Z", "2025-11-11T16:30:00Z", "下午一起玩接飞盘游戏"});
-    process1.Processes.append(Machine_Process_Single{"休息", "江边", "2025-11-11T16:40:00Z", "2025-11-11T17:00:00Z", "吃完饭后小憩片刻"});
-
-
-
-    // 第二条流程
-    Machine_Process_Total process2;
-    process2.process_id = "2";
-    process2.process_name = "小明创建的另一个流程";
-    process2.creation_time = "2025-11-12T14:00:00Z";
-    process2.remark = "这个流程是给猫用的";
-
-    // 添加子流程
-    process2.Processes.append(Machine_Process_Single{"散步", "躺平", "2025-11-12T14:00:00Z", "2025-11-12T14:30:00Z", "午饭吃饭"});
-    process2.Processes.append(Machine_Process_Single{"吃屎", "躺平", "2025-11-12T15:00:00Z", "2025-11-12T15:30:00Z", "洗澡后吃鸡蛋"});
-
-    // 第三条流程
-    Machine_Process_Total process3;
-    process3.process_id = "3";
-    process3.process_name = "小明创建的特殊流程";
-    process3.creation_time = "2025-11-13T16:00:00Z";
-    process3.remark = "这个流程是给狗和猫用的";
-
-    // 添加子流程
-    process3.Processes.append(Machine_Process_Single{"骂人", "躺平", "2025-11-13T16:00:00Z", "2025-11-13T16:30:00Z", "下午吃饭"});
-    process3.Processes.append(Machine_Process_Single{"杀人", "躺平", "2025-11-13T17:00:00Z", "2025-11-13T17:30:00Z", "洗澡后吃鸡蛋"});
-
-
-
-    processVector.append(process1);
-    processVector.append(process2);
-    processVector.append(process3);
-
-
-
-    for (const DeviceStatus& device : deviceVector)
-    {
-        //device.append(device.toJsonAll());
-        SQL_Device device_preinsert;
-        device_preinsert.device_status = device.status;
-        device_preinsert.total_flow = device.trafficStatistics;
-        device_preinsert.bound_user ="123";
-        device_preinsert.checksum ="SSVGG";
-        device_preinsert.serial_number =device.serialNumber;
-        device_preinsert.ip_address =device.ip;
-        device_preinsert.bound_time ="14点50分";
-        dbManager.insertDevice(device_preinsert);
-    }
-
-    for (const Machine_Process_Total& processes : processVector)
-    {
-        dbManager.insertProcessSteps(processes);
-    }
-
-
-#endif
     QList<SQL_Device> devices = dbManager->getAllDevices();
     processVector = dbManager->getAllProcessSteps();
     for (const SQL_Device &device : devices) {
@@ -1507,7 +1408,7 @@ void HttpServer::handlePostFileUpload(QTcpSocket *clientSocket, QUrlQuery query,
     if(cmd.remark.contains("MARK:CRCODE_LOGGIN:MARK"))
     {
         emit getCRcodeImg(commandId);
-      //  updateTaskStatusByCommandId(commandId,"crcode");
+        updateTaskStatusByCommandId(commandId,"sent");
     }
     qDebug() << "=== handlePostFileUpload finished ===";
     qDebug() << "";
@@ -1646,6 +1547,27 @@ void HttpServer::handleGetidleDev(QTcpSocket *clientSocket)
     // 发送响应
     sendJsonResponse(clientSocket, 200, responseJson);
 }
+
+void HttpServer::sendErrorResponse(QTcpSocket *clientSocket, int errorCode, const QString &errorMsg)
+{
+    qDebug() << "发送错误响应: 状态码" << errorCode << "信息:" << errorMsg;
+
+    // 只返回HTTP头部，没有body（Content-Length: 0）
+    QString response = QString("HTTP/1.1 %1 %2\r\n"
+                              "Content-Type: image/png\r\n"  // 保持为图片类型，但实际没有图片
+                              "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n"
+                              "Content-Length: 0\r\n"
+                              "\r\n")
+                      .arg(errorCode)
+                      .arg(getHttpStatusText(errorCode));
+
+    clientSocket->write(response.toUtf8());
+    clientSocket->flush();
+
+    qDebug() << "已发送错误响应(无body)";
+}
 void HttpServer::handleGetCancelDev(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     // 提取 username 和 platform 参数
@@ -1723,6 +1645,78 @@ void HttpServer::handleGetTaskSta(QTcpSocket *clientSocket, const QUrlQuery &que
 
     sendJsonResponse(clientSocket, 200, response);
 }
+
+#include <QPainter>
+#include <QBuffer>
+void HttpServer::sendErrorImage(QTcpSocket *clientSocket, int errorCode, const QString &errorMsg)
+{
+    qDebug() << "发送错误图片: 状态码" << errorCode << "信息:" << errorMsg;
+
+    QByteArray imageData;
+    QString contentType = "image/png";
+
+    // 首先尝试在当前目录/images/下查找plzwait.png
+    QDir currentDir = QDir::current();
+    QString waitImagePath = currentDir.filePath("images/plzwait.png");
+
+    QFile waitImageFile(waitImagePath);
+    if (waitImageFile.exists() && waitImageFile.open(QIODevice::ReadOnly)) {
+        // 找到并使用预定义的等待图片
+        imageData = waitImageFile.readAll();
+        waitImageFile.close();
+        qDebug() << "使用预定义等待图片:" << waitImagePath;
+    } else {
+        // 如果找不到预定义图片，则动态生成错误图片
+        qDebug() << "未找到预定义图片，动态生成错误图片";
+
+        // 创建一个简单的错误提示图片
+        QImage errorImage(400, 100, QImage::Format_RGB32);
+        errorImage.fill(Qt::white);
+
+        QPainter painter(&errorImage);
+        painter.setPen(Qt::red);
+        painter.setFont(QFont("Arial", 14));
+        painter.drawText(20, 35, QString("Error %1").arg(errorCode));
+        painter.setPen(Qt::black);
+        painter.setFont(QFont("Arial", 10));
+
+        // 限制错误信息长度，避免超出图片
+        QString displayMsg = errorMsg;
+        if (displayMsg.length() > 40) {
+            displayMsg = displayMsg.left(37) + "...";
+        }
+        painter.drawText(20, 65, displayMsg);
+
+        // 绘制边框
+        painter.setPen(Qt::gray);
+        painter.drawRect(0, 0, errorImage.width()-1, errorImage.height()-1);
+
+        // 转换为PNG格式的二进制数据
+        QBuffer buffer(&imageData);
+        buffer.open(QIODevice::WriteOnly);
+        errorImage.save(&buffer, "PNG");
+        buffer.close();
+    }
+
+    // 构建HTTP响应
+    QString response = QString("HTTP/1.1 %1\r\n"
+                              "Content-Type: %2\r\n"
+                              "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n"
+                              "Content-Length: %3\r\n"
+                              "\r\n")
+                      .arg(errorCode)
+                      .arg(contentType)
+                      .arg(imageData.size());
+
+    // 发送响应
+    clientSocket->write(response.toUtf8());
+    clientSocket->write(imageData);
+    clientSocket->flush();
+
+    qDebug() << "错误图片已发送，大小:" << imageData.size() << "bytes";
+}
 void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     qDebug() << "=== handleGetCRCODE 开始处理 ===";
@@ -1732,10 +1726,7 @@ void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &quer
 
     if (taskId.isEmpty()) {
         qWarning() << "缺少taskid参数";
-        QJsonObject errorResponse;
-        errorResponse["code"] = 400;
-        errorResponse["message"] = "Missing taskid parameter";
-        sendJsonResponse(clientSocket, 400, errorResponse);
+        sendErrorResponse(clientSocket, 400, "Missing taskid parameter");
         return;
     }
 
@@ -1756,120 +1747,91 @@ void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &quer
 
     if (!taskFound) {
         qWarning() << "未找到对应的任务:" << taskId;
-        QJsonObject errorResponse;
-        errorResponse["code"] = 404;
-        errorResponse["message"] = "Task not found";
-        sendJsonResponse(clientSocket, 404, errorResponse);
+        sendErrorResponse(clientSocket, 404, "Task not found");
         return;
     }
 
     if (commandId.isEmpty()) {
         qWarning() << "任务commandid为空:" << taskId;
-        QJsonObject errorResponse;
-        errorResponse["code"] = 500;
-        errorResponse["message"] = "Task commandid is empty";
-        sendJsonResponse(clientSocket, 500, errorResponse);
+        sendErrorResponse(clientSocket, 500, "Task commandid is empty");
         return;
     }
 
-
 #ifdef DEBUG_MODE
-    //
-    QDir currentDir = QDir::current();
-    QString imageFilePath = currentDir.filePath("images/debugpic.png");
+    // ... debug代码 ...
+    QString imageFilePath = QDir::current().filePath("images/debugpic.png");
     QTimer::singleShot(5000, [this]() {
-                if (!frontendTasks.isEmpty()) {
-                    FrontendTask& task = frontendTasks[QRandomGenerator::global()->bounded(frontendTasks.size())];
-                    task.status = QRandomGenerator::global()->bounded(2) ? "success" : "failed";
-                    qDebug() << "DEBUG: 任务" << task.taskId << "状态设为" << task.status;
-                }
-            });
+        if (!frontendTasks.isEmpty()) {
+            FrontendTask& task = frontendTasks[QRandomGenerator::global()->bounded(frontendTasks.size())];
+            task.status = QRandomGenerator::global()->bounded(2) ? "success" : "failed";
+            qDebug() << "DEBUG: 任务" << task.taskId << "状态设为" << task.status;
+        }
+    });
 #else
-    // 构建Upload目录下对应的文件夹路径
+    // ... 原查找图片逻辑 ...
     QDir currentDir = QDir::current();
     QString uploadDirPath = currentDir.filePath("Upload");
     QString commandDirPath = QDir(uploadDirPath).filePath(commandId);
 
-    qDebug() << "检查目录是否存在:";
-    qDebug() << "Upload目录:" << uploadDirPath;
-    qDebug() << "Command目录:" << commandDirPath;
-
-    // 检查Upload目录是否存在
+    // 检查目录和文件是否存在
     if (!QDir(uploadDirPath).exists()) {
-        qWarning() << "Upload目录不存在:" << uploadDirPath;
-        QJsonObject errorResponse;
-        errorResponse["code"] = 404;
-        errorResponse["message"] = "Upload directory not found";
-        sendJsonResponse(clientSocket, 404, errorResponse);
+        sendErrorResponse(clientSocket, 404, "Upload directory not found");
         return;
     }
-    // 检查以commandId命名的文件夹是否存在
+
     QDir commandDir(commandDirPath);
     if (!commandDir.exists()) {
-        qWarning() << "Command目录不存在:" << commandDirPath;
-        QJsonObject errorResponse;
-        errorResponse["code"] = 404;
-        errorResponse["message"] = "QR code not generated yet";
-        sendJsonResponse(clientSocket, 404, errorResponse);
+        sendErrorResponse(clientSocket, 404, "QR code not ready");
         return;
     }
 
-    // 查找文件夹中的图片文件（支持常见图片格式）
     QStringList imageFilters;
     imageFilters << "*.jpg" << "*.jpeg" << "*.png" << "*.bmp" << "*.gif";
-
     QStringList imageFiles = commandDir.entryList(imageFilters, QDir::Files);
 
     if (imageFiles.isEmpty()) {
-        qWarning() << "Command目录中没有图片文件:" << commandDirPath;
-        QJsonObject errorResponse;
-        errorResponse["code"] = 404;
-        errorResponse["message"] = "QR code image not found";
-        sendJsonResponse(clientSocket, 404, errorResponse);
+        sendErrorResponse(clientSocket, 404, "QR image not found");
         return;
     }
 
-    // 取第一个图片文件
     QString imageFileName = imageFiles.first();
     QString imageFilePath = commandDir.filePath(imageFileName);
 
-    qDebug() << "找到图片文件:" << imageFileName;
-    qDebug() << "图片完整路径:" << imageFilePath;
-#endif
-    // 读取图片文件
+    // 读取图片
     QFile imageFile(imageFilePath);
     if (!imageFile.open(QIODevice::ReadOnly)) {
-        qWarning() << "无法打开图片文件:" << imageFilePath;
-        QJsonObject errorResponse;
-        errorResponse["code"] = 500;
-        errorResponse["message"] = "Cannot open QR code image";
-        sendJsonResponse(clientSocket, 500, errorResponse);
+        sendErrorResponse(clientSocket, 500, "Cannot open image");
         return;
     }
 
     QByteArray imageData = imageFile.readAll();
     imageFile.close();
+#endif
 
     if (imageData.isEmpty()) {
-        qWarning() << "图片文件为空:" << imageFilePath;
-        QJsonObject errorResponse;
-        errorResponse["code"] = 500;
-        errorResponse["message"] = "QR code image is empty";
-        sendJsonResponse(clientSocket, 500, errorResponse);
+        sendErrorResponse(clientSocket, 500, "Image is empty");
         return;
     }
 
-    // 构建成功响应
     qDebug() << "图片文件大小:" << imageData.size() << "bytes";
 
-    // 直接返回图片数据
+    // 根据文件扩展名确定Content-Type
+    QString contentType = "image/jpeg";
+    if (imageFileName.endsWith(".png", Qt::CaseInsensitive)) contentType = "image/png";
+    else if (imageFileName.endsWith(".gif", Qt::CaseInsensitive)) contentType = "image/gif";
+    else if (imageFileName.endsWith(".bmp", Qt::CaseInsensitive)) contentType = "image/bmp";
+
+    // 统一返回图片格式
     QString response = QString("HTTP/1.1 200 OK\r\n"
-                              "Content-Type: image/jpeg\r\n"  // 可以根据实际格式调整
-                              "Content-Length: %1\r\n"
+                              "Content-Type: %1\r\n"
+                              "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n"
+                              "Content-Length: %2\r\n"
                               "\r\n")
+                      .arg(contentType)
                       .arg(imageData.size());
 
-    // 写入响应头和图片数据
     clientSocket->write(response.toUtf8());
     clientSocket->write(imageData);
     clientSocket->flush();
@@ -1877,6 +1839,20 @@ void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &quer
     qDebug() << "已返回二维码图片，大小:" << imageData.size() << "bytes";
     qDebug() << "=== handleGetCRCODE 处理完成 ===";
 }
+
+
+
+// 辅助函数：获取HTTP状态码文本
+QString HttpServer::getHttpStatusText(int code)
+{
+    switch(code) {
+        case 400: return "Bad Request";
+        case 404: return "Not Found";
+        case 500: return "Internal Server Error";
+        default: return "Error";
+    }
+}
+
 void HttpServer::handleGetProductsPic(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     QDir currentDir(QDir::currentPath());
@@ -3523,7 +3499,7 @@ void HttpServer::handlePostPlatformReqSendcode(QTcpSocket *clientSocket, const Q
         if (task.taskId == taskId) {
             qDebug() << "找到匹配的任务!";
             qDebug() << "原状态:" << task.status;
-            task.status = "dispose";  // 更新状态为dispose
+            task.status = "sent";  // 更新状态为dispose
             qDebug() << "新状态:" << task.status;
 
             device = task.deviceSerial; // 假设任务中有设备序列号字段

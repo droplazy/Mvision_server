@@ -8,6 +8,10 @@
 #include <QString>
 #include <QDebug>
 #include "publicheader.h"
+#include <QMutex>
+#include <QMutexLocker>
+
+
 // 可以在头文件中定义这些状态常量
 namespace AppealStatus {
 // 总体状态
@@ -215,8 +219,14 @@ public:
     QList<SQL_AppAccount> searchAppAccounts(const QString &keyword);
     SQL_AppAccount extractAppAccountFromQuery(const QSqlQuery &query);
     bool checkAppAccountExists(const QString &accountName);
+    bool clearAllCommandHistory();
 private:
     QSqlDatabase db;
+    mutable QRecursiveMutex m_mutex;  // 只改这里：QRecursiveMutex    // 私有辅助函数，内部使用
+    bool executeQueryWithLock(QSqlQuery &query);
+    bool beginTransactionWithLock();
+    bool commitTransactionWithLock();
+    bool rollbackTransactionWithLock();
 
     bool createTable1(); //设备表
     bool createTable2(); //后台用户表

@@ -12,39 +12,120 @@
 #include <QMessageBox>
 #include <QDebug>
 
+
+
 commanddev::commanddev(DatabaseManager *db, QVector<DeviceStatus> *devices, QWidget *parent)
     : QWidget  (parent)
     , ui(new Ui::commanddev)
     , m_db(db)
     , m_devices(devices)
 {
-    ui->setupUi(this);
+    qDebug() << "=== commanddev 构造函数开始 ===";
+    qDebug() << "[1] 检查参数指针...";
+    qDebug() << "  db 指针:" << db;
+    qDebug() << "  devices 指针:" << devices;
+    qDebug() << "  devices 大小:" << (devices ? devices->size() : -1);
+    qDebug() << "  parent 指针:" << parent;
 
-    // 初始化订单列表
-    initOrderListView();
-    initActionComboBox();
+    try {
+        qDebug() << "[2] 创建 UI 对象...";
+        ui = new Ui::commanddev();
+        qDebug() << "  UI 对象创建成功";
 
-    // 设置时间控件默认值
-    ui->timeEdit_start->setTime(QTime(0, 0, 0));
-    ui->timeEdit_end->setTime(QTime(23, 59, 59));
+        qDebug() << "[3] 设置固定大小...";
+        setFixedSize(1000,620);
+        qDebug() << "  大小设置完成";
 
-    // 初始化设备表格
-    setupDeviceTable();
-    updateDeviceTable();
+        qDebug() << "[4] 调用 setupUi...";
+        ui->setupUi(this);
+        qDebug() << "  setupUi 调用完成";
 
-    // 连接信号槽
-    connect(ui->listView_order, &QListView::doubleClicked,
-            this, &commanddev::onOrderListViewDoubleClicked);
-    connect(ui->comboBox_act, &QComboBox::currentTextChanged,
-            this, &::commanddev::on_comboBox_act_currentTextChanged);
-    // 连接复选框状态变化信号
-    connect(ui->checkBox_direct_send, &QCheckBox::checkStateChanged,
-            this, &commanddev::on_checkBox_direct_send_stateChanged);
+        qDebug() << "[5] 初始化订单列表...";
+        initOrderListView();
+        qDebug() << "  订单列表初始化完成";
 
-    // 初始时，如果不勾选直接发送，则需要订单，所以订单列表默认可用
-    on_checkBox_direct_send_stateChanged(ui->checkBox_direct_send->checkState());
+        qDebug() << "[6] 初始化动作下拉框...";
+        initActionComboBox();
+        qDebug() << "  动作下拉框初始化完成";
+
+        qDebug() << "[7] 设置时间控件默认值...";
+        ui->timeEdit_start->setTime(QTime(0, 0, 0));
+        ui->timeEdit_end->setTime(QTime(23, 59, 59));
+        qDebug() << "  时间控件设置完成";
+
+        qDebug() << "[8] 初始化设备表格...";
+        setupDeviceTable();
+        qDebug() << "  设备表格初始化完成";
+
+        qDebug() << "[9] 更新设备表格数据...";
+        updateDeviceTable();
+        qDebug() << "  设备表格数据更新完成";
+
+        qDebug() << "[10] 开始连接信号槽...";
+
+        qDebug() << "  [10.1] 连接订单列表双击信号...";
+        bool connected1 = connect(ui->listView_order, &QListView::doubleClicked,
+                                  this, &commanddev::onOrderListViewDoubleClicked);
+        qDebug() << "    连接结果:" << connected1;
+
+        qDebug() << "  [10.2] 连接动作下拉框信号...";
+        bool connected2 = connect(ui->comboBox_act, &QComboBox::currentTextChanged,
+                                  this, &::commanddev::on_comboBox_act_currentTextChanged);
+        qDebug() << "    连接结果:" << connected2;
+
+        qDebug() << "  [10.3] 连接复选框信号...";
+        bool connected3 = connect(ui->checkBox_direct_send, &QCheckBox::checkStateChanged,
+                                  this, &commanddev::on_checkBox_direct_send_stateChanged);
+        qDebug() << "    连接结果:" << connected3;
+
+        qDebug() << "  信号槽连接完成";
+
+        qDebug() << "[11] 初始化复选框状态...";
+        on_checkBox_direct_send_stateChanged(ui->checkBox_direct_send->checkState());
+        qDebug() << "  复选框状态初始化完成";
+
+        // 打印UI控件信息
+        qDebug() << "[12] UI 控件检查...";
+        qDebug() << "  listView_order 指针:" << ui->listView_order;
+        qDebug() << "  comboBox_act 指针:" << ui->comboBox_act;
+        qDebug() << "  comboBox_subact 指针:" << ui->comboBox_subact;
+        qDebug() << "  tableView_dev 指针:" << ui->tableView_dev;
+        qDebug() << "  timeEdit_start 指针:" << ui->timeEdit_start;
+        qDebug() << "  timeEdit_end 指针:" << ui->timeEdit_end;
+        qDebug() << "  checkBox_direct_send 指针:" << ui->checkBox_direct_send;
+
+        // 检查设备表格模型
+        if (ui->tableView_dev && ui->tableView_dev->model()) {
+            qDebug() << "  tableView_dev 模型有效，行数:" << ui->tableView_dev->model()->rowCount();
+        } else {
+            qDebug() << "  tableView_dev 模型无效或为空";
+        }
+
+        // 检查设备数据
+        if (m_devices) {
+            qDebug() << "  m_devices 数据有效，大小:" << m_devices->size();
+            if (!m_devices->isEmpty()) {
+                qDebug() << "  第一个设备信息:";
+                qDebug() << "    序列号:" << m_devices->first().serialNumber;
+                qDebug() << "    IP:" << m_devices->first().ip;
+                qDebug() << "    状态:" << m_devices->first().status;
+                qDebug() << "    动作:" << m_devices->first().currentAction;
+            }
+        } else {
+            qDebug() << "  m_devices 指针为空";
+        }
+
+    } catch (const std::exception& e) {
+        qDebug() << "[EXCEPTION] commanddev 构造函数异常:" << e.what();
+        throw;  // 重新抛出异常
+    } catch (...) {
+        qDebug() << "[EXCEPTION] commanddev 构造函数未知异常";
+        throw;
+    }
+
+    qDebug() << "=== commanddev 构造函数完成 ===";
+    qDebug() << "";
 }
-
 commanddev::~commanddev()
 {
     delete ui;
@@ -111,12 +192,14 @@ void commanddev::updateSubActionComboBox(const QString &mainAction)
         // ui->comboBox_subact->addItem("退出");
         // ui->comboBox_subact->addItem("登录");
 
-        ui->comboBox_subact->addItem("评论", "评论");//点赞评论转发收藏
         ui->comboBox_subact->addItem("直播", "直播");
         ui->comboBox_subact->addItem("弹幕", "弹幕");//1 明文 2 传输文本
         ui->comboBox_subact->addItem("私信", "私信");//1 明文 2 传输文本
-        ui->comboBox_subact->addItem("退出", "退出");//1 明文 2 传输文本
         ui->comboBox_subact->addItem("登录", "登录");//1 明文 2 传输文本
+        ui->comboBox_subact->addItem("关注", "关注");//1 明文 2 传输文本
+        ui->comboBox_subact->addItem("评论", "评论");//点赞评论转发收藏
+        ui->comboBox_subact->addItem("退出", "退出");//1 明文 2 传输文本
+        ui->comboBox_subact->addItem("互粉", "互粉");//1 明文 2 传输文本
 
     }
     else if (mainAction == "BB") {
