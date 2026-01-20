@@ -16,7 +16,11 @@
 // 在 HttpServer.h 中添加：
 
 
+#ifdef QT_DEBUG
+#define DEBUG_MODE 1
+#else
 #define DEBUG_MODE 0
+#endif
 
 struct FrontendTask {
     QString taskId;          // 任务ID
@@ -171,7 +175,7 @@ private:
     QString mapStatusToChinese(const QString &status);
     void handleCreateProductDebug();
     // void handlePostMallProducts(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
-    void handleGetMallProducts(QTcpSocket *clientSocket);
+    void handleGetMallProducts(QTcpSocket *clientSocket, const QUrlQuery &query);
     // void handlePostVerifyCode(QTcpSocket *clientSocket, const QByteArray &body);
     
     
@@ -205,6 +209,7 @@ private:
     void sendErrorResponse(QTcpSocket *clientSocket, int errorCode, const QString &errorMsg);
     QString getHttpStatusText(int code);
     void handlecmdSnap(QTcpSocket *clientSocket, const QUrlQuery &query);
+    QJsonObject productToJson(const SQL_Product &product);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);

@@ -638,10 +638,10 @@ void HttpServer::onReadyRead() {
         qDebug() << "token:" << token;
 #if 1
         // Token验证（排除登录接口）
-        bool isLoginPath = (path == "/auth/login" || path == "/mall/login/info"|| (path == "/home" || path.contains(".css") || path.contains("/login") \
-                                                                                   || path.contains(".js") || path.contains(".html") \
-                                                                                   || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
-                                                                                   || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
+        bool isLoginPath = (path == "/mall/login/para" ||path == "/auth/login" || path == "/mall/login/info"|| (path == "/home" || path.contains(".css") || path.contains("/login") \
+                           || path.startsWith("/mall/auth/register")|| path.contains(".js") || path.contains(".html") \
+                           || path.startsWith("/mall/auth/passwd-reset/reset")|| path.contains("/mall/auth/passwd-reset/sendemail") || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
+                           || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
         if (!isLoginPath) {
             // 非登录接口需要验证token
             if(token=="GXFC")
@@ -702,9 +702,22 @@ void HttpServer::onReadyRead() {
                             handleGetidleDev(clientSocket );
             }else if (path == "/device/iptest") {
                 handleGetIPTEST(clientSocket, clientIp );
-            }else if (path.contains("/images")) {
-                handleBGimagesGet(clientSocket, query);
-            } else if (path == "/process/get") {
+            }else if (path.startsWith("/images")) {
+                QString imagePath = path.mid(7);  // 去掉 "/images/"
+                QUrlQuery newQuery;
+                newQuery.addQueryItem("path", imagePath);
+                qDebug() << "图片请求处理:" << path;
+                qDebug() << "提取的路径:" << imagePath;
+                handleBGimagesGet(clientSocket, newQuery);
+            }else if (path == "/images") {
+                // 处理访问 /images 目录的情况（列出图片列表或返回错误）
+                QString response = "HTTP/1.1 400 Bad Request\r\n"
+                                   "Content-Type: text/html\r\n\r\n"
+                                   "<h1>400 Bad Request</h1>"
+                                   "<p>Please specify a filename. Usage: /images/filename.jpg</p>";
+                clientSocket->write(response.toUtf8());
+                clientSocket->close();
+            }else if (path == "/process/get") {
                 handleGetProcess(clientSocket, query);
             } else if (path == "/download") {
                 handleGetDownload(clientSocket, query);
@@ -724,7 +737,7 @@ void HttpServer::onReadyRead() {
             }else if (path == "/withdraw_list") {
                 handleGetWithDraw(clientSocket, query);
             }else if (path == "/mall/product/item") {
-                handleGetMallProducts(clientSocket);
+                handleGetMallProducts(clientSocket, query);
             } else if (path == "/mall/auth/promot") {
                 handleGetAuthPromote(clientSocket, query);
             } else if (path == "/mall/auth/order/query") {
@@ -2000,65 +2013,105 @@ void HttpServer::handleGetLoginUI(QTcpSocket *clientSocket, const QUrlQuery &que
     // 发送响应
     sendResponse(clientSocket, jsonData);
 }
-
 void HttpServer::handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
-    // 从查询参数获取文件名
-    QString fileName = query.queryItemValue("filename");
+    // 从查询参数获取文件路径
+    QString imagePath = query.queryItemValue("path");
 
-    qDebug() << "Image request - filename:" << fileName;
+    qDebug() << "=== Image请求调试信息 ===";
+    qDebug() << "Query参数:" << query.toString();
+    qDebug() << "提取的路径:" << imagePath;
+    qDebug() << "客户端地址:" << clientSocket->peerAddress().toString();
+    qDebug() << "请求时间:" << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
 
-    if (fileName.isEmpty()) {
-        qDebug() << "Error: No filename specified";
-        sendResponse(clientSocket, "HTTP/1.1 400 Bad Request\r\n\r\nNo filename specified");
+    if (imagePath.isEmpty()) {
+        qDebug() << "错误: 路径参数为空";
+        QString response = "HTTP/1.1 400 Bad Request\r\n"
+                           "Content-Type: text/html\r\n\r\n"
+                           "<h1>400 Bad Request</h1>"
+                           "<p>No path specified.</p>";
+        clientSocket->write(response.toUtf8());
+        clientSocket->close();
         return;
     }
 
+    // 移除路径开头的斜杠（如果有）
+    if (imagePath.startsWith("/")) {
+        imagePath = imagePath.mid(1);
+    }
+
     // 安全检查：防止目录遍历攻击
-    if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
-        qDebug() << "Security check failed: Invalid filename" << fileName;
-        sendResponse(clientSocket, "HTTP/1.1 403 Forbidden\r\n\r\nInvalid filename");
+    if (imagePath.contains("..") || imagePath.contains("//") || imagePath.contains("\\")) {
+        qDebug() << "安全检测失败: 非法路径" << imagePath;
+        sendResponse(clientSocket, "HTTP/1.1 403 Forbidden\r\n\r\nInvalid file path");
         return;
     }
 
     // 只允许图片文件扩展名
-    QString extension = QFileInfo(fileName).suffix().toLower();
+    QFileInfo fileInfo(imagePath);
+    QString extension = fileInfo.suffix().toLower();
     QStringList allowedExtensions = {"jpg", "jpeg", "png", "gif", "bmp", "svg", "webp", "ico"};
 
     if (!allowedExtensions.contains(extension)) {
-        qDebug() << "Security check failed: Invalid file extension" << extension;
-        sendResponse(clientSocket, "HTTP/1.1 403 Forbidden\r\n\r\nInvalid file extension");
+        qDebug() << "安全检测失败: 不支持的文件扩展名" << extension;
+        QString response = QString("HTTP/1.1 403 Forbidden\r\n"
+                                   "Content-Type: text/html\r\n\r\n"
+                                   "<h1>403 Forbidden</h1>"
+                                   "<p>Invalid file extension '%1'. Allowed extensions: %2</p>")
+                .arg(extension)
+                .arg(allowedExtensions.join(", "));
+        clientSocket->write(response.toUtf8());
+        clientSocket->close();
         return;
     }
 
-    // 在当前应用程序目录的images子目录中查找文件
-
+    // 构建完整的文件路径 - 固定查找当前目录下的images子目录
     QDir currentDir(QDir::currentPath());
-    QString imagePath = currentDir.filePath("images/"+fileName);
-    qDebug() << "Looking for image at:" << imagePath;
+    QString fullPath = currentDir.filePath("images/" + imagePath);
+    qDebug() << "查找图片完整路径:" << fullPath;
 
-    QFileInfo fileInfo(imagePath);
-    if (!fileInfo.exists() || !fileInfo.isFile()) {
-        qDebug() << "Image not found:" << imagePath;
+    QFileInfo fullFileInfo(fullPath);
+    if (!fullFileInfo.exists() || !fullFileInfo.isFile()) {
+        qDebug() << "图片不存在:" << fullPath;
+
+        // 额外检查：列出images目录下存在的文件，方便调试
+        QDir imagesDir(currentDir.filePath("images"));
+        QStringList existingFiles;
+        if (imagesDir.exists()) {
+            existingFiles = imagesDir.entryList(QDir::Files);
+        }
+
         QString response = QString("HTTP/1.1 404 Not Found\r\n"
                                    "Content-Type: text/html\r\n\r\n"
                                    "<h1>404 Not Found</h1>"
-                                   "<p>Image '%1' not found in images directory.</p>")
-                .arg(fileName);
+                                   "<p>Image '%1' not found in images directory.</p>"
+                                   "<p>Full path: %2</p>")
+                .arg(imagePath)
+                .arg(fullPath);
+
         clientSocket->write(response.toUtf8());
+        clientSocket->close();
+
+        if (!existingFiles.isEmpty()) {
+            qDebug() << "images目录下现有文件:" << existingFiles;
+        } else {
+            qDebug() << "images目录不存在或为空";
+        }
         return;
     }
 
     // 读取文件
-    QFile file(imagePath);
+    QFile file(fullPath);
     if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << "Cannot open file:" << imagePath << file.errorString();
+        qDebug() << "无法打开文件:" << fullPath << file.errorString();
         sendResponse(clientSocket, "HTTP/1.1 500 Internal Server Error\r\n\r\nCannot open file");
         return;
     }
 
     QByteArray fileData = file.readAll();
     file.close();
+
+    qDebug() << "文件读取成功，大小:" << fileData.size() << "字节";
 
     // 确定MIME类型
     QString mimeType = "application/octet-stream";
@@ -2070,19 +2123,28 @@ void HttpServer::handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &qu
     else if (extension == "webp") mimeType = "image/webp";
     else if (extension == "ico") mimeType = "image/x-icon";
 
-    // 发送响应
+    // 构建响应头
     QString header = QString("HTTP/1.1 200 OK\r\n"
                              "Content-Type: %1\r\n"
                              "Content-Length: %2\r\n"
+                             "Cache-Control: public, max-age=86400\r\n"  // 缓存24小时
                              "Connection: close\r\n\r\n")
             .arg(mimeType)
             .arg(fileData.size());
 
+    qDebug() << "发送响应头:" << header;
+
+    // 发送响应
     clientSocket->write(header.toUtf8());
     clientSocket->write(fileData);
     clientSocket->flush();
+    clientSocket->waitForBytesWritten(3000);
+    clientSocket->close();
 
-    qDebug() << "Image served successfully:" << fileName << "Size:" << fileData.size() << "bytes";
+    qDebug() << "图片成功发送:" << imagePath
+             << "大小:" << fileData.size() << "字节"
+             << "MIME类型:" << mimeType;
+    qDebug() << "=== 请求处理完成 ===";
 }
 
 void HttpServer::handleGetIPTEST(QTcpSocket *clientSocket, const QString &IP)
@@ -3350,98 +3412,154 @@ void HttpServer::handleGetProcess(QTcpSocket *clientSocket, const QUrlQuery &que
     sendResponse(clientSocket, jsonData);
 }
 
-void HttpServer::handleGetMallProducts(QTcpSocket *clientSocket)
+void HttpServer::handleGetMallProducts(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
-    qDebug() << "处理获取商品分类列表请求";
+    qDebug() << "处理获取商品信息请求";
+
+    // 检查是否有 productId 参数
+    bool singleProductMode = query.hasQueryItem("productId");
+    QString requestedProductId = singleProductMode ? query.queryItemValue("productId") : "";
+
+    qDebug() << "查询模式:" << (singleProductMode ? "单个商品详情" : "所有商品分类");
+    if (singleProductMode) {
+        qDebug() << "请求的商品ID:" << requestedProductId;
+    }
 
     // 构建响应数据结构
     QJsonObject responseJson;
     responseJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    responseJson["singleMode"] = singleProductMode; // 告诉前端是否是单个商品模式
 
-    QJsonObject dataObj;
-    QJsonArray categoriesArray;
-
-    // 检查数据库是否有数据
-    bool hasData = false;
-
-    // 尝试从数据库获取商品
-    QList<SQL_Product> allProducts;
+    // 尝试从数据库获取数据
+    QList<SQL_Product> products;
     try {
-        allProducts = dbManager->getAllProducts();
-        hasData = !allProducts.isEmpty();
+        if (singleProductMode) {
+            // 单个商品模式：查询指定ID的商品
+            SQL_Product product = dbManager->getProductById(requestedProductId);
+            if (!product.productId.isEmpty()) {
+                products.append(product);
+            }
+        } else {
+            // 原逻辑：获取所有商品
+            products = dbManager->getAllProducts();
+        }
+    } catch (const std::exception& e) {
+        qDebug() << "数据库查询异常:" << e.what();
+        responseJson["error"] = "数据库查询失败";
+        sendJsonResponse(clientSocket, 500, responseJson);
+        return;
     } catch (...) {
-        // 数据库错误，继续返回空数据
-        qDebug() << "数据库查询失败，返回空数据";
-    }
-
-    // 如果没有数据，返回空数组
-    if (!hasData) {
-        qDebug() << "没有商品数据，返回空数组";
-        dataObj["categories"] = categoriesArray; // 空数组
-        responseJson["data"] = dataObj;
-        sendJsonResponse(clientSocket, 200, responseJson);
+        qDebug() << "未知数据库错误";
+        responseJson["error"] = "数据库查询失败";
+        sendJsonResponse(clientSocket, 500, responseJson);
         return;
     }
 
-    // 如果有数据，按分类分组
-    QMap<QString, QList<SQL_Product>> productsByCategory;
-    for (const auto& product : allProducts) {
-        productsByCategory[product.categoryId].append(product);
+    // 检查数据是否为空
+    bool hasData = !products.isEmpty();
+    if (!hasData) {
+        qDebug() << "没有找到商品数据";
+
+        if (singleProductMode) {
+            responseJson["error"] = "未找到指定商品";
+            responseJson["requestedProductId"] = requestedProductId;
+            sendJsonResponse(clientSocket, 404, responseJson);
+        } else {
+            QJsonObject dataObj;
+            dataObj["categories"] = QJsonArray(); // 空数组
+            responseJson["data"] = dataObj;
+            sendJsonResponse(clientSocket, 200, responseJson);
+        }
+        return;
     }
 
-    // 构建分类数组
-    for (auto it = productsByCategory.begin(); it != productsByCategory.end(); ++it) {
-        QJsonObject categoryObj;
-        categoryObj["categoryId"] = it.key();
-        categoryObj["categoryName"] = "未命名分类"; // 可以根据需要添加分类名
+    // 构建响应数据
+    QJsonObject dataObj;
 
-        QJsonArray productArray;
-        for (const auto& product : it.value()) {
-            QJsonObject productObj;
-            productObj["productId"] = product.productId;
-            productObj["productName"] = product.productName;
-            productObj["unitPrice"] = product.unitPrice;
-            productObj["stock"] = product.stock;
-            productObj["minOrder"] = product.minOrder;
-            productObj["maxOrder"] = product.maxOrder;
-            productObj["status"] = product.status;
+    if (singleProductMode) {
+        // 单个商品模式：直接返回商品详情
+        const SQL_Product& product = products.first();
+        QJsonObject productObj = productToJson(product);
+        dataObj["product"] = productObj;
 
-            // 修改部分：将imageUrl改为数组，遍历文件夹下的图片
-            QDir currentDir(QDir::currentPath());
-            QString imageFolderPath = currentDir.absoluteFilePath(product.imageUrl);
-            QDir imageDir(imageFolderPath);
+        qDebug() << "返回单个商品详情:" << product.productName;
+    } else {
+        // 原逻辑：按分类分组返回
+        QJsonArray categoriesArray;
+        QMap<QString, QList<SQL_Product>> productsByCategory;
 
-            QJsonArray imageUrlsArray;
-            if (imageDir.exists()) {
-                // 获取文件夹下所有图片文件
-                QStringList imageFilters;
-                imageFilters << "*.jpg" << "*.jpeg" << "*.png" << "*.gif" << "*.bmp" << "*.webp";
-                QStringList imageFiles = imageDir.entryList(imageFilters, QDir::Files, QDir::Name);
-
-                // 构建完整的图片URL路径
-                for (const QString& imageFile : imageFiles) {
-                    QString fullImagePath = "/product_images/" + product.imageUrl + imageFile;
-                    imageUrlsArray.append(fullImagePath);
-                }
-            }
-
-            productObj["imageUrl"] = imageUrlsArray; // 改为数组
-            productObj["description"] = product.description;
-            productArray.append(productObj);
+        // 按分类分组
+        for (const auto& product : products) {
+            productsByCategory[product.categoryId].append(product);
         }
 
-        categoryObj["products"] = productArray;
-        categoriesArray.append(categoryObj);
+        // 构建分类数组
+        for (auto it = productsByCategory.begin(); it != productsByCategory.end(); ++it) {
+            QJsonObject categoryObj;
+            categoryObj["categoryId"] = it.key();
+            categoryObj["categoryName"] = "未命名分类"; // 可以根据需要添加分类名
+
+            QJsonArray productArray;
+            for (const auto& product : it.value()) {
+                productArray.append(productToJson(product));
+            }
+
+            categoryObj["products"] = productArray;
+            categoriesArray.append(categoryObj);
+        }
+
+        dataObj["categories"] = categoriesArray;
+        qDebug() << "返回分类数据，分类数量:" << categoriesArray.size();
     }
 
-    // 构建完整响应
-    dataObj["categories"] = categoriesArray;
     responseJson["data"] = dataObj;
 
     // 发送响应
     sendJsonResponse(clientSocket, 200, responseJson);
+}
 
-    qDebug() << "返回数据，分类数量:" << categoriesArray.size();
+// 辅助函数：将 SQL_Product 转换为 JSON 对象
+QJsonObject HttpServer::productToJson(const SQL_Product &product)
+{
+    QJsonObject productObj;
+    productObj["productId"] = product.productId;
+    productObj["productName"] = product.productName;
+    productObj["unitPrice"] = product.unitPrice;
+    productObj["stock"] = product.stock;
+    productObj["minOrder"] = product.minOrder;
+    productObj["maxOrder"] = product.maxOrder;
+    productObj["status"] = product.status;
+    productObj["description"] = product.description;
+    productObj["categoryId"] = product.categoryId;
+    productObj["categoryName"] = "未命名分类"; // 可以根据需要添加分类名
+
+    // 修改部分：将imageUrl改为数组，遍历文件夹下的图片
+    QDir currentDir(QDir::currentPath());
+    QString imageFolderPath = currentDir.absoluteFilePath(product.imageUrl);
+    QDir imageDir(imageFolderPath);
+
+    QJsonArray imageUrlsArray;
+    if (imageDir.exists()) {
+        // 获取文件夹下所有图片文件
+        QStringList imageFilters;
+        imageFilters << "*.jpg" << "*.jpeg" << "*.png" << "*.gif" << "*.bmp" << "*.webp";
+        QStringList imageFiles = imageDir.entryList(imageFilters, QDir::Files, QDir::Name);
+
+        // 构建完整的图片URL路径
+        for (const QString& imageFile : imageFiles) {
+            QString fullImagePath = "/product_images/" + product.imageUrl  + imageFile;
+            imageUrlsArray.append(fullImagePath);
+        }
+    }
+
+    // 如果没有图片，保持原 imageUrl 作为字符串
+    if (imageUrlsArray.isEmpty()) {
+        productObj["imageUrl"] = product.imageUrl;
+    } else {
+        productObj["imageUrl"] = imageUrlsArray;
+    }
+
+    return productObj;
 }
 void HttpServer::handlePostPlatformReqSendcode(QTcpSocket *clientSocket, const QByteArray &body)
 {
