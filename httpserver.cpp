@@ -444,6 +444,12 @@ void HttpServer::sendHttpResponse(QTcpSocket *clientSocket,
     response += QString("HTTP/1.1 %1 %2\r\n").arg(statusCode).arg(statusText);
     response += "Content-Type: text/plain; charset=utf-8\r\n";
     response += QString("Content-Length: %1\r\n").arg(body.size());
+
+    // 添加CORS头
+    response += "Access-Control-Allow-Origin: *\r\n";
+    response += "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
+    response += "Access-Control-Allow-Headers: Content-Type\r\n";
+
     response += "Connection: close\r\n";
     response += "\r\n";
 
@@ -913,19 +919,8 @@ void HttpServer::sendUnauthorized(QTcpSocket *clientSocket)
     response["message"] = "Unauthorized: Token missing or invalid";
     response["timestamp"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
 
-    QJsonDocument doc(response);
-    QByteArray jsonData = doc.toJson();
-
-    QString responseStr = QString(
-                "HTTP/1.1 401 Unauthorized\r\n"
-                "Content-Type: application/json\r\n"
-                "Content-Length: %1\r\n"
-                "\r\n"
-                "%2"
-                ).arg(jsonData.size()).arg(QString::fromUtf8(jsonData));
-
-    clientSocket->write(responseStr.toUtf8());
-    clientSocket->flush();
+    // 使用统一的sendJsonResponse函数
+    sendJsonResponse(clientSocket, 401, response);
 }
 void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
 {
@@ -1112,9 +1107,12 @@ void HttpServer::saveDeviceStatusToDatabase(const DeviceStatus &deviceStatus)
 // 发送404响应
 void HttpServer::send404(QTcpSocket *clientSocket) {
     QByteArray errorResponse = "HTTP/1.1 404 Not Found\r\n";
-    errorResponse += "Content-Type: text/html\r\n";
+    errorResponse += "Content-Type: text/html; charset=utf-8\r\n";
+    errorResponse += "Access-Control-Allow-Origin: *\r\n";  // 添加CORS
     errorResponse += "Connection: close\r\n\r\n";
-    errorResponse += "<html><body><h1>404 Not Found</h1></body></html>";
+    errorResponse += "<html><body><h1>404 Not Found</h1>";
+    errorResponse += "<p>The requested resource was not found on this server.</p>";
+    errorResponse += "</body></html>";
     clientSocket->write(errorResponse);
     clientSocket->flush();
 }
@@ -1585,21 +1583,50 @@ void HttpServer::sendErrorResponse(QTcpSocket *clientSocket, int errorCode, cons
 {
     qDebug() << "发送错误响应: 状态码" << errorCode << "信息:" << errorMsg;
 
-    // 只返回HTTP头部，没有body（Content-Length: 0）
-    QString response = QString("HTTP/1.1 %1 %2\r\n"
-                              "Content-Type: image/png\r\n"  // 保持为图片类型，但实际没有图片
-                              "Access-Control-Allow-Origin: *\r\n"
-                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-                              "Access-Control-Allow-Headers: Content-Type\r\n"
-                              "Content-Length: 0\r\n"
-                              "\r\n")
-                      .arg(errorCode)
-                      .arg(getHttpStatusText(errorCode));
+    // 构造响应头
+    QStringList headers;
+
+    // 状态行
+    headers << QString("HTTP/1.1 %1 %2").arg(errorCode).arg(getHttpStatusText(errorCode));
+
+    // 通用头部
+    headers << "Date: " + QDateTime::currentDateTimeUtc().toString("ddd, dd MMM yyyy hh:mm:ss") + " GMT";
+    headers << "Server: MyHttpServer";
+
+    // CORS 头部 - 完整设置
+    headers << "Access-Control-Allow-Origin: *";
+    headers << "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, HEAD";
+    headers << "Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With";
+    headers << "Access-Control-Allow-Credentials: false";
+    headers << "Access-Control-Max-Age: 86400";  // 24小时预检请求缓存
+
+    // 根据错误码设置Content-Type
+    QString contentType = "text/plain; charset=utf-8";
+    if (errorCode >= 400 && errorCode < 500) {
+        // 客户端错误返回JSON格式
+        contentType = "application/json; charset=utf-8";
+    }
+    headers << "Content-Type: " + contentType;
+
+    // 可以选择返回一个简短的错误消息体
+    QString body;
+    if (errorCode >= 400) {
+        // 对于错误状态码，返回JSON格式的错误信息
+        body = QString("{\"error\": {\"code\": %1, \"message\": \"%2\"}}")
+                .arg(errorCode)
+                .arg(errorMsg.toHtmlEscaped());
+    }
+
+    headers << "Content-Length: " + QString::number(body.toUtf8().size());
+    headers << "Connection: close";
+
+    // 构建完整响应
+    QString response = headers.join("\r\n") + "\r\n\r\n" + body;
 
     clientSocket->write(response.toUtf8());
     clientSocket->flush();
 
-    qDebug() << "已发送错误响应(无body)";
+    qDebug() << "已发送错误响应，状态码:" << errorCode;
 }
 void HttpServer::handleGetCancelDev(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
@@ -1790,7 +1817,7 @@ void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &quer
         return;
     }
 
-#ifdef DEBUG_MODE
+#if DEBUG_MODE
     // ... debug代码 ...
     QString imageFilePath = QDir::current().filePath("images/debugpic.png");
     QTimer::singleShot(5000, [this]() {
@@ -3035,7 +3062,6 @@ QString HttpServer::formatOrderTime(const QString &dbTime)
     return dt.toString("yyyy.MM.dd HH:mm:ss");
 }
 
-// 辅助函数：发送JSON响应
 void HttpServer::sendJsonResponse(QTcpSocket *clientSocket, int statusCode, const QJsonObject &json)
 {
     QJsonDocument doc(json);
@@ -3055,7 +3081,6 @@ void HttpServer::sendJsonResponse(QTcpSocket *clientSocket, int statusCode, cons
     clientSocket->flush();
     clientSocket->close();
 }
-
 void HttpServer::handleGetOrderList(QTcpSocket *clientSocket, const QUrlQuery &query) {
     int limit = 1000; // 默认最大1000条
     int offset = 0;
@@ -3116,8 +3141,8 @@ void HttpServer::handleGetOrderList(QTcpSocket *clientSocket, const QUrlQuery &q
 
     QString action = "action";        // $1
     QString subAction = "sub_action"; // $2
-    QString startTime = "start_time"; // $3
-    QString endTime = "end_time";     // $4
+    QString startTime = "00:00:00"; // $3
+    QString endTime = "23:59:59";    // $4
 
     // 构建JSON响应
     QJsonObject jsonResponse;
@@ -3729,7 +3754,7 @@ void HttpServer::handlePostPlatformReqSendcode(QTcpSocket *clientSocket, const Q
     qDebug() << "目标设备:" << device;
 
     // 通过信号发送到MQTT
-#ifdef DEBUG_MODE
+#if DEBUG_MODE
     QTimer::singleShot(5000, [this]() {
                 if (!frontendTasks.isEmpty()) {
                     FrontendTask& task = frontendTasks[QRandomGenerator::global()->bounded(frontendTasks.size())];
@@ -3806,11 +3831,11 @@ void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArra
     }
 
     // 查找未登录设备
-#ifdef DEBUG_MODE
-    QString deviceSerial = "12345678910"; // findAvailableDevice(platformCode);
+#if DEBUG_MODE
+    QString deviceSerial = "1234567890"; // findAvailableDevice(platformCode);
 #else
    // QString deviceSerial = findAvailableDevice(platformCode);
-    QString deviceSerial ="JMCR202601050002";// findAvailableDevice(platformCode);
+    QString deviceSerial ="JMCR202601050005";// findAvailableDevice(platformCode);
 
 #endif
     if (deviceSerial.isEmpty()) {
@@ -3894,8 +3919,13 @@ void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArra
         SQL_CommandHistory commandHistory;
         commandHistory.commandId = commandId;
         commandHistory.status = "executing";  // 状态设为执行中
+#if DEBUG_MODE
+        commandHistory.action = "act";
+        commandHistory.sub_action = "sub_act";
+#else
         commandHistory.action = platform;
         commandHistory.sub_action = subAction;
+#endif
         commandHistory.start_time = "00:00:00";
         commandHistory.end_time = "23:59:59";
         commandHistory.remark = remark;

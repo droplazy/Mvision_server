@@ -17,9 +17,9 @@
 
 
 #ifdef QT_DEBUG
-#define DEBUG_MODE 1
-#else
 #define DEBUG_MODE 0
+#else
+#define DEBUG_MODE 1
 #endif
 
 struct FrontendTask {
@@ -210,6 +210,7 @@ private:
     QString getHttpStatusText(int code);
     void handlecmdSnap(QTcpSocket *clientSocket, const QUrlQuery &query);
     QJsonObject productToJson(const SQL_Product &product);
+  //  void sendJsonResponse(QTcpSocket *clientSocket, int statusCode, const QJsonObject &json, bool keepAlive = false);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
