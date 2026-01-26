@@ -9,6 +9,9 @@
 #include <QCloseEvent>
 #include "mediamtx_manager.h"
 
+#include "./UIclass/realtimespeechrecognizer.h"
+
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -44,6 +47,8 @@ private slots:
     void on_pushButton_appcount_clicked();
 
     void on_pushButton_withdraw_clicked();
+
+    void on_pushButton_clicked();
 
 private:
     Ui::MainWindow *ui;
@@ -85,5 +90,9 @@ private:
     void createTrayMenu();
     void createTrayIcon();
     void changeEvent(QEvent *event) override;
+
+
+    RealtimeSpeechRecognizer *m_recognizer = nullptr;
+    QTimer *m_stopTimer = nullptr;
 };
 #endif // MAINWINDOW_H

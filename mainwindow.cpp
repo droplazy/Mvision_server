@@ -1230,3 +1230,67 @@ void MainWindow::on_pushButton_withdraw_clicked()
     // 4. 显示
     ui->sub_widget->setVisible(true);
 }
+
+void MainWindow::on_pushButton_clicked()
+{
+    static RealtimeSpeechRecognizer *recognizer = nullptr;
+
+    if (!recognizer || !recognizer->isRecognizing()) {
+        // 开始测试
+        qDebug() << "=== 开始语音识别测试 ===";
+        recognizer = new RealtimeSpeechRecognizer(this);
+
+        RealtimeSpeechRecognizer::Config config;
+        config.appId = "318eeb03";
+        config.apiKey = "0731bdabe8a186215737d1edeb15b9ea";
+        config.apiSecret = "MGM2NGNlYWM4NTA3Mzc3ZmY4ODIzZmZh";
+        config.ffmpegPath = QDir::current().filePath("ffmpeg/bin/ffmpeg.exe");
+
+        qDebug() << "FFmpeg路径:" << config.ffmpegPath;
+        qDebug() << "RTSP地址: rtsp://127.0.0.1:8554/audio";
+
+        recognizer->setConfig(config);
+
+        // 连接信号
+        connect(recognizer, &RealtimeSpeechRecognizer::textReceived,
+                [](const QString &text) {
+                    qDebug() << "🔊 识别结果:" << text;
+                });
+
+        connect(recognizer, &RealtimeSpeechRecognizer::errorOccurred,
+                [](const QString &error) {
+                    qDebug() << "💥 错误:" << error;
+                });
+
+        connect(recognizer, &RealtimeSpeechRecognizer::statusMessage,
+                [](const QString &msg) {
+                    qDebug() << "📢 状态:" << msg;
+                });
+
+        QString rtspUrl = "rtsp://127.0.0.1:8554/audio";
+        if (recognizer->startRecognition(rtspUrl)) {
+            qDebug() << "✅ 开始识别命令成功";
+            ui->pushButton->setText("停止测试");
+
+            // 20秒后自动停止
+            QTimer::singleShot(200000, [=]() {
+                if (recognizer && recognizer->isRecognizing()) {
+                    qDebug() << "⏰ 20秒自动停止";
+                    recognizer->stopRecognition();
+                }
+            });
+        } else {
+            qDebug() << "❌ 开始识别失败";
+        }
+    } else {
+        // 停止测试
+        qDebug() << "=== 停止语音识别测试 ===";
+        if (recognizer->isRecognizing()) {
+            recognizer->stopRecognition();
+        }
+        recognizer->deleteLater();
+        recognizer = nullptr;
+        ui->pushButton->setText("开始测试");
+        qDebug() << "🛑 识别已停止";
+    }
+}

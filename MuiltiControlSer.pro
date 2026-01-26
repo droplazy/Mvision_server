@@ -1,4 +1,4 @@
-QT       += core gui  mqtt network sql
+QT       += core gui  mqtt network sql websockets
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -23,6 +23,7 @@ SOURCES += \
     UIclass/mallusermanager.cpp \
     UIclass/managerui.cpp \
     UIclass/orderlist.cpp \
+    UIclass/realtimespeechrecognizer.cpp \
     UIclass/userappeal.cpp \
     UIclass/withdraw.cpp \
     databasemanager.cpp \
@@ -51,6 +52,7 @@ HEADERS += \
     UIclass/mallusermanager.h \
     UIclass/managerui.h \
     UIclass/orderlist.h \
+    UIclass/realtimespeechrecognizer.h \
     UIclass/userappeal.h \
     UIclass/withdraw.h \
     databasemanager.h \
@@ -91,6 +93,9 @@ TRANSLATIONS += \
 INCLUDEPATH +=E:\OpenCV-4.10.0\build\include  \
               E:\OpenCV-4.10.0\build\include\opencv \
               E:\OpenCV-4.10.0\build\include\opencv2
+
+
+
 
 CONFIG(debug, debug|release): {
 
