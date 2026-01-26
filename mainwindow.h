@@ -7,6 +7,7 @@
 #include "emailsender.h"
 #include <QSystemTrayIcon>
 #include <QCloseEvent>
+#include "mediamtx_manager.h"
 
 
 QT_BEGIN_NAMESPACE
@@ -54,6 +55,7 @@ private:
     class HttpServer *p_http;
     class mqttclient *p_mqtt_cli;
     class MQTT_server *p_mqttt_ser;
+    MediaMTX_Manager manager;
 
     class EmailSender *p_email;
     QSystemTrayIcon *trayIcon;
@@ -82,6 +84,6 @@ private:
     void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
     void createTrayMenu();
     void createTrayIcon();
-    void changeEvent(QEvent *event);
+    void changeEvent(QEvent *event) override;
 };
 #endif // MAINWINDOW_H

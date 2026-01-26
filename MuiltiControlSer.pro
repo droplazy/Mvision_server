@@ -31,6 +31,7 @@ SOURCES += \
     loghandler.cpp \
     main.cpp \
     mainwindow.cpp \
+    mediamtx_manager.cpp \
     mqtt_server.cpp \
     mqttclient.cpp \
     privilegehelper.cpp
@@ -57,6 +58,7 @@ HEADERS += \
     httpserver.h \
     loghandler.h \
     mainwindow.h \
+    mediamtx_manager.h \
     mqtt_server.h \
     mqttclient.h \
     privilegehelper.h \

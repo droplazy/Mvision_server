@@ -8,6 +8,7 @@
 #include <QEvent>
 #include <QCloseEvent>
 #include <QSystemTrayIcon>
+
 /****************************子窗口控件*/
 #include "./UIclass/devicelistdialog.h"
 #include "./UIclass/commandlsit.h"
@@ -81,6 +82,26 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 初始化数据库对象
     initDatabase();
+
+
+    QObject::connect(&manager, &MediaMTX_Manager::serverStarted, [](const QString &url) {
+        qDebug() << "服务器启动成功";
+        qDebug() << "RTSP地址:" << url;
+    });
+
+    QObject::connect(&manager, &MediaMTX_Manager::error, [](const QString &msg) {
+        qDebug() << "错误:" << msg;
+    });
+
+    // 启动服务器
+    QString mediamtxPath = "mediamtx/mediamtx.exe";
+    if (manager.startServer(mediamtxPath)) {
+        qDebug() << "服务器运行中...按Ctrl+C停止";
+    } else {
+        qDebug() << "启动失败";
+    }
+
+
 
     qDebug() << "=== MainWindow 初始化完成 ===";
 }

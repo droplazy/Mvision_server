@@ -4,12 +4,14 @@
 #include <QLocale>
 #include <QTranslator>
 #include "loghandler.h"
-#include "privilegehelper.h"  // 添加这行
+#include "privilegehelper.h"
 #include <QMessageBox>
+
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+
     // 检查系统是否支持托盘
     a.setApplicationName("后台控制系统");
     a.setOrganizationName("MyCompany");
@@ -48,4 +50,5 @@ int main(int argc, char *argv[])
     w.show();
 
     return a.exec();
+
 }
