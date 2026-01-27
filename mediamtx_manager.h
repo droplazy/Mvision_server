@@ -19,7 +19,7 @@ public:
     void stopServer();
 
     // 生成RTSP地址
-    static QString generateRTSPUrl(const QString &ip = "127.0.0.1",
+    static QString generateRTSPUrl(const QString &ip = "192.168.10.103",
                                    int port = 8554,
                                    const QString &stream = "audio");
 

@@ -1267,7 +1267,7 @@ void MainWindow::on_pushButton_clicked()
                     qDebug() << "📢 状态:" << msg;
                 });
 
-        QString rtspUrl = "rtsp://127.0.0.1:8554/audio";
+        QString rtspUrl = "rtsp://192.168.10.103:8554/audio";
         if (recognizer->startRecognition(rtspUrl)) {
             qDebug() << "✅ 开始识别命令成功";
             ui->pushButton->setText("停止测试");

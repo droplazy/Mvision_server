@@ -19,6 +19,7 @@ SOURCES += \
     UIclass/firmware.cpp \
     UIclass/guidetextset.cpp \
     UIclass/insertdev.cpp \
+    UIclass/livingcontrol.cpp \
     UIclass/mallproducts.cpp \
     UIclass/mallusermanager.cpp \
     UIclass/managerui.cpp \
@@ -48,6 +49,7 @@ HEADERS += \
     UIclass/firmware.h \
     UIclass/guidetextset.h \
     UIclass/insertdev.h \
+    UIclass/livingcontrol.h \
     UIclass/mallproducts.h \
     UIclass/mallusermanager.h \
     UIclass/managerui.h \
@@ -71,6 +73,7 @@ FORMS += \
     UIclass/applogin2.ui \
     UIclass/commanddev.ui \
     UIclass/disposewithdrwaw.ui \
+    UIclass/livingcontrol.ui \
     UIclass/withdraw.ui \
     addproduct.ui \
     commandlsit.ui \
