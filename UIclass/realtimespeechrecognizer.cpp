@@ -46,19 +46,36 @@ void RealtimeSpeechRecognizer::setConfig(const Config &config)
 
 bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
 {
+    qDebug() << "=== startRecognition 开始 ===";
+    qDebug() << "RTSP URL:" << rtspUrl;
+    qDebug() << "FFmpeg路径:" << m_config.ffmpegPath;
+    qDebug() << "API Key长度:" << m_config.apiKey.length();
+    qDebug() << "API Secret长度:" << m_config.apiSecret.length();
+
     m_lastRtspUrl = rtspUrl;  // 保存URL
     m_reconnectCount = 0;     // 重置重连计数
+
     if (m_isRecognizing) {
+        qDebug() << "错误: 已经在识别中";
         emit errorOccurred("已经在识别中");
         return false;
     }
 
     if (m_config.apiKey.isEmpty() || m_config.apiSecret.isEmpty()) {
+        qDebug() << "错误: API凭证未设置";
+        qDebug() << "API Key为空:" << m_config.apiKey.isEmpty();
+        qDebug() << "API Secret为空:" << m_config.apiSecret.isEmpty();
         emit errorOccurred("API凭证未设置");
         return false;
     }
 
-    if (!QFile::exists(m_config.ffmpegPath)) {
+    // 检查ffmpeg文件是否存在
+    qDebug() << "检查FFmpeg文件:" << m_config.ffmpegPath;
+    bool ffmpegExists = QFile::exists(m_config.ffmpegPath);
+    qDebug() << "FFmpeg文件存在:" << ffmpegExists;
+
+    if (!ffmpegExists) {
+        qDebug() << "错误: FFmpeg不存在";
         emit errorOccurred("FFmpeg不存在: " + m_config.ffmpegPath);
         return false;
     }
@@ -79,21 +96,43 @@ bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
          << "-f" << "s16le"
          << "pipe:1";
 
+    qDebug() << "FFmpeg命令:";
+    qDebug() << "  程序:" << m_config.ffmpegPath;
+    qDebug() << "  参数:" << args;
+
+    qDebug() << "启动FFmpeg进程...";
     m_ffmpegProcess->start(m_config.ffmpegPath, args);
 
-    if (!m_ffmpegProcess->waitForStarted(3000)) {
+    qDebug() << "等待FFmpeg启动...";
+    bool started = m_ffmpegProcess->waitForStarted(3000);
+    qDebug() << "FFmpeg启动结果:" << started;
+
+    if (!started) {
+        qDebug() << "错误: FFmpeg启动失败";
+        qDebug() << "FFmpeg错误输出:" << m_ffmpegProcess->readAllStandardError();
+        qDebug() << "FFmpeg标准输出:" << m_ffmpegProcess->readAllStandardOutput();
+        qDebug() << "进程状态:" << m_ffmpegProcess->state();
+        qDebug() << "退出码:" << m_ffmpegProcess->exitCode();
+
         emit errorOccurred("FFmpeg启动失败");
         m_isRecognizing = false;
         return false;
     }
 
+    qDebug() << "FFmpeg启动成功，PID:" << m_ffmpegProcess->processId();
+
     // 2. 连接WebSocket
+    qDebug() << "开始连接WebSocket...";
     if (!initWebSocket()) {
+        qDebug() << "错误: 无法连接WebSocket";
+        qDebug() << "终止FFmpeg进程...";
         m_ffmpegProcess->terminate();
+        m_ffmpegProcess->waitForFinished(2000);
         m_isRecognizing = false;
         return false;
     }
 
+    qDebug() << "=== startRecognition 成功 ===";
     emit statusMessage("开始识别...");
     return true;
 }
@@ -234,78 +273,62 @@ void RealtimeSpeechRecognizer::onWebSocketTextMessageReceived(const QString &mes
     QJsonObject response = doc.object();
     int code = response["code"].toInt();
 
-    // 打印完整的响应（前200字符）
-    QString shortResponse = message;
-    if (shortResponse.length() > 200) {
-        shortResponse = shortResponse.left(200) + "...";
-    }
-    qDebug() << "服务器响应内容:" << shortResponse;
-
-    // 处理10165错误 - 自动重连
-    if (code == 10165) {
-        QString errorMsg = response["message"].toString();
-        qDebug() << "🔄 收到10165错误，准备重连:" << errorMsg;
-
-        // 保存当前状态
-        bool wasRecognizing = m_isRecognizing;
-
-        // 停止当前连接
-        stopRecognition();
-
-        // 延迟1秒后重连
-        if (wasRecognizing) {
-            QTimer::singleShot(1000, this, [this]() {
-                qDebug() << "🔄 开始重连...";
-                // 这里需要保存RTSP URL以便重连
-                // 你可以添加一个成员变量 m_lastRtspUrl 来保存
-            });
-        }
-
-        emit errorOccurred(QString("会话超时，正在重连: %1").arg(errorMsg));
-        return;
-    }
-
+    // 处理服务器响应
     if (code == 0 && response.contains("data")) {
         QJsonObject data = response["data"].toObject();
 
-        // 检查是否有sid
-        if (response.contains("sid")) {
-            QString sid = response["sid"].toString();
-            qDebug() << "🆔 会话ID:" << sid;
-        }
-
-        // 检查服务器是否返回了最终结果（status=2）
+        // 检查会话状态
         int serverStatus = data["status"].toInt();
-        if (serverStatus == 2) {
-            qDebug() << "⚠️  服务器返回最终状态(status=2)，准备重连";
+        qDebug() << "🔍 服务器状态码:" << serverStatus;
 
-            // 延迟500ms后重连
-            QTimer::singleShot(500, this, [this]() {
-                if (m_isRecognizing) {
-                    qDebug() << "🔄 服务器结束会话，重新连接...";
-                    // 这里需要触发重连
+        // 状态码=2表示会话结束
+        if (serverStatus == 2) {
+            qDebug() << "✅ 服务器返回最终状态(status=2)，本次会话结束";
+
+            // 检查是否有最终的识别结果
+            if (data.contains("result")) {
+                QJsonObject result = data["result"].toObject();
+                QString finalText = extractTextFromResult(result);
+
+                // 打印sn（句子序号）
+                int sn = result["sn"].toInt(-1);
+                if (sn != -1) {
+                    qDebug() << "📝 句子序号(sn):" << sn;
                 }
-            });
+
+                if (!finalText.isEmpty()) {
+                    qDebug() << "🎤 最终识别结果:" << finalText;
+                    emit textReceived(finalText);
+                } else {
+                    qDebug() << "🔇 最终识别结果为空";
+                }
+            }
+
+            // 触发会话结束信号
+            emit sessionCompleted();
+
+            // 停止发送定时器
+            if (m_sendTimer->isActive()) {
+                m_sendTimer->stop();
+                qDebug() << "⏹️ 停止发送音频定时器";
+            }
+
+            return; // 不再处理后续内容
         }
 
+        // 处理正常识别结果（status!=2）
         if (data.contains("result")) {
             QJsonObject result = data["result"].toObject();
+
+            // 打印sn（句子序号）
+            int sn = result["sn"].toInt(-1);
+            if (sn != -1) {
+                qDebug() << "📝 句子序号(sn):" << sn;
+            }
+
             if (result.contains("ws")) {
-                QString text;
-                QJsonArray wsArray = result["ws"].toArray();
-                for (const auto &wsVal : wsArray) {
-                    QJsonObject wsObj = wsVal.toObject();
-                    if (wsObj.contains("cw")) {
-                        QJsonArray cwArray = wsObj["cw"].toArray();
-                        if (!cwArray.isEmpty()) {
-                            QJsonObject cwObj = cwArray.first().toObject();
-                            QString word = cwObj["w"].toString();
-                            if (!word.isEmpty()) {
-                                text += word;
-                            }
-                        }
-                    }
-                }
+                QString text = extractTextFromResult(result);
+
                 if (!text.isEmpty()) {
                     qDebug() << "🎤 识别到文本:" << text;
                     emit textReceived(text);
@@ -314,11 +337,45 @@ void RealtimeSpeechRecognizer::onWebSocketTextMessageReceived(const QString &mes
                 }
             }
         }
-    } else if (code != 0) {
+    }
+    else if (code == 10165) {
+        // 处理10165错误 - 自动重连
+        QString errorMsg = response["message"].toString();
+        qDebug() << "🔄 收到10165错误，准备重连:" << errorMsg;
+        emit errorOccurred(QString("会话超时: %1").arg(errorMsg));
+
+        // 这里可以添加重连逻辑
+    }
+    else if (code != 0) {
         QString errorMsg = response["message"].toString();
         qDebug() << "❌ 服务器错误" << code << ":" << errorMsg;
         emit errorOccurred(QString("错误 %1: %2").arg(code).arg(errorMsg));
     }
+}
+
+
+QString RealtimeSpeechRecognizer::extractTextFromResult(const QJsonObject &result)
+{
+    QString text;
+
+    if (result.contains("ws")) {
+        QJsonArray wsArray = result["ws"].toArray();
+        for (const auto &wsVal : wsArray) {
+            QJsonObject wsObj = wsVal.toObject();
+            if (wsObj.contains("cw")) {
+                QJsonArray cwArray = wsObj["cw"].toArray();
+                if (!cwArray.isEmpty()) {
+                    QJsonObject cwObj = cwArray.first().toObject();
+                    QString word = cwObj["w"].toString();
+                    if (!word.isEmpty() && word != "？") {
+                        text += word;
+                    }
+                }
+            }
+        }
+    }
+
+    return text;
 }
 
 void RealtimeSpeechRecognizer::onFFmpegReadyRead()
@@ -381,7 +438,7 @@ void RealtimeSpeechRecognizer::sendStartFrame()
     business["language"] = "zh_cn";
     business["domain"] = "iat";
     business["accent"] = "mandarin";
-    business["vad_eos"] = 10000;
+    business["vad_eos"] = 2000;//停顿多久结束
     business["ptt"] = 1;
     business["dwa"] = "wpgs";  // 动态修正
 

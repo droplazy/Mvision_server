@@ -439,8 +439,16 @@ struct ProgramInfo
     QString commandId;
     QString programName;
     QList<QString> deviceList;
-};
+    QString rtspurl;
+    int keepTime;
+    QDateTime startTime;  // 添加开始时间
+    bool isStreaming;     // 是否正在推流
+    bool isListen;     // 是否正在推流
 
+    QString voicetotext;
+    QString bragger;
+
+};
 
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）
 // QMap<QString, QString> productNameMap = {

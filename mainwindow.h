@@ -8,7 +8,7 @@
 #include <QSystemTrayIcon>
 #include <QCloseEvent>
 #include "mediamtx_manager.h"
-#include "./UIclass/realtimespeechrecognizer.h"
+#include "UIclass/realtimespeechrecognizer.h"
 #include "./UIclass/livingcontrol.h"
 #include "ai_bragger.h"
 
@@ -50,6 +50,9 @@ private slots:
 
     void on_pushButton_livingcontrol_clicked();
 
+    void onOneSecondTimerTimeout();
+
+    void checkAndStartProgramSpeechRecognition();
 private:
     Ui::MainWindow *ui;
 
@@ -63,9 +66,9 @@ private:
     class MQTT_server *p_mqttt_ser;
     MediaMTX_Manager manager;
     livingcontrol *livingControlWindow; //todo
-
+    QTimer *m_oneSecondTimer;  // 1秒定时器
     AI_bragger *p_ai;
-
+    QMap<QString, RealtimeSpeechRecognizer*> m_programSpeechRecognizers;  // 节目语音识别器映射
     class EmailSender *p_email;
     QSystemTrayIcon *trayIcon;
     QMenu *trayMenu;
@@ -96,9 +99,10 @@ private:
     void changeEvent(QEvent *event) override;
 
 
-    RealtimeSpeechRecognizer *m_recognizer = nullptr;
-    QTimer *m_stopTimer = nullptr;
+
     void createLivingControl();
     void switchToView(QWidget *view);
+
+    void updateProgramVoiceText(const QString &commandId, const QString &text);
 };
 #endif // MAINWINDOW_H

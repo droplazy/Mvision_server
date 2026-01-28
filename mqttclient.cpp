@@ -147,7 +147,8 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
         ProgramInfo programInfo;
         programInfo.commandId = commandId;
         programInfo.programName = action + subAction + "_" + commandId;
-
+        programInfo.rtspurl ="";
+        programInfo.isListen = false;
         // 添加所有相关的serialNumber到deviceList
         for (const QJsonValue &serialNumber : std::as_const(serial_numbers)) {
             QString deviceSerial = serialNumber.toString().trimmed();
@@ -251,6 +252,13 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
             qDebug() << "指令状态已更新为executing";
         }
     }
+}
+
+void mqttclient::devcommandsend(QString topic, QString msg)
+{
+    QMqttTopicName topicName(topic);
+    QByteArray message =msg.toUtf8();
+    publishMessage(topicName,message);
 }
 
 void mqttclient::ProcessDevtSend(QJsonObject json)

@@ -32,7 +32,7 @@ signals:
     void textReceived(const QString &text);
     void errorOccurred(const QString &error);
     void statusMessage(const QString &message);
-
+    void sessionCompleted();
 private slots:
     void onWebSocketConnected();
     void onWebSocketDisconnected();
@@ -59,6 +59,7 @@ private:
     QString m_lastRtspUrl;  // 保存最后一次的RTSP URL
     int m_reconnectCount = 0;  // 重连次数
     const int MAX_RECONNECT = 3;  // 最大重连次数
+    QString extractTextFromResult(const QJsonObject &result);
 };
 
 #endif // REALTIMESPEECHRECOGNIZER_H

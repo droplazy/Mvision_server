@@ -31,6 +31,7 @@ public:
 public slots:
     void ADDsubscribeTopic(QString device);
     void CommandMuiltSend(QJsonObject json);
+    void devcommandsend(QString topic, QString msg);
     void ProcessDevtSend(QJsonObject json);
     void reconnectBroker();  // 重新连接
     void devUpgrade(QStringList devList);
