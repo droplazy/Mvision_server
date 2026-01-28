@@ -63,6 +63,7 @@ signals:
     void updateDeviceInfo(DeviceStatus);
     void mqttclientconnted(bool);
     void applogginstatus(QString commid,bool);
+     void programInfoGenerated(const ProgramInfo &programInfo);
 
 };
 

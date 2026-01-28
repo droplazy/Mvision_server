@@ -521,6 +521,19 @@
      <string>PushButton</string>
     </property>
    </widget>
+   <widget class="QPushButton" name="pushButton_livingcontrol">
+    <property name="geometry">
+     <rect>
+      <x>1210</x>
+      <y>0</y>
+      <width>80</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>直播控场</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
  </widget>

@@ -27,6 +27,7 @@ SOURCES += \
     UIclass/realtimespeechrecognizer.cpp \
     UIclass/userappeal.cpp \
     UIclass/withdraw.cpp \
+    ai_bragger.cpp \
     databasemanager.cpp \
     emailsender.cpp \
     httpserver.cpp \
@@ -36,7 +37,8 @@ SOURCES += \
     mediamtx_manager.cpp \
     mqtt_server.cpp \
     mqttclient.cpp \
-    privilegehelper.cpp
+    privilegehelper.cpp \
+    xunfeiai.cpp
 
 HEADERS += \
     UIclass/addproduct.h \
@@ -57,6 +59,7 @@ HEADERS += \
     UIclass/realtimespeechrecognizer.h \
     UIclass/userappeal.h \
     UIclass/withdraw.h \
+    ai_bragger.h \
     databasemanager.h \
     emailsender.h \
     httpserver.h \
@@ -66,7 +69,8 @@ HEADERS += \
     mqtt_server.h \
     mqttclient.h \
     privilegehelper.h \
-    publicheader.h
+    publicheader.h \
+    xunfeiai.h
 
 FORMS += \
     UIclass/appacount.ui \

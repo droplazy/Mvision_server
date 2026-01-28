@@ -8,12 +8,10 @@
 #include <QSystemTrayIcon>
 #include <QCloseEvent>
 #include "mediamtx_manager.h"
-
 #include "./UIclass/realtimespeechrecognizer.h"
+#include "./UIclass/livingcontrol.h"
+#include "ai_bragger.h"
 
-
-
-QT_BEGIN_NAMESPACE
 namespace Ui {
 class MainWindow;
 }
@@ -50,8 +48,11 @@ private slots:
 
     void on_pushButton_clicked();
 
+    void on_pushButton_livingcontrol_clicked();
+
 private:
     Ui::MainWindow *ui;
+
 
     QString IP;
     QString MQTT_PORT;
@@ -61,6 +62,9 @@ private:
     class mqttclient *p_mqtt_cli;
     class MQTT_server *p_mqttt_ser;
     MediaMTX_Manager manager;
+    livingcontrol *livingControlWindow; //todo
+
+    AI_bragger *p_ai;
 
     class EmailSender *p_email;
     QSystemTrayIcon *trayIcon;
@@ -94,5 +98,7 @@ private:
 
     RealtimeSpeechRecognizer *m_recognizer = nullptr;
     QTimer *m_stopTimer = nullptr;
+    void createLivingControl();
+    void switchToView(QWidget *view);
 };
 #endif // MAINWINDOW_H

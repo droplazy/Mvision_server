@@ -433,6 +433,15 @@ struct SQL_AppAccount {
     QString remark;      // 备注
     QString devserial;
 };
+
+struct ProgramInfo
+{
+    QString commandId;
+    QString programName;
+    QList<QString> deviceList;
+};
+
+
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）
 // QMap<QString, QString> productNameMap = {
 //     {"PROD001", "iPhone 15 Pro"}, {"PROD002", "MacBook Pro"},

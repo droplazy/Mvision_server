@@ -8,21 +8,23 @@
 #include <QEvent>
 #include <QCloseEvent>
 #include <QSystemTrayIcon>
+#include "ai_bragger.h"
+
 
 /****************************子窗口控件*/
-#include "./UIclass/devicelistdialog.h"
-#include "./UIclass/commandlsit.h"
-#include "./UIclass/firmware.h"
-#include "./UIclass/mallusermanager.h"  // 添加头文件
-#include "./UIclass/mallproducts.h"
-#include "./UIclass/orderlist.h"
-#include "./UIclass/userappeal.h"
-#include "./UIclass/guidetextset.h"
-#include "./UIclass/managerui.h"
-#include "./UIclass/commanddev.h"
-#include "./UIclass/appacount.h"
+#include "UIclass/devicelistdialog.h"
+#include "UIclass/commandlsit.h"
+#include "UIclass/firmware.h"
+#include "UIclass/mallusermanager.h"  // 添加头文件
+#include "UIclass/mallproducts.h"
+#include "UIclass/orderlist.h"
+#include "UIclass/userappeal.h"
+#include "UIclass/guidetextset.h"
+#include "UIclass/managerui.h"
+#include "UIclass/commanddev.h"
+#include "UIclass/appacount.h"
 #include "UIclass/withdraw.h"
-
+#include "UIclass/livingcontrol.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -34,7 +36,7 @@ MainWindow::MainWindow(QWidget *parent)
     , p_email(nullptr)
 {
     ui->setupUi(this);
-
+    livingControlWindow = nullptr;
     // 调试：检查初始状态
     qDebug() << "=== MainWindow 初始化开始 ===";
     qDebug() << "应用程序图标状态（初始化前）:";
@@ -101,7 +103,8 @@ MainWindow::MainWindow(QWidget *parent)
         qDebug() << "启动失败";
     }
 
-
+    p_ai =new AI_bragger();
+    p_ai->start();
 
     qDebug() << "=== MainWindow 初始化完成 ===";
 }
@@ -438,6 +441,13 @@ void MainWindow::on_pushButton_openmqtt_clicked()
             ui->pushButton_openmqtt->setText("关闭服务器");
             ui->pushButton_openmqtt->setStyleSheet("background-color: red; color: white;");
 
+            if (p_mqtt_cli) {
+                connect(p_mqtt_cli, &mqttclient::programInfoGenerated,
+                        p_ai, &AI_bragger::onProgramInfoGenerated);
+                qDebug() << "成功连接 programInfoGenerated 信号";
+            } else {
+                qDebug() << "警告：p_mqtt_cli 为空，无法连接信号";
+            }
             // 显示成功信息
             QString successInfo = QString("所有服务器启动成功！\n\nHTTP服务：\n"
                                           "• 地址：http://%1:%2\n\n"
@@ -1200,6 +1210,41 @@ void MainWindow::on_pushButton_appcount_clicked()
     // 5. 显示（不需要exec()）
     ui->sub_widget->setVisible(true);
 }
+void MainWindow::createLivingControl()
+{
+    // 检查 ui->sub_widget 是否已经有布局
+    if (ui->sub_widget->layout()) {
+        QLayoutItem* item;
+        while ((item = ui->sub_widget->layout()->takeAt(0)) != nullptr) {
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
+        }
+        // 重要：清空后布局还在，但内容是空的
+    } else {
+        // 如果没有布局，创建一个
+        QVBoxLayout* layout = new QVBoxLayout(ui->sub_widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+    }
+
+    // 创建 livingcontrol 实例
+    livingControlWindow = new livingcontrol(ui->sub_widget);
+    ui->sub_widget->layout()->addWidget(livingControlWindow);
+
+    // 连接信号到 livingcontrol 的槽函数
+    // 假设 p_mqtt_cli 是你的 mqttclient 实例
+    if (p_mqtt_cli) {
+        connect(p_mqtt_cli, &mqttclient::programInfoGenerated,
+                livingControlWindow, &livingcontrol::onProgramInfoGenerated);
+        qDebug() << "成功连接 programInfoGenerated 信号";
+    } else {
+        qDebug() << "警告：p_mqtt_cli 为空，无法连接信号";
+    }
+
+    // 如果需要，可以显示窗口
+    livingControlWindow->show();
+}
 
 void MainWindow::on_pushButton_withdraw_clicked()
 {
@@ -1293,4 +1338,28 @@ void MainWindow::on_pushButton_clicked()
         ui->pushButton->setText("开始测试");
         qDebug() << "🛑 识别已停止";
     }
+}
+
+#include <QCryptographicHash>
+#include <QMessageAuthenticationCode>
+
+QString generateSignature(const QString &apiSecret, const QString &date, const QString &method, const QString &path)
+{
+    // 1. 构建签名字符串
+    QString signatureOrigin = QString("host: spark-api-open.xf-yun.com\ndate: %1\n%2 %3 HTTP/1.1")
+                                  .arg(date).arg(method).arg(path);
+
+    // 2. 计算HMAC-SHA256
+    QMessageAuthenticationCode hmac(QCryptographicHash::Sha256);
+    hmac.setKey(apiSecret.toUtf8());
+    hmac.addData(signatureOrigin.toUtf8());
+    QByteArray signature = hmac.result();
+
+    // 3. Base64编码
+    return signature.toBase64();
+}
+
+void MainWindow::on_pushButton_livingcontrol_clicked()
+{
+
 }

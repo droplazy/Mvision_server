@@ -132,10 +132,36 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     }
 
     QString commandId = dataObj["command_id"].toString();
+    QString action = dataObj["action"].toString();
+    QString subAction = dataObj.value("sub_action").toString();
     QJsonArray serial_numbers = dataObj["serial_numbers"].toArray();
 
     qDebug() << "指令ID:" << commandId;
     qDebug() << "目标设备数量:" << serial_numbers.size();
+
+    // 检查sub_action是否为"直播"
+    if (subAction == "直播") {
+        qDebug() << "检测到直播指令，生成ProgramInfo结构体";
+
+        // 生成ProgramInfo结构体
+        ProgramInfo programInfo;
+        programInfo.commandId = commandId;
+        programInfo.programName = action + subAction + "_" + commandId;
+
+        // 添加所有相关的serialNumber到deviceList
+        for (const QJsonValue &serialNumber : std::as_const(serial_numbers)) {
+            QString deviceSerial = serialNumber.toString().trimmed();
+            if (!deviceSerial.isEmpty()) {
+                programInfo.deviceList.append(deviceSerial);
+            }
+        }
+
+        qDebug() << "生成的节目名称:" << programInfo.programName;
+        qDebug() << "包含设备数量:" << programInfo.deviceList.size();
+
+        // 发射信号
+        emit programInfoGenerated(programInfo);
+    }
 
     // 验证指令是否存在（可选）
     if (dbManager) {
@@ -153,8 +179,8 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     // 复制原始数据（保持指令ID等信息不变）
     QJsonObject sendData;
     sendData["command_id"] = commandId;
-    sendData["action"] = dataObj["action"].toString();
-    sendData["sub_action"] = dataObj.value("sub_action").toString();  // 使用value避免不存在时报错
+    sendData["action"] = action;
+    sendData["sub_action"] = subAction;  // 使用获取到的subAction
     sendData["start_time"] = dataObj.value("start_time").toString();
     sendData["end_time"] = dataObj.value("end_time").toString();
     sendData["remark"] = dataObj.value("remark").toString();
