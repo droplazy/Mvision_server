@@ -86,7 +86,7 @@
    <property name="geometry">
     <rect>
      <x>650</x>
-     <y>460</y>
+     <y>560</y>
      <width>291</width>
      <height>31</height>
     </rect>
@@ -103,7 +103,7 @@ color: rgb(0, 0, 255);</string>
    <property name="geometry">
     <rect>
      <x>650</x>
-     <y>420</y>
+     <y>520</y>
      <width>291</width>
      <height>31</height>
     </rect>
@@ -145,7 +145,7 @@ color: rgb(0, 0, 255);</string>
     <string>主题</string>
    </property>
   </widget>
-  <widget class="QTextEdit" name="textEdit_theme_2">
+  <widget class="QTextEdit" name="textEdit_scene">
    <property name="geometry">
     <rect>
      <x>650</x>
@@ -165,10 +165,10 @@ color: rgb(0, 0, 255);</string>
     </rect>
    </property>
    <property name="text">
-    <string>修饰：</string>
+    <string>场景</string>
    </property>
   </widget>
-  <widget class="QTextEdit" name="textEdit_theme_3">
+  <widget class="QTextEdit" name="textEdit_motion">
    <property name="geometry">
     <rect>
      <x>650</x>
@@ -188,7 +188,56 @@ color: rgb(0, 0, 255);</string>
     </rect>
    </property>
    <property name="text">
-    <string>围绕这句话</string>
+    <string>情绪</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pushButton_para">
+   <property name="geometry">
+    <rect>
+     <x>650</x>
+     <y>480</y>
+     <width>291</width>
+     <height>31</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>参数设置</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_status">
+   <property name="geometry">
+    <rect>
+     <x>220</x>
+     <y>240</y>
+     <width>361</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>识别中</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_7">
+   <property name="geometry">
+    <rect>
+     <x>660</x>
+     <y>420</y>
+     <width>141</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>开头</string>
+   </property>
+  </widget>
+  <widget class="QTextEdit" name="textEdit_head">
+   <property name="geometry">
+    <rect>
+     <x>650</x>
+     <y>440</y>
+     <width>291</width>
+     <height>31</height>
+    </rect>
    </property>
   </widget>
  </widget>

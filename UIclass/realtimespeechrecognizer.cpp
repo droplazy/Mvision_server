@@ -261,8 +261,8 @@ void RealtimeSpeechRecognizer::onWebSocketTextMessageReceived(const QString &mes
     static int responseCount = 0;
     responseCount++;
 
-    qDebug() << "📥 收到第" << responseCount << "个服务器响应，长度:"
-             << message.length() << "字符";
+    // qDebug() << "📥 收到第" << responseCount << "个服务器响应，长度:"
+    //          << message.length() << "字符";
 
     QJsonDocument doc = QJsonDocument::fromJson(message.toUtf8());
     if (doc.isNull()) {
@@ -279,7 +279,7 @@ void RealtimeSpeechRecognizer::onWebSocketTextMessageReceived(const QString &mes
 
         // 检查会话状态
         int serverStatus = data["status"].toInt();
-        qDebug() << "🔍 服务器状态码:" << serverStatus;
+    //    qDebug() << "🔍 服务器状态码:" << serverStatus;
 
         // 状态码=2表示会话结束
         if (serverStatus == 2) {
@@ -293,7 +293,7 @@ void RealtimeSpeechRecognizer::onWebSocketTextMessageReceived(const QString &mes
                 // 打印sn（句子序号）
                 int sn = result["sn"].toInt(-1);
                 if (sn != -1) {
-                    qDebug() << "📝 句子序号(sn):" << sn;
+        //            qDebug() << "📝 句子序号(sn):" << sn;
                 }
 
                 if (!finalText.isEmpty()) {
@@ -323,17 +323,17 @@ void RealtimeSpeechRecognizer::onWebSocketTextMessageReceived(const QString &mes
             // 打印sn（句子序号）
             int sn = result["sn"].toInt(-1);
             if (sn != -1) {
-                qDebug() << "📝 句子序号(sn):" << sn;
+           //     qDebug() << "📝 句子序号(sn):" << sn;
             }
 
             if (result.contains("ws")) {
                 QString text = extractTextFromResult(result);
 
                 if (!text.isEmpty()) {
-                    qDebug() << "🎤 识别到文本:" << text;
+              //      qDebug() << "🎤 识别到文本:" << text;
                     emit textReceived(text);
                 } else {
-                    qDebug() << "🔇 识别结果为空（可能是音乐/噪声）";
+              //      qDebug() << "🔇 识别结果为空（可能是音乐/噪声）";
                 }
             }
         }
@@ -438,7 +438,7 @@ void RealtimeSpeechRecognizer::sendStartFrame()
     business["language"] = "zh_cn";
     business["domain"] = "iat";
     business["accent"] = "mandarin";
-    business["vad_eos"] = 2000;//停顿多久结束
+    business["vad_eos"] = 5000;//停顿多久结束
     business["ptt"] = 1;
     business["dwa"] = "wpgs";  // 动态修正
 

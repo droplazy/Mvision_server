@@ -28,7 +28,9 @@ private slots:
 private:
     class QNetworkAccessManager *m_manager;
     class QNetworkReply *m_reply;
-
+    QString m_pendingQuestion;      // 等待处理的问题
+    bool m_hasPendingQuestion;      // 是否有等待的问题
+    bool m_isRequesting;            // 是否正在请求中
     QString m_apiKey;
     QString m_apiSecret;
 };

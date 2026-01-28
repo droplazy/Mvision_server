@@ -31,9 +31,14 @@ private:
 
     QString generateRandomSuffix();  // 生成随机后缀
     QString getCurrentTimestamp();   // 获取当前时间戳
-
+    void checkAndDistributeBraggers();
+    QStringList splitBraggerByDevices(const QString &bragger, int deviceCount);
+    QTimer* aiCooldownTimer;  // 新增：AI冷却计时器
+    void checkCoolDown();
 signals:
     void sCommadSend(QString topic, QString msg);
+private slots:
+    void resetAIState();
 };
 
 #endif // AI_BRAGGER_H

@@ -25,20 +25,36 @@ void SimpleXFAI::setAuthInfo(const QString &apiKey, const QString &apiSecret)
 
 void SimpleXFAI::askQuestion(const QString &question)
 {
-    qDebug() << "=== 发送问题到讯飞AI ===";
-    qDebug() << "问题:" << question;
+    // qDebug() << "=== 发送问题到讯飞AI ===";
+    // qDebug() << "问题:" << question;
 
     if (question.isEmpty()) {
         emit errorOccurred("问题不能为空");
         return;
     }
 
-    // 如果有正在进行的请求，先取消
+    // 如果有正在进行的请求，等待它完成，不发送新请求
     if (m_reply && m_reply->isRunning()) {
-        m_reply->abort();
-        m_reply->deleteLater();
-        m_reply = nullptr;
+        qDebug() << "⚠️ 已有请求正在进行中，等待完成...";
+        // 可以在这里缓存问题，等当前请求完成后继续处理
+        m_pendingQuestion = question;
+        m_hasPendingQuestion = true;
+        return;
     }
+
+    // 如果有pending请求，先处理pending
+    if (m_hasPendingQuestion && !m_pendingQuestion.isEmpty()) {
+        qDebug() << "📝 处理pending请求";
+        QString pendingQuestion = m_pendingQuestion;
+        m_pendingQuestion.clear();
+        m_hasPendingQuestion = false;
+
+        // 递归调用自己，处理pending请求
+        askQuestion(pendingQuestion);
+        return;
+    }
+
+    qDebug() << "🚀 发送AI请求...";
 
     // 构建请求URL
     QUrl url("https://spark-api-open.xf-yun.com/v2/chat/completions");
@@ -72,13 +88,17 @@ void SimpleXFAI::askQuestion(const QString &question)
     QJsonDocument doc(requestBody);
     QByteArray postData = doc.toJson();
 
-    qDebug() << "发送请求...";
-
     // 发送请求
     m_reply = m_manager->post(request, postData);
+    m_isRequesting = true;  // 标记正在请求
 
     // 连接完成信号
     connect(m_reply, &QNetworkReply::finished, this, &SimpleXFAI::onReplyFinished);
+
+    // 连接错误信号
+    connect(m_reply, &QNetworkReply::errorOccurred, this, [this](QNetworkReply::NetworkError error) {
+        qDebug() << "网络错误发生:" << error;
+    });
 }
 
 void SimpleXFAI::onReplyFinished()
@@ -101,7 +121,7 @@ void SimpleXFAI::onReplyFinished()
     reply->deleteLater();
 
     qDebug() << "收到响应，大小:" << responseData.size() << "字节";
-    qDebug() << "响应内容:" << QString::fromUtf8(responseData);
+   // qDebug() << "响应内容:" << QString::fromUtf8(responseData);
 
     // 解析JSON
     QJsonDocument doc = QJsonDocument::fromJson(responseData);

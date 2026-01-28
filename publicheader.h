@@ -449,6 +449,14 @@ struct ProgramInfo
     QString voicetotext;
     QString bragger;
 
+    QString theme;
+    QString scene;
+    QString motion;
+    QString guideword;
+
+    // 添加冷却时间相关字段
+    QDateTime cooldownEndTime;  // 冷却结束时间
+    bool isCoolingDown;         // 是否在冷却中
 };
 struct AIpost
 {
@@ -457,6 +465,7 @@ struct AIpost
     QString motion;
     QString commandid;
     QString scene;
+    QString guide;
     int num;
 };
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）
