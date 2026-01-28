@@ -8,9 +8,9 @@ AI_bragger::AI_bragger()
 {
     checkTimer = new QTimer(this);
     connect(checkTimer, &QTimer::timeout, this, &AI_bragger::checkProgramList);
-    aiCooldownTimer = new QTimer(this);
-    aiCooldownTimer->setSingleShot(true);
-    connect(aiCooldownTimer, &QTimer::timeout, this, &AI_bragger::resetAIState);
+    // aiCooldownTimer = new QTimer(this);
+    // aiCooldownTimer->setSingleShot(true);
+    // connect(aiCooldownTimer, &QTimer::timeout, this, &AI_bragger::resetAIState);
 }
 
 AI_bragger::~AI_bragger()
@@ -100,7 +100,7 @@ void AI_bragger::checkProgramList()
     for(int i = 0; i < ProgramList.size(); ++i) {
         ProgramInfo &program = ProgramList[i];
 
-      /*  qDebug() << QString("节目[%1]: ID=%2, rtspurl='%3', isStreaming=%4")
+        /*  qDebug() << QString("节目[%1]: ID=%2, rtspurl='%3', isStreaming=%4")
                         .arg(i)
                         .arg(program.commandId)
                         .arg(program.rtspurl)
@@ -123,7 +123,8 @@ void AI_bragger::checkProgramList()
                     QString suffix = generateRandomSuffix();
                     QString rtspUrl = QString("rtsp://%1:%2/audio")
                                           .arg(host_ip)
-                                          .arg(host_port);
+                                          .arg(host_port);//.arg(suffix);
+
 
                     qDebug() << QString("  生成的RTSP URL: %1").arg(rtspUrl);
 
@@ -178,48 +179,49 @@ void AI_bragger::checkAndDistributeBraggers()
 
             // 将bragger按设备数量切片
             QStringList braggerSlices = splitBraggerByDevices(program.bragger, program.deviceList.size());
+            if(!braggerSlices.isEmpty())
+            {
 
-            // 为每个设备发送一条评论
-            for (int i = 0; i < program.deviceList.size(); ++i) {
-                if (i < braggerSlices.size()) {
-                    QString deviceSerial = program.deviceList[i];
-                    QString braggerSlice = braggerSlices[i];
+                // 为每个设备发送一条评论
+                for (int i = 0; i < program.deviceList.size(); ++i) {
+                    if (i < braggerSlices.size()) {
+                        QString deviceSerial = program.deviceList[i];
+                        QString braggerSlice = braggerSlices[i];
 
-                    // 构建JSON
-                    QJsonObject payloadObj;
-                    QJsonObject dataObj;
-                    dataObj["action"] = "XXXAAAA";
-                    dataObj["sub_action"] = "弹幕";
-                    dataObj["start_time"] = startTime;
-                    dataObj["end_time"] = endTime;
-                    dataObj["commandid"] = program.commandId;
-                    dataObj["remark"] = QString("MSG:%1:MSG").arg(braggerSlice);
+                        // 构建JSON
+                        QJsonObject payloadObj;
+                        QJsonObject dataObj;
+                        dataObj["action"] = "XXXAAAA";
+                        dataObj["sub_action"] = "弹幕";
+                        dataObj["start_time"] = startTime;
+                        dataObj["end_time"] = endTime;
+                        dataObj["commandid"] = program.commandId;
+                        dataObj["remark"] = QString("MSG:%1:MSG").arg(braggerSlice);
 
-                    payloadObj["data"] = dataObj;
-                    payloadObj["messageType"] = "command";
-                    payloadObj["password"] = "securePassword123";
-                    payloadObj["timestamp"] = getCurrentTimestamp();
-                    payloadObj["username"] = "user123";
+                        payloadObj["data"] = dataObj;
+                        payloadObj["messageType"] = "command";
+                        payloadObj["password"] = "securePassword123";
+                        payloadObj["timestamp"] = getCurrentTimestamp();
+                        payloadObj["username"] = "user123";
 
-                    QJsonDocument doc(payloadObj);
-                    QString payload = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-                    QString topic = QString("Device/Dispatch/%1").arg(deviceSerial);
+                        QJsonDocument doc(payloadObj);
+                        QString payload = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+                        QString topic = QString("Device/Dispatch/%1").arg(deviceSerial);
 
-                    // 发送信号
-                    emit sCommadSend(topic, payload);
+                        // 发送信号
+                        emit sCommadSend(topic, payload);
 
-                    qDebug() << "  📤 发送评论到设备" << deviceSerial;
-                    qDebug() << "    评论切片:" << braggerSlice.left(50) << "...";
+                        qDebug() << "  📤 发送评论到设备" << deviceSerial;
+                        qDebug() << "    评论切片:" << braggerSlice.left(50) << "...";
+                    }
                 }
             }
 
-            // 分发完成后，清空语音文本和AI评论
-            program.voicetotext.clear();
-            program.bragger.clear();
+
 
             // 设置冷却状态
             program.isCoolingDown = true;
-            program.cooldownEndTime = currentTime.addSecs(60); // 1分钟后结束冷却
+            program.cooldownEndTime = currentTime.addSecs(10); // 1分钟后结束冷却
 
             // 设置其他状态
             program.isGenerating = true;
@@ -242,7 +244,8 @@ void AI_bragger::checkCoolDown()
             program.isCoolingDown = false;
             program.isGenerating = false;
             program.isListen = false;
-
+            program.voicetotext.clear();
+            program.bragger.clear();
             qDebug() << "🔄 节目" << program.commandId << "冷却结束，重置状态";
         }
     }
@@ -268,7 +271,8 @@ QStringList AI_bragger::splitBraggerByDevices(const QString &bragger, int device
 
     // 如果没有找到方括号内容，使用换行分割
     if (comments.isEmpty()) {
-        comments = bragger.split("\n", Qt::SkipEmptyParts);
+        //  comments = bragger.split("\n", Qt::SkipEmptyParts);
+        return comments;
     }
 
     // 分配评论给设备
@@ -293,6 +297,8 @@ void AI_bragger::resetAIState()
         if (program.isGenerating) {
             program.isGenerating = false;
             qDebug() << "  节目" << program.commandId << "AI状态已重置，可以继续下一轮";
+            // 分发完成后，清空语音文本和AI评论
+
         }
     }
 }

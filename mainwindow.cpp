@@ -1325,36 +1325,14 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
 
     QVector<ProgramInfo>& programList = p_ai->ProgramList;
 
-// 调试开关
-//#define DEBUG_SPEECH_RECOG
-
-#ifdef DEBUG_SPEECH_RECOG
-    static int checkCount = 0;
-    qDebug() << QString("=== 语音识别检查[%1] ===").arg(++checkCount);
-#endif
-
     for (ProgramInfo& program : programList) {
         QString commandId = program.commandId;
-
-#ifdef DEBUG_SPEECH_RECOG
-        qDebug() << QString("节目[%1]: rtsp=%2, streaming=%3, voiceText=%4, isListen=%5, hasRecognizer=%6")
-                        .arg(commandId)
-                        .arg(program.rtspurl.isEmpty() ? "空" : "有")
-                        .arg(program.isStreaming ? "是" : "否")
-                        .arg(program.voicetotext.isEmpty() ? "空" : QString("%1字").arg(program.voicetotext.length()))
-                        .arg(program.isListen ? "是" : "否")
-                        .arg(m_programSpeechRecognizers.contains(commandId) ? "有" : "无");
-#endif
 
         if (!program.rtspurl.isEmpty() &&
             program.isStreaming &&
             program.voicetotext.isEmpty() &&
             !program.isListen &&
             !m_programSpeechRecognizers.contains(commandId)) {
-
-#ifdef DEBUG_SPEECH_RECOG
-            qDebug() << QString("  ✓ 满足条件，开始语音识别");
-#endif
 
             program.isListen = true;
 
@@ -1368,57 +1346,46 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
 
             recognizer->setConfig(config);
 
-            // 为每个节目创建A和B
-            QString* currentSentence = new QString();  // A: 当前句子
-            QString* historyText = new QString();      // B: 历史拼接文本
+            // 为每个节目创建两个临时变量
+            QString* currentSentence = new QString();  // 当前句子
+            QString* historyText = new QString();      // 历史文本
 
             connect(recognizer, &RealtimeSpeechRecognizer::textReceived,
                     this, [this, commandId, currentSentence, historyText](const QString &text) {
-#ifdef DEBUG_SPEECH_RECOG_DETAIL
-                        qDebug() << QString("节目%1收到: %2").arg(commandId).arg(text);
-#endif
-
-                        // 判断是否新句子开始（比A短）
+                        // 判断是否新句子开始（比当前句子短）
                         if (text.length() < currentSentence->length()) {
-                            // 将A拼接到B（如果A不为空）
+                            // 将当前句子拼接到历史文本
                             if (!currentSentence->isEmpty()) {
                                 if (!historyText->isEmpty()) {
                                     *historyText += "，";
                                 }
                                 *historyText += *currentSentence;
-                        //        updateProgramVoiceText(commandId, *historyText);
                             }
+                            // 开始新句子
                             *currentSentence = text;
                         }
                         else {
+                            // 当前句子的修正
                             *currentSentence = text;
-                            QString displayText = *historyText;
-                            if (!displayText.isEmpty() && !currentSentence->isEmpty()) {
-                                displayText += "，";
-                            }
-                            displayText += *currentSentence;
-                    //        updateProgramVoiceText(commandId, displayText);
                         }
                     });
 
             connect(recognizer, &RealtimeSpeechRecognizer::sessionCompleted,
                     this, [this, commandId, currentSentence, historyText]() {
-#ifdef DEBUG_SPEECH_RECOG
-                        qDebug() << QString("✅ 节目%1识别完成").arg(commandId);
-#endif
-
+                        // 处理最后一个句子
                         if (!currentSentence->isEmpty()) {
                             if (!historyText->isEmpty()) {
                                 *historyText += "，";
                             }
                             *historyText += *currentSentence;
-#ifdef DEBUG_SPEECH_RECOG
-                            qDebug() << QString("  最终文本: %1").arg(historyText->left(50));
-#endif
                         }
 
-                        if (!historyText->isEmpty()) {
-                            updateProgramVoiceText(commandId, *historyText);
+                        // 生成最终文本
+                        QString finalText = *historyText;
+
+                        // 只在有文本内容时才更新program
+                        if (!finalText.isEmpty()) {
+                            updateProgramVoiceText(commandId, finalText);
                         }
 
                         // 设置isListen为false
@@ -1442,19 +1409,15 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
 
             connect(recognizer, &RealtimeSpeechRecognizer::errorOccurred,
                     this, [this, commandId, currentSentence, historyText](const QString &error) {
-#ifdef DEBUG_SPEECH_RECOG
-                        qDebug() << QString("💥 节目%1错误: %2").arg(commandId).arg(error);
-#endif
+                        // 出错时保存已有文本
+                        QString finalText = *historyText;
+                        if (!finalText.isEmpty() && !currentSentence->isEmpty()) {
+                            finalText += "，";
+                        }
+                        finalText += *currentSentence;
 
-                        if (!currentSentence->isEmpty() || !historyText->isEmpty()) {
-                            QString finalText = *historyText;
-                            if (!finalText.isEmpty() && !currentSentence->isEmpty()) {
-                                finalText += "，";
-                            }
-                            finalText += *currentSentence;
-                            if (!finalText.isEmpty()) {
-                                updateProgramVoiceText(commandId, finalText);
-                            }
+                        if (!finalText.isEmpty()) {
+                            updateProgramVoiceText(commandId, finalText);
                         }
 
                         for (ProgramInfo& prog : p_ai->ProgramList) {
@@ -1476,13 +1439,7 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
 
             if (recognizer->startRecognition(program.rtspurl)) {
                 m_programSpeechRecognizers[commandId] = recognizer;
-#ifdef DEBUG_SPEECH_RECOG
-                qDebug() << QString("  ✅ 识别器启动成功");
-#endif
             } else {
-#ifdef DEBUG_SPEECH_RECOG
-                qDebug() << QString("  ❌ 识别器启动失败");
-#endif
                 program.isListen = false;
                 delete currentSentence;
                 delete historyText;
@@ -1490,10 +1447,6 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
             }
         }
     }
-
-#ifdef DEBUG_SPEECH_RECOG
-    qDebug() << "=== 检查完成 ===\n";
-#endif
 }
 // updateProgramVoiceText函数保持不变
 void MainWindow::updateProgramVoiceText(const QString &commandId, const QString &text)
@@ -1526,8 +1479,9 @@ void MainWindow::xunfeiAIprase(const AIpost &aiPost)
         prompt = aiPost.guide + "\n\n";
     } else {
         // 默认开头
-        prompt = "请帮我生成用户评论：\n\n";
     }
+
+    prompt = "请帮我生成用户评论：\n\n";
 
     // 添加主题要求
     if (!aiPost.theme.isEmpty()) {
@@ -1543,9 +1497,12 @@ void MainWindow::xunfeiAIprase(const AIpost &aiPost)
     if (!aiPost.motion.isEmpty()) {
         prompt += QString("【情感基调】%1\n").arg(aiPost.motion);
     }
-
+    // 添加情绪要求
+    if (!aiPost.guide.isEmpty()) {
+        prompt += QString("【其他参考】%1\n").arg(aiPost.guide);
+    }
     // 添加内容参考
-    prompt += QString("【内容参考】%1\n\n").arg(aiPost.text);
+    prompt += QString("【视频内容】%1\n\n").arg(aiPost.text);
 
     // 添加数量要求
     prompt += QString("【生成数量】%1条\n\n").arg(aiPost.num);
@@ -1593,6 +1550,7 @@ void MainWindow::xunfeiAIprase(const AIpost &aiPost)
 
 
     // 发送请求
+    qDebug() << "AI post" << prompt;
     ai.askQuestion(prompt);
 }
 void MainWindow::resetProgramGenerating(const QString &commandId)
@@ -1672,6 +1630,12 @@ void MainWindow::checkAndGenerateBragger()
 #ifdef DEBUG_AI_GENERATE
                 qDebug() << QString("  长度不足: %1 < 15").arg(program.voicetotext.trimmed().length());
 #endif
+                program.voicetotext.clear();
+                program.bragger.clear();
+                program.isListen =false;
+                program.isGenerating =false;
+                qDebug() << "重置数据";
+
                 continue;
             }
 

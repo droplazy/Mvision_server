@@ -40,6 +40,8 @@ private slots:
     void onFFmpegReadyRead();
     void onSendTimerTimeout();
     void reconnect();  // 重连函数
+    void onTimeout();
+
 private:
     bool initWebSocket();
     bool startFFmpegStream(const QString &rtspUrl);
@@ -47,7 +49,7 @@ private:
     void sendStartFrame();
     void sendAudioFrame(const QByteArray &audioData);
     void sendEndFrame();
-
+    QTimer *m_timeoutTimer;  // 新增：超时计时器
     Config m_config;
     QWebSocket *m_webSocket;
     QProcess *m_ffmpegProcess;
@@ -60,6 +62,8 @@ private:
     int m_reconnectCount = 0;  // 重连次数
     const int MAX_RECONNECT = 3;  // 最大重连次数
     QString extractTextFromResult(const QJsonObject &result);
+    void sendAudioFrameForend(const QByteArray &audioData);
+    void stopSendingAudio();
 };
 
 #endif // REALTIMESPEECHRECOGNIZER_H

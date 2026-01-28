@@ -65,7 +65,7 @@ void livingcontrol::updateUI()
             deviceModel->appendRow(deviceItem);
         }
 
-        // === 修改点1：更新文本内容（追加模式） ===
+        // === 更新文本内容（追加模式） ===
         static QString lastVoiceText;   // 记录上次的语音文本
         static QString lastBraggerText; // 记录上次的AI评论
 
@@ -73,13 +73,14 @@ void livingcontrol::updateUI()
 
         // 处理 voicetotext（语音识别文本）
         QString currentVoiceText = program.voicetotext;
+
         if (!currentVoiceText.isEmpty() && currentVoiceText != lastVoiceText) {
             // 获取当前的完整历史
             QString fullHistory = ui->textEdit_up->toPlainText();
 
             if (!fullHistory.isEmpty()) {
                 // 添加时间和分隔符
-                fullHistory += QString("\n\n[%1] 新的语音识别：\n").arg(currentTime);
+                fullHistory += QString("\n\n[%1] 语音识别：\n").arg(currentTime);
                 fullHistory += currentVoiceText;
             } else {
                 // 首次添加
@@ -97,13 +98,14 @@ void livingcontrol::updateUI()
 
         // 处理 bragger（AI评论）
         QString currentBraggerText = program.bragger;
+
         if (!currentBraggerText.isEmpty() && currentBraggerText != lastBraggerText) {
             // 获取当前的完整历史
             QString fullHistory = ui->textEdit_content->toPlainText();
 
             if (!fullHistory.isEmpty()) {
                 // 添加时间和分隔符
-                fullHistory += QString("\n\n[%1] 新的AI评论：\n").arg(currentTime);
+                fullHistory += QString("\n\n[%1] AI评论：\n").arg(currentTime);
                 fullHistory += currentBraggerText;
             } else {
                 // 首次添加
@@ -136,8 +138,6 @@ void livingcontrol::updateUI()
     }
 }
 
-
-
 void livingcontrol::on_pushButton_allow_clicked()
 {
     // 留空，你后续可以添加功能
@@ -146,14 +146,13 @@ void livingcontrol::on_pushButton_allow_clicked()
 void livingcontrol::on_pushButton_general_clicked()
 {
     if (!m_aiBragger) {
-        qDebug() << "错误: AI对象为空";
+        ui->label_status->setText("错误: AI对象为空");
         return;
     }
 
     // 获取选中的节目索引
     QModelIndex currentIndex = ui->listView_program->currentIndex();
     if (!currentIndex.isValid()) {
-        qDebug() << "错误: 没有选中任何节目";
         ui->label_status->setText("请先选择一个节目");
         return;
     }
@@ -162,7 +161,7 @@ void livingcontrol::on_pushButton_general_clicked()
     QVector<ProgramInfo>& programList = m_aiBragger->ProgramList;
 
     if (selectedIndex >= programList.size()) {
-        qDebug() << "错误: 索引越界";
+        ui->label_status->setText("错误: 索引越界");
         return;
     }
 
@@ -170,18 +169,10 @@ void livingcontrol::on_pushButton_general_clicked()
     ProgramInfo& selectedProgram = programList[selectedIndex];
     QString commandId = selectedProgram.commandId;
 
-    qDebug() << "=== 重置节目状态 ===";
-    qDebug() << "节目ID:" << commandId;
-    qDebug() << "重置前状态:";
-    qDebug() << "  isListen:" << selectedProgram.isListen;
-    qDebug() << "  isGenerating:" << selectedProgram.isGenerating;
-    qDebug() << "  voicetotext长度:" << selectedProgram.voicetotext.length();
-    qDebug() << "  bragger长度:" << selectedProgram.bragger.length();
-
     // 重置状态（但不影响UI中的历史记录）
     QString currentTime = QDateTime::currentDateTime().toString("hh:mm:ss");
 
-    // === 修改点2：在重置时在UI中添加重置标记，但不清空历史 ===
+    // 在重置时在UI中添加重置标记，但不清空历史
     QString upHistory = ui->textEdit_up->toPlainText();
     if (!upHistory.isEmpty()) {
         upHistory += QString("\n\n[%1] 🔄 语音识别已重置\n").arg(currentTime);
@@ -200,13 +191,7 @@ void livingcontrol::on_pushButton_general_clicked()
     selectedProgram.isListen = false;
     selectedProgram.isGenerating = false;
 
-    qDebug() << "重置后状态:";
-    qDebug() << "  isListen:" << selectedProgram.isListen;
-    qDebug() << "  isGenerating:" << selectedProgram.isGenerating;
-    qDebug() << "  voicetotext长度:" << selectedProgram.voicetotext.length();
-    qDebug() << "  bragger长度:" << selectedProgram.bragger.length();
-
-    // === 修改点3：更新状态显示，但不清空文本框 ===
+    // 更新状态显示，但不清空文本框
     QString statusText;
     if (selectedProgram.isStreaming) statusText += "推流中";
     if (selectedProgram.isListen) {
@@ -220,32 +205,24 @@ void livingcontrol::on_pushButton_general_clicked()
     if (statusText.isEmpty()) statusText = "就绪 (已重置)";
 
     ui->label_status->setText(statusText);
-
-    qDebug() << "✅ 已重置节目:" << commandId;
 }
 
 void livingcontrol::on_pushButton_para_clicked()
 {
-    qDebug() << "=== 点击保存参数按钮 ===";
-
     if (!m_aiBragger) {
-        qDebug() << "错误: m_aiBragger为空";
         ui->label_status->setText("错误: AI对象为空");
         return;
     }
 
     if (m_currentProgramIndex < 0) {
-        qDebug() << "错误: 没有选中节目，m_currentProgramIndex =" << m_currentProgramIndex;
         ui->label_status->setText("请先双击选择一个节目");
         return;
     }
 
     QVector<ProgramInfo>& programList = m_aiBragger->ProgramList;
     int programCount = programList.size();
-    qDebug() << "节目总数:" << programCount << "当前选中索引:" << m_currentProgramIndex;
 
     if (m_currentProgramIndex >= programCount) {
-        qDebug() << "错误: 索引越界，索引=" << m_currentProgramIndex << "总数=" << programCount;
         ui->label_status->setText("错误: 节目索引无效");
         return;
     }
@@ -253,17 +230,11 @@ void livingcontrol::on_pushButton_para_clicked()
     // 获取当前节目引用
     ProgramInfo& program = programList[m_currentProgramIndex];
 
-    // 获取UI参数前打印
+    // 获取UI参数
     QString theme = ui->textEdit_theme->toPlainText().trimmed();
     QString scene = ui->textEdit_scene->toPlainText().trimmed();
     QString motion = ui->textEdit_motion->toPlainText().trimmed();
     QString guideword = ui->textEdit_head->toPlainText().trimmed();
-
-    qDebug() << "获取到参数:";
-    qDebug() << "  主题:" << theme;
-    qDebug() << "  场景:" << scene;
-    qDebug() << "  情绪:" << motion;
-    qDebug() << "  引导词:" << guideword;
 
     // 保存到节目
     program.theme = theme;
@@ -277,14 +248,8 @@ void livingcontrol::on_pushButton_para_clicked()
     if (!scene.isEmpty()) status += QString(" 场景: %1").arg(scene);
 
     ui->label_status->setText(status);
-
-    qDebug() << "✅ 成功保存参数到节目:" << program.commandId;
-    qDebug() << "节目当前参数:";
-    qDebug() << "  theme:" << program.theme;
-    qDebug() << "  scene:" << program.scene;
-    qDebug() << "  motion:" << program.motion;
-    qDebug() << "  guideword:" << program.guideword;
 }
+
 // 添加：当切换不同节目时，需要重置静态变量
 void livingcontrol::onProgramDoubleClicked(const QModelIndex &index)
 {

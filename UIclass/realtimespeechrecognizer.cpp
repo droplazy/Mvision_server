@@ -15,6 +15,7 @@ RealtimeSpeechRecognizer::RealtimeSpeechRecognizer(QObject *parent)
     , m_webSocket(new QWebSocket())
     , m_ffmpegProcess(new QProcess(this))
     , m_sendTimer(new QTimer(this))
+     , m_timeoutTimer(new QTimer(this))  // 新增
     , m_isRecognizing(false)
     , m_hasSentStartFrame(false)
     , m_frameSize(1280)  // 16000Hz * 40ms * 1channel * 2bytes / 1000
@@ -32,18 +33,78 @@ RealtimeSpeechRecognizer::RealtimeSpeechRecognizer(QObject *parent)
     m_sendTimer->setInterval(40);  // 40ms发送一帧
     connect(m_sendTimer, &QTimer::timeout,
             this, &RealtimeSpeechRecognizer::onSendTimerTimeout);
+
+    // 配置超时计时器（30秒）
+    m_timeoutTimer->setInterval(30000);  // 30秒
+    m_timeoutTimer->setSingleShot(true);  // 单次触发
+    connect(m_timeoutTimer, &QTimer::timeout,
+            this, &RealtimeSpeechRecognizer::onTimeout);
 }
 
 RealtimeSpeechRecognizer::~RealtimeSpeechRecognizer()
 {
+    // 停止所有计时器
+    if (m_timeoutTimer) {
+        m_timeoutTimer->stop();
+        delete m_timeoutTimer;
+    }
+
     stopRecognition();
 }
+void RealtimeSpeechRecognizer::onTimeout()
+{
+    if (!m_isRecognizing) return;
 
+    qDebug() << "⏰ 识别超时（30秒），准备结束会话";
+    emit statusMessage("识别超时，正在结束...");
+
+    // 1. 先停止发送音频数据
+    stopSendingAudio();
+
+    // 2. 等待100ms，确保最后几帧音频发送完成
+    QTimer::singleShot(100, this, [this]() {
+        if (!m_isRecognizing) return;
+
+        qDebug() << "📤 发送超时结束帧";
+
+        // 3. 发送带音频数据的结束帧（最后一个音频包）
+        if (m_audioBuffer.size() > 0) {
+            // 如果有剩余音频数据，发送带音频的结束帧
+            QByteArray lastFrame = m_audioBuffer.left(qMin(m_frameSize, m_audioBuffer.size()));
+            sendAudioFrameForend(lastFrame);
+            m_audioBuffer.clear();
+        } else {
+            // 如果没有音频数据，发送空的结束帧
+            sendEndFrame();
+        }
+
+        // 4. 等待服务器响应，5秒后强制关闭
+        QTimer::singleShot(5000, this, [this]() {
+            if (m_isRecognizing) {
+                qDebug() << "⏰ 超时后未收到服务器响应，强制结束";
+                emit sessionCompleted();
+                stopRecognition();
+            }
+        });
+    });
+}
 void RealtimeSpeechRecognizer::setConfig(const Config &config)
 {
     m_config = config;
 }
+// 新增：停止发送音频函数
+void RealtimeSpeechRecognizer::stopSendingAudio()
+{
+    if (m_sendTimer->isActive()) {
+        m_sendTimer->stop();
+        qDebug() << "⏹️ 停止发送音频定时器";
+    }
 
+    if (m_timeoutTimer->isActive()) {
+        m_timeoutTimer->stop();
+        qDebug() << "⏹️ 停止超时计时器";
+    }
+}
 bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
 {
     qDebug() << "=== startRecognition 开始 ===";
@@ -131,7 +192,15 @@ bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
         m_isRecognizing = false;
         return false;
     }
+    m_isRecognizing = true;
+    m_hasSentStartFrame = false;
+    m_audioBuffer.clear();
 
+    // 重置重连计数
+    m_reconnectCount = 0;
+    // 启动30秒超时计时器
+    m_timeoutTimer->start();
+    qDebug() << "⏱️ 启动30秒超时计时器";
     qDebug() << "=== startRecognition 成功 ===";
     emit statusMessage("开始识别...");
     return true;
@@ -141,8 +210,16 @@ void RealtimeSpeechRecognizer::stopRecognition()
 {
     if (!m_isRecognizing) return;
 
+    qDebug() << "🛑 手动停止识别";
+
+    // 停止所有计时器
+    stopSendingAudio();
+
+    if (m_timeoutTimer->isActive()) {
+        m_timeoutTimer->stop();
+    }
+
     m_isRecognizing = false;
-    m_sendTimer->stop();
 
     if (m_webSocket && m_webSocket->state() == QAbstractSocket::ConnectedState) {
         sendEndFrame();
@@ -226,7 +303,6 @@ void RealtimeSpeechRecognizer::onWebSocketConnected()
         }
     });
 }
-
 void RealtimeSpeechRecognizer::onWebSocketDisconnected()
 {
     qDebug() << "🔌 WebSocket断开连接";
@@ -279,7 +355,7 @@ void RealtimeSpeechRecognizer::onWebSocketTextMessageReceived(const QString &mes
 
         // 检查会话状态
         int serverStatus = data["status"].toInt();
-    //    qDebug() << "🔍 服务器状态码:" << serverStatus;
+       // qDebug() << "🔍 服务器状态码:" << serverStatus;
 
         // 状态码=2表示会话结束
         if (serverStatus == 2) {
@@ -293,14 +369,14 @@ void RealtimeSpeechRecognizer::onWebSocketTextMessageReceived(const QString &mes
                 // 打印sn（句子序号）
                 int sn = result["sn"].toInt(-1);
                 if (sn != -1) {
-        //            qDebug() << "📝 句子序号(sn):" << sn;
+              //      qDebug() << "📝 句子序号(sn):" << sn;
                 }
 
                 if (!finalText.isEmpty()) {
-                    qDebug() << "🎤 最终识别结果:" << finalText;
+              //      qDebug() << "🎤 最终识别结果:" << finalText;
                     emit textReceived(finalText);
                 } else {
-                    qDebug() << "🔇 最终识别结果为空";
+              //      qDebug() << "🔇 最终识别结果为空";
                 }
             }
 
@@ -323,14 +399,14 @@ void RealtimeSpeechRecognizer::onWebSocketTextMessageReceived(const QString &mes
             // 打印sn（句子序号）
             int sn = result["sn"].toInt(-1);
             if (sn != -1) {
-           //     qDebug() << "📝 句子序号(sn):" << sn;
+            //    qDebug() << "📝 句子序号(sn):" << sn;
             }
 
             if (result.contains("ws")) {
                 QString text = extractTextFromResult(result);
 
                 if (!text.isEmpty()) {
-              //      qDebug() << "🎤 识别到文本:" << text;
+             //       qDebug() << "🎤 识别到文本:" << text;
                     emit textReceived(text);
                 } else {
               //      qDebug() << "🔇 识别结果为空（可能是音乐/噪声）";
@@ -413,14 +489,14 @@ void RealtimeSpeechRecognizer::onSendTimerTimeout()
         m_audioBuffer.remove(0, m_frameSize);
         sendAudioFrame(frame);
     } else {
-        qDebug() << "⚠️  数据不足，跳过此帧，当前缓冲区:"
-                 << m_audioBuffer.size() << "字节";
+        // qDebug() << "⚠️  数据不足，跳过此帧，当前缓冲区:"
+        //          << m_audioBuffer.size() << "字节";
 
         // 如果没有数据，发送静音帧保持连接
         static int emptyCount = 0;
         emptyCount++;
 
-        if (emptyCount > 3) {  // 连续3次没有数据
+        if (emptyCount > 300) {  // 连续3次没有数据
             qDebug() << "🔇 连续" << emptyCount << "次无数据，发送静音帧保持连接";
             QByteArray silence(m_frameSize, 0);
             sendAudioFrame(silence);
@@ -438,7 +514,7 @@ void RealtimeSpeechRecognizer::sendStartFrame()
     business["language"] = "zh_cn";
     business["domain"] = "iat";
     business["accent"] = "mandarin";
-    business["vad_eos"] = 5000;//停顿多久结束
+    business["vad_eos"] = 2000;//停顿多久结束
     business["ptt"] = 1;
     business["dwa"] = "wpgs";  // 动态修正
 
@@ -488,6 +564,25 @@ void RealtimeSpeechRecognizer::sendAudioFrame(const QByteArray &audioData)
     //              << audioData.size() << "字节, Base64后:"
     //              << data["audio"].toString().length() << "字符";
     // }
+
+    m_webSocket->sendTextMessage(jsonStr);
+}
+void RealtimeSpeechRecognizer::sendAudioFrameForend(const QByteArray &audioData)
+{
+    QJsonObject data;
+    data["status"] = 2;  // 结束帧
+    data["format"] = QString("audio/L16;rate=%1").arg(m_config.sampleRate);
+    data["encoding"] = "raw";
+    data["audio"] = QString::fromLatin1(audioData.toBase64());
+
+    QJsonObject root;
+    root["data"] = data;
+
+    QJsonDocument doc(root);
+    QString jsonStr = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+
+    qDebug() << "📤 发送带音频的结束帧(status=2)，音频大小:"
+             << audioData.size() << "字节";
 
     m_webSocket->sendTextMessage(jsonStr);
 }
