@@ -38,7 +38,7 @@ SOURCES += \
     mqtt_server.cpp \
     mqttclient.cpp \
     privilegehelper.cpp \
-    xunfeiai.cpp
+    simplexfai.cpp
 
 HEADERS += \
     UIclass/addproduct.h \
@@ -70,7 +70,7 @@ HEADERS += \
     mqttclient.h \
     privilegehelper.h \
     publicheader.h \
-    xunfeiai.h
+    simplexfai.h
 
 FORMS += \
     UIclass/appacount.ui \

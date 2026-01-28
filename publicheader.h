@@ -444,12 +444,21 @@ struct ProgramInfo
     QDateTime startTime;  // 添加开始时间
     bool isStreaming;     // 是否正在推流
     bool isListen;     // 是否正在推流
+    bool isGenerating;     //AI
 
     QString voicetotext;
     QString bragger;
 
 };
-
+struct AIpost
+{
+    QString text;
+    QString theme;
+    QString motion;
+    QString commandid;
+    QString scene;
+    int num;
+};
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）
 // QMap<QString, QString> productNameMap = {
 //     {"PROD001", "iPhone 15 Pro"}, {"PROD002", "MacBook Pro"},

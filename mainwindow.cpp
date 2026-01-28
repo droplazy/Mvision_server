@@ -10,7 +10,6 @@
 #include <QSystemTrayIcon>
 #include "ai_bragger.h"
 
-
 /****************************子窗口控件*/
 #include "UIclass/devicelistdialog.h"
 #include "UIclass/commandlsit.h"
@@ -258,7 +257,7 @@ void MainWindow::initDatabase()
 void MainWindow::initUIStatus()
 {
     // 设置默认IP和端口
-    ui->lineEdit_ip->setText("填写实际IP而非0.0.0.0地址");
+    ui->lineEdit_ip->setText("192.168.10.103");
     ui->lineEdit_mqtport->setText("1883");
     ui->lineEdit_httpport->setText("8080");
     // 设置服务器按钮初始状态
@@ -1292,67 +1291,15 @@ void MainWindow::on_pushButton_withdraw_clicked()
 
 void MainWindow::on_pushButton_clicked()
 {
-    static RealtimeSpeechRecognizer *recognizer = nullptr;
-
-    if (!recognizer || !recognizer->isRecognizing()) {
-        // 开始测试
-        qDebug() << "=== 开始语音识别测试 ===";
-        recognizer = new RealtimeSpeechRecognizer(this);
-
-        RealtimeSpeechRecognizer::Config config;
-        config.appId = "318eeb03";
-        config.apiKey = "0731bdabe8a186215737d1edeb15b9ea";
-        config.apiSecret = "MGM2NGNlYWM4NTA3Mzc3ZmY4ODIzZmZh";
-        config.ffmpegPath = QDir::current().filePath("ffmpeg/bin/ffmpeg.exe");
-
-        qDebug() << "FFmpeg路径:" << config.ffmpegPath;
-        qDebug() << "RTSP地址: rtsp://127.0.0.1:8554/audio";
-
-        recognizer->setConfig(config);
-
-        // 连接信号
-        connect(recognizer, &RealtimeSpeechRecognizer::textReceived,
-                [](const QString &text) {
-                    qDebug() << "🔊 识别结果:" << text;
-                });
-
-        connect(recognizer, &RealtimeSpeechRecognizer::errorOccurred,
-                [](const QString &error) {
-                    qDebug() << "💥 错误:" << error;
-                });
-
-        connect(recognizer, &RealtimeSpeechRecognizer::statusMessage,
-                [](const QString &msg) {
-                    qDebug() << "📢 状态:" << msg;
-                });
-
-        QString rtspUrl = "rtsp://192.168.10.103:8554/audio";
-        if (recognizer->startRecognition(rtspUrl)) {
-            qDebug() << "✅ 开始识别命令成功";
-            ui->pushButton->setText("停止测试");
-
-            // 20秒后自动停止
-            QTimer::singleShot(200000, [=]() {
-                if (recognizer && recognizer->isRecognizing()) {
-                    qDebug() << "⏰ 20秒自动停止";
-                    recognizer->stopRecognition();
-                }
-            });
-        } else {
-            qDebug() << "❌ 开始识别失败";
-        }
-    } else {
-        // 停止测试
-        qDebug() << "=== 停止语音识别测试 ===";
-        if (recognizer->isRecognizing()) {
-            recognizer->stopRecognition();
-        }
-        recognizer->deleteLater();
-        recognizer = nullptr;
-        ui->pushButton->setText("开始测试");
-        qDebug() << "🛑 识别已停止";
-    }
-
+    // 创建测试数据
+    AIpost a;
+    a.theme = "旅游体验";
+    a.text = "最近去了一趟黄山，看到了美丽的云海和奇特的松树，山上空气清新，风景如画";
+    a.motion = "积极正面";
+    a.scene = "旅游社交平台分享";
+    a.num = 3;
+    a.commandid = "TEST_001";
+    xunfeiAIprase(a);
 }
 
 #include <QCryptographicHash>
@@ -1381,6 +1328,7 @@ void MainWindow::on_pushButton_livingcontrol_clicked()
 void MainWindow::onOneSecondTimerTimeout()
 {
     checkAndStartProgramSpeechRecognition();
+    checkAndGenerateBragger();
 }
 
 void MainWindow::checkAndStartProgramSpeechRecognition()
@@ -1418,13 +1366,13 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
 
             connect(recognizer, &RealtimeSpeechRecognizer::textReceived,
                     this, [this, commandId, currentSentence, historyText](const QString &text) {
-                        qDebug() << "🔊 节目" << commandId << "收到文本:" << text;
-                        qDebug() << "  当前A:" << *currentSentence << "(长度:" << currentSentence->length() << ")";
-                        qDebug() << "  历史B:" << *historyText << "(长度:" << historyText->length() << ")";
+                        // qDebug() << "🔊 节目" << commandId << "收到文本:" << text;
+                        // qDebug() << "  当前A:" << *currentSentence << "(长度:" << currentSentence->length() << ")";
+                        // qDebug() << "  历史B:" << *historyText << "(长度:" << historyText->length() << ")";
 
                         // 判断是否新句子开始（比A短）
                         if (text.length() < currentSentence->length()) {
-                            qDebug() << "📦 检测到新句子开始，将A拼接到B";
+                        //    qDebug() << "📦 检测到新句子开始，将A拼接到B";
 
                             // 将A拼接到B（如果A不为空）
                             if (!currentSentence->isEmpty()) {
@@ -1432,7 +1380,7 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
                                     *historyText += "，";  // 添加分隔符
                                 }
                                 *historyText += *currentSentence;
-                                qDebug() << "  拼接后B:" << *historyText;
+                           //     qDebug() << "  拼接后B:" << *historyText;
 
                                 // 更新节目信息
                                 updateProgramVoiceText(commandId, *historyText);
@@ -1443,7 +1391,7 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
                         }
                         // 否则是当前句子的修正（比A长或相等）
                         else {
-                            qDebug() << "📝 当前句子修正";
+                      //      qDebug() << "📝 当前句子修正";
                             *currentSentence = text;
 
                             // 实时显示：B + A
@@ -1456,8 +1404,8 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
                             updateProgramVoiceText(commandId, displayText);
                         }
 
-                        qDebug() << "  更新后A:" << *currentSentence;
-                        qDebug() << "  更新后B:" << *historyText;
+                        // qDebug() << "  更新后A:" << *currentSentence;
+                        // qDebug() << "  更新后B:" << *historyText;
                     });
 
             // 新增：连接会话结束信号
@@ -1498,24 +1446,6 @@ void MainWindow::checkAndStartProgramSpeechRecognition()
                         delete currentSentence;
                         delete historyText;
 
-                      /*   qDebug() << "🔄 准备开始新的识别会话...";
-
-                        // 延迟后重新开始识别
-                       QTimer::singleShot(1000, this, [this, commandId]() {
-                            if (p_ai) {
-                                for (ProgramInfo& prog : p_ai->ProgramList) {
-                                    if (prog.commandId == commandId &&
-                                        !prog.rtspurl.isEmpty() &&
-                                        prog.isStreaming) {
-                                        // 清空之前的识别结果，重新开始识别
-                                        prog.voicetotext.clear();
-                                        prog.isListen = true;
-                                        qDebug() << "🔄 重新开始识别节目:" << commandId;
-                                        break;
-                                    }
-                                }
-                            }
-                        });*/
                     });
 
             connect(recognizer, &RealtimeSpeechRecognizer::errorOccurred,
@@ -1581,6 +1511,122 @@ void MainWindow::updateProgramVoiceText(const QString &commandId, const QString 
     for (ProgramInfo& prog : p_ai->ProgramList) {
         if (prog.commandId == commandId) {
             prog.voicetotext = text;
+            break;
+        }
+    }
+}
+
+void MainWindow::xunfeiAIprase(const AIpost &aiPost)
+{
+    QString commandId = aiPost.commandid;
+
+    qDebug() << "=== AI评论生成接口调用 ===";
+    qDebug() << "命令ID:" << commandId;
+
+    // 构建AI提示词
+    QString prompt = QString("请帮我生成%1条用户评论。\n内容参考：%2\n\n要求：\n1. 每条评论都要独特、不重复\n2. 语言自然口语化，像真人写的\n3. 每条评论长度30-100字\n\n重要：请严格按照以下格式回复，每条评论用方括号包裹：\n[第一条评论内容]\n[第二条评论内容]\n[...]")
+                         .arg(aiPost.num)
+                         .arg(aiPost.text);
+
+    // 连接信号槽 - 去掉Qt::UniqueConnection
+    connect(&ai, &SimpleXFAI::responseReceived,
+            this, [this, commandId](const QString &response) {
+                qDebug() << "🎯 收到AI回复，命令ID:" << commandId;
+
+                // 解析评论
+                QStringList comments = parseBracketComments(response);
+
+                if (!comments.isEmpty()) {
+                    QString allComments = comments.join("；");
+                    updateProgramBragger(commandId, allComments);
+                } else {
+                    updateProgramBragger(commandId, response);
+                }
+
+                // 手动断开连接
+                disconnect(&ai, &SimpleXFAI::responseReceived, this, 0);
+            });
+
+    // 错误处理
+    connect(&ai, &SimpleXFAI::errorOccurred,
+            this, [this, commandId](const QString &error) {
+                qDebug() << "💥 AI请求错误，命令ID:" << commandId;
+
+                // 重置生成状态
+                resetProgramGenerating(commandId);
+
+                // 手动断开连接
+                disconnect(&ai, &SimpleXFAI::errorOccurred, this, 0);
+            });
+
+    // 发送请求
+    ai.askQuestion(prompt);
+
+    qDebug() << "=== AI请求已发送 ===";
+}
+void MainWindow::resetProgramGenerating(const QString &commandId)
+{
+    if (!p_ai) return;
+
+    for (ProgramInfo &program : p_ai->ProgramList) {
+        if (program.commandId == commandId) {
+            program.isGenerating = false;
+            qDebug() << "✅ 重置节目" << commandId << "的isGenerating状态";
+            break;
+        }
+    }
+}
+
+QStringList MainWindow::parseBracketComments(const QString &response)
+{
+    QStringList comments;
+    QRegularExpression regex("\\[(.*?)\\]");
+    QRegularExpressionMatchIterator it = regex.globalMatch(response);
+
+    while (it.hasNext()) {
+        QRegularExpressionMatch match = it.next();
+        QString comment = match.captured(1).trimmed();
+        if (!comment.isEmpty()) comments << comment;
+    }
+    return comments;
+}
+
+void MainWindow::updateProgramBragger(const QString &commandId, const QString &comments)
+{
+    if (!p_ai) return;
+    for (ProgramInfo &program : p_ai->ProgramList) {
+        if (program.commandId == commandId) {
+            program.bragger = comments;
+            program.isGenerating = false;
+            break;
+        }
+    }
+}
+void MainWindow::checkAndGenerateBragger()
+{
+    if (!p_ai) return;
+
+    QVector<ProgramInfo>& programList = p_ai->ProgramList;
+    for (ProgramInfo& program : programList) {
+        QString commandId = program.commandId;
+
+        if (!program.voicetotext.isEmpty() &&
+            program.bragger.isEmpty() &&
+            !program.isGenerating && !program.isListen) {
+
+            if (program.voicetotext.trimmed().length() < 15) continue;
+
+            program.isGenerating = true;
+
+            AIpost aiRequest;
+            aiRequest.commandid = commandId;
+            aiRequest.text = program.voicetotext;
+            aiRequest.theme = "甄嬛传";
+            aiRequest.scene = "抖音电视剧解说";
+            aiRequest.motion = "消极的（解说什么玩意儿 听不懂）";
+            aiRequest.num = 3;
+
+            xunfeiAIprase(aiRequest);
             break;
         }
     }

@@ -11,6 +11,7 @@
 #include "UIclass/realtimespeechrecognizer.h"
 #include "./UIclass/livingcontrol.h"
 #include "ai_bragger.h"
+#include "simplexfai.h"
 
 namespace Ui {
 class MainWindow;
@@ -56,7 +57,7 @@ private slots:
 private:
     Ui::MainWindow *ui;
 
-
+    SimpleXFAI ai;
     QString IP;
     QString MQTT_PORT;
     QString HTTP_PORT;
@@ -104,5 +105,10 @@ private:
     void switchToView(QWidget *view);
 
     void updateProgramVoiceText(const QString &commandId, const QString &text);
+    void xunfeiAIprase(const AIpost &aiPost);
+    void updateProgramBragger(const QString &commandId, const QString &comments);
+    QStringList parseBracketComments(const QString &response);
+    void checkAndGenerateBragger();
+    void resetProgramGenerating(const QString &commandId);
 };
 #endif // MAINWINDOW_H

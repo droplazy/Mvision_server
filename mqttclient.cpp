@@ -149,6 +149,8 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
         programInfo.programName = action + subAction + "_" + commandId;
         programInfo.rtspurl ="";
         programInfo.isListen = false;
+        programInfo.isListen = false;
+
         // 添加所有相关的serialNumber到deviceList
         for (const QJsonValue &serialNumber : std::as_const(serial_numbers)) {
             QString deviceSerial = serialNumber.toString().trimmed();
