@@ -29,6 +29,7 @@ SOURCES += \
     UIclass/withdraw.cpp \
     ai_bragger.cpp \
     databasemanager.cpp \
+    deepseekai.cpp \
     emailsender.cpp \
     httpserver.cpp \
     loghandler.cpp \
@@ -61,6 +62,7 @@ HEADERS += \
     UIclass/withdraw.h \
     ai_bragger.h \
     databasemanager.h \
+    deepseekai.h \
     emailsender.h \
     httpserver.h \
     loghandler.h \

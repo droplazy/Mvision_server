@@ -618,6 +618,8 @@ void HttpServer::onReadyRead() {
         QString clientIp = clientSocket->peerAddress().toString();
         // 读取请求
         QByteArray request = clientSocket->readAll();
+
+       // qDebug() << "收到的原文 : " << request;
         // 发送请求信息信号（在完整处理之前）
         QString reqInfo = QString("IP: %1").arg(clientIp);
         emit sendreqInfo(reqInfo);
@@ -938,7 +940,9 @@ void HttpServer::onDeviceUpdata(DeviceStatus updatedDevice)
             deviceVector[i].hardversion = updatedDevice.hardversion;
             deviceVector[i].current_end = updatedDevice.current_end;
             deviceVector[i].current_start = updatedDevice.current_start;
+            deviceVector[i].currentSubAction = updatedDevice.currentSubAction;
             deviceVector[i].currentAction = updatedDevice.currentAction;
+
             deviceVector[i].ip = updatedDevice.ip;
             deviceVector[i].lastHeartbeat = updatedDevice.lastHeartbeat;
             deviceVector[i].trafficStatistics = updatedDevice.trafficStatistics;
@@ -1662,7 +1666,14 @@ void HttpServer::handleGetPersonInfo(QTcpSocket *clientSocket, const QUrlQuery &
     json["timestamp"] = "2025-11-25T12:00:00Z";
 
     QJsonObject data;
-    data["platform"] = "AAA";
+
+    // platform改为数组
+    QJsonArray platformArray;
+    platformArray.append("AAA");
+    platformArray.append("BBB");
+    platformArray.append("CCC");
+
+    data["platform"] = platformArray;  // 数组格式
     data["keeptime"] = "65000";
     data["earned"] = "5.00￥";
     data["username"] = username;  // 返回传入的用户名
@@ -1670,7 +1681,6 @@ void HttpServer::handleGetPersonInfo(QTcpSocket *clientSocket, const QUrlQuery &
     json["data"] = data;
 
     sendJsonResponse(clientSocket, 200, json);
-
 }
 void HttpServer::handleGetTaskSta(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
@@ -3073,8 +3083,12 @@ void HttpServer::sendJsonResponse(QTcpSocket *clientSocket, int statusCode, cons
     response += QString("Content-Length: %1\r\n")
             .arg(responseData.size());
     response += "Connection: close\r\n";
-    response += "Access-Control-Allow-Origin: *\r\n";
-    response += "\r\n";
+    // 必须的CORS头部
+    response.append("Access-Control-Allow-Origin: *\r\n");
+    response.append("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n");
+    response.append("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With\r\n");
+    response.append("Access-Control-Max-Age: 86400\r\n");
+    response.append("Access-Control-Allow-Credentials: true\r\n");    response += "\r\n";
     response += QString::fromUtf8(responseData);
 
     clientSocket->write(response.toUtf8());

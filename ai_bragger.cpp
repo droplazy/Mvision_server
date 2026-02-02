@@ -31,7 +31,9 @@ void AI_bragger::run()
     while(!isInterruptionRequested()) {
         checkProgramList();
         checkAndDistributeBraggers();
-        checkCoolDown();  // 添加冷却检查
+        checkCoolDown();  // 冷却检查
+        checkDeviceStatusForPrograms();// 设备状态检查
+
         QThread::sleep(1);
     }
 
@@ -79,9 +81,10 @@ void AI_bragger::onProgramInfoGenerated(const ProgramInfo &programInfo)
     newProgram.isGenerating = false;
     newProgram.isCoolingDown = false;  // 初始不在冷却中
     newProgram.cooldownEndTime = QDateTime();  // 初始化为无效时间
-
+    newProgram.checkTime =  QDateTime::currentDateTime();;
     qDebug() << "设置后startTime:" << newProgram.startTime.toString("yyyy-MM-dd hh:mm:ss");
     qDebug() << "设置后isStreaming:" << newProgram.isStreaming;
+    qDebug() << "命令原文:" << newProgram.cmdtext;
 
     // 添加到容器
     ProgramList.append(newProgram);
@@ -112,8 +115,8 @@ void AI_bragger::checkProgramList()
 
             qDebug() << QString("  空跑中，已等待: %1秒").arg(elapsedSeconds);
 
-            if(elapsedSeconds >= 5) {  // 已空跑30秒
-                qDebug() << "  已满30秒，准备推流...";
+            if(elapsedSeconds >= 120) {  // 已空跑30秒
+                qDebug() << "  已满120秒，准备推流...";
 
                 if(!program.deviceList.isEmpty()) {
                     int randomIndex = QRandomGenerator::global()->bounded(program.deviceList.size());
@@ -121,9 +124,9 @@ void AI_bragger::checkProgramList()
 
                     // 生成rtsp URL
                     QString suffix = generateRandomSuffix();
-                    QString rtspUrl = QString("rtsp://%1:%2/audio")
+                    QString rtspUrl = QString("rtsp://%1:%2/%3")
                                           .arg(host_ip)
-                                          .arg(host_port);//.arg(suffix);
+                                          .arg(host_port).arg(suffix);
 
 
                     qDebug() << QString("  生成的RTSP URL: %1").arg(rtspUrl);
@@ -149,6 +152,7 @@ void AI_bragger::checkProgramList()
 
                     // 发送信号
                     emit sCommadSend(topic, payload);
+                    program.streamDev = selectedDevice;
 
                     qDebug() << "  >>> 发送推流指令";
                     qDebug() << "  主题:" << topic;
@@ -173,7 +177,7 @@ void AI_bragger::checkAndDistributeBraggers()
 
             qDebug() << "🎯 满足分发条件，节目:" << program.commandId;
 
-            // 计算结束时间（当前时间+10分钟）
+            // 计算结束时间（当前时间+10分钟）  执行时间
             QString endTime = currentTime.addSecs(600).toString("hh:mm:ss");
             QString startTime = currentTime.toString("hh:mm:ss");
 
@@ -209,7 +213,7 @@ void AI_bragger::checkAndDistributeBraggers()
                         QString topic = QString("Device/Dispatch/%1").arg(deviceSerial);
 
                         // 发送信号
-                        emit sCommadSend(topic, payload);
+                        //emit sCommadSend(topic, payload);
 
                         qDebug() << "  📤 发送评论到设备" << deviceSerial;
                         qDebug() << "    评论切片:" << braggerSlice.left(50) << "...";
@@ -221,7 +225,7 @@ void AI_bragger::checkAndDistributeBraggers()
 
             // 设置冷却状态
             program.isCoolingDown = true;
-            program.cooldownEndTime = currentTime.addSecs(10); // 1分钟后结束冷却
+            program.cooldownEndTime = currentTime.addSecs(cooldownTimer); // 1分钟后结束冷却
 
             // 设置其他状态
             program.isGenerating = true;
@@ -299,6 +303,175 @@ void AI_bragger::resetAIState()
             qDebug() << "  节目" << program.commandId << "AI状态已重置，可以继续下一轮";
             // 分发完成后，清空语音文本和AI评论
 
+        }
+    }
+}
+void AI_bragger::onProgramEnded(const QString &commandId)
+{
+    qDebug() << "🛑 收到节目结束请求，commandId:" << commandId;
+
+    // 查找要结束的节目
+    for (int i = 0; i < ProgramList.size(); ++i) {
+        if (ProgramList[i].commandId == commandId) {
+            ProgramInfo &program = ProgramList[i];
+
+            qDebug() << "  找到节目:" << program.programName;
+            qDebug() << "  当前状态:";
+            qDebug() << "    isStreaming:" << program.isStreaming;
+            qDebug() << "    rtspurl:" << program.rtspurl;
+            qDebug() << "    设备数量:" << program.deviceList.size();
+
+            // 如果正在推流，发送停止推流的指令
+            if (!program.rtspurl.isEmpty() && program.isStreaming) {
+                qDebug() << "  正在停止推流...";
+
+                // 为每个设备发送停止推流指令
+                for (const QString &device : program.deviceList) {
+                    if (!device.isEmpty()) {
+                        QJsonObject payloadObj;
+                        QJsonObject dataObj;
+                        dataObj["url"] = program.rtspurl;
+                        dataObj["switch"] = "off";  // 关闭推流
+                        payloadObj["data"] = dataObj;
+                        payloadObj["messageType"] = "stream";
+                        payloadObj["password"] = "securePassword123";
+                        payloadObj["timestamp"] = getCurrentTimestamp();
+                        payloadObj["username"] = "user123";
+
+                        QJsonDocument doc(payloadObj);
+                        QString payload = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+                        QString topic = QString("Device/Dispatch/%1").arg(device);
+
+                        // 发送停止推流信号
+                        emit sCommadSend(topic, payload);
+                        qDebug() << "    发送停止推流到设备:" << device;
+                    }
+                }
+            }
+
+            // 清理评论相关的指令（如果需要）
+            if (!program.bragger.isEmpty()) {
+                qDebug() << "  清理评论相关数据...";
+                // 这里可以发送清除评论的指令，如果需要的话
+            }
+
+            // 从容器的中移除该节目
+            ProgramList.removeAt(i);
+
+            qDebug() << "✅ 节目" << commandId << "已成功结束并移除";
+            qDebug() << "  剩余节目数量:" << ProgramList.size();
+
+            return;
+        }
+    }
+
+    qDebug() << "⚠️ 未找到commandId为" << commandId << "的节目";
+}
+void AI_bragger::setDeviceVector(QVector<DeviceStatus>* vector) {
+    deviceVector = vector;
+    if (deviceVector) {
+        updateDeviceIndexMap();
+    }
+}
+void AI_bragger::updateDeviceIndexMap()
+{
+    deviceIndexMap.clear();
+    if (!deviceVector) return;
+
+    for (int i = 0; i < deviceVector->size(); ++i) {
+        const auto& device = deviceVector->at(i);
+        deviceIndexMap[device.serialNumber] = i;
+    }
+
+    qDebug() << "设备索引映射已更新，共" << deviceIndexMap.size() << "个设备";
+}
+void AI_bragger::checkDeviceStatusForPrograms()
+{
+    if (!deviceVector || ProgramList.isEmpty()) {
+        return;
+    }
+
+    QDateTime now = QDateTime::currentDateTime();
+
+    for (auto& program : ProgramList) {
+        // 跳过没有设备列表的节目
+        if (program.deviceList.isEmpty()) continue;
+
+        // 检查该节目是否需要检查（默认60秒检查一次）
+        if (program.checkTime.isValid() && program.checkTime.secsTo(now) < 180) {
+            continue; // 距离上次检查不到60秒，跳过
+        }
+
+        // 更新该节目的检查时间
+        program.checkTime = now;
+
+        qDebug() << "检查节目:" << program.programName
+                 << "命令ID:" << program.commandId
+                 << "时间:" << now.toString("hh:mm:ss");
+
+        for (const QString& deviceId : program.deviceList) {
+            if (!deviceIndexMap.contains(deviceId)) {
+                QString warning = QString("节目[%1] 设备[%2]未在设备列表中找到")
+                                      .arg(program.programName)
+                                      .arg(deviceId);
+                qDebug() << warning;
+                continue;
+            }
+
+            int index = deviceIndexMap[deviceId];
+            const auto& device = deviceVector->at(index);
+
+            // 检查离线状态
+            if (device.status == "离线") {
+                QString warning = QString("节目[%1] 设备[%2]离线")
+                                      .arg(program.programName)
+                                      .arg(deviceId);
+                qDebug() << warning;
+            }
+            // 检查异常动作
+            else if (device.currentAction == "未知" || device.currentAction == "空闲") {
+                QString warning = QString("节目[%1] 设备[%2]异常动作: %3")
+                                      .arg(program.programName)
+                                      .arg(deviceId)
+                                      .arg(device.currentAction);
+                qDebug() << warning;
+
+                // 补发命令
+                QString payload = program.cmdtext;
+                QString topic = QString("Device/Dispatch/%1").arg(deviceId);
+                emit sCommadSend(topic, payload);
+                qDebug() << "补发命令:" << topic << "\n" << payload;
+                qDebug() << "检查推流设备:" << deviceId << "<------>" << program.streamDev;
+
+                // 如果是推流设备，补发推流命令
+                if(deviceId == program.streamDev)
+                {
+                    qDebug() << "检测到异常设备为推流设备" << deviceId;
+                    qDebug() << "需要补发一条推流命令";
+
+                    // 创建JSON payload
+                    QJsonObject payloadObj;
+                    QJsonObject dataObj;
+                    dataObj["url"] = program.rtspurl;
+                    dataObj["switch"] = "on";
+                    payloadObj["data"] = dataObj;
+                    payloadObj["messageType"] = "stream";
+                    payloadObj["password"] = "securePassword123";
+                    payloadObj["timestamp"] = getCurrentTimestamp();
+                    payloadObj["username"] = "user123";
+
+                    QJsonDocument doc(payloadObj);
+                    QString streamPayload = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+                    QString streamTopic = QString("Device/Dispatch/%1").arg(deviceId);
+
+                    // 发送信号
+                    emit sCommadSend(streamTopic, streamPayload);
+
+                    qDebug() << ">>> 发送推流指令";
+                    qDebug() << "主题:" << streamTopic;
+                    qDebug() << "RTSP URL:" << program.rtspurl;
+                }
+            }
         }
     }
 }

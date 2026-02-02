@@ -35,7 +35,7 @@ RealtimeSpeechRecognizer::RealtimeSpeechRecognizer(QObject *parent)
             this, &RealtimeSpeechRecognizer::onSendTimerTimeout);
 
     // 配置超时计时器（30秒）
-    m_timeoutTimer->setInterval(30000);  // 30秒
+    m_timeoutTimer->setInterval(60000);  // 30秒
     m_timeoutTimer->setSingleShot(true);  // 单次触发
     connect(m_timeoutTimer, &QTimer::timeout,
             this, &RealtimeSpeechRecognizer::onTimeout);
@@ -107,11 +107,11 @@ void RealtimeSpeechRecognizer::stopSendingAudio()
 }
 bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
 {
-    qDebug() << "=== startRecognition 开始 ===";
-    qDebug() << "RTSP URL:" << rtspUrl;
-    qDebug() << "FFmpeg路径:" << m_config.ffmpegPath;
-    qDebug() << "API Key长度:" << m_config.apiKey.length();
-    qDebug() << "API Secret长度:" << m_config.apiSecret.length();
+    // qDebug() << "=== startRecognition 开始 ===";
+    // qDebug() << "RTSP URL:" << rtspUrl;
+    // qDebug() << "FFmpeg路径:" << m_config.ffmpegPath;
+    // qDebug() << "API Key长度:" << m_config.apiKey.length();
+    // qDebug() << "API Secret长度:" << m_config.apiSecret.length();
 
     m_lastRtspUrl = rtspUrl;  // 保存URL
     m_reconnectCount = 0;     // 重置重连计数
@@ -131,9 +131,9 @@ bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
     }
 
     // 检查ffmpeg文件是否存在
-    qDebug() << "检查FFmpeg文件:" << m_config.ffmpegPath;
+  //  qDebug() << "检查FFmpeg文件:" << m_config.ffmpegPath;
     bool ffmpegExists = QFile::exists(m_config.ffmpegPath);
-    qDebug() << "FFmpeg文件存在:" << ffmpegExists;
+ //   qDebug() << "FFmpeg文件存在:" << ffmpegExists;
 
     if (!ffmpegExists) {
         qDebug() << "错误: FFmpeg不存在";
@@ -157,16 +157,16 @@ bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
          << "-f" << "s16le"
          << "pipe:1";
 
-    qDebug() << "FFmpeg命令:";
-    qDebug() << "  程序:" << m_config.ffmpegPath;
-    qDebug() << "  参数:" << args;
+    // qDebug() << "FFmpeg命令:";
+    // qDebug() << "  程序:" << m_config.ffmpegPath;
+    // qDebug() << "  参数:" << args;
 
-    qDebug() << "启动FFmpeg进程...";
+ //   qDebug() << "启动FFmpeg进程...";
     m_ffmpegProcess->start(m_config.ffmpegPath, args);
 
-    qDebug() << "等待FFmpeg启动...";
+  //  qDebug() << "等待FFmpeg启动...";
     bool started = m_ffmpegProcess->waitForStarted(3000);
-    qDebug() << "FFmpeg启动结果:" << started;
+ //   qDebug() << "FFmpeg启动结果:" << started;
 
     if (!started) {
         qDebug() << "错误: FFmpeg启动失败";
@@ -180,10 +180,10 @@ bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
         return false;
     }
 
-    qDebug() << "FFmpeg启动成功，PID:" << m_ffmpegProcess->processId();
+ //   qDebug() << "FFmpeg启动成功，PID:" << m_ffmpegProcess->processId();
 
     // 2. 连接WebSocket
-    qDebug() << "开始连接WebSocket...";
+ //   qDebug() << "开始连接WebSocket...";
     if (!initWebSocket()) {
         qDebug() << "错误: 无法连接WebSocket";
         qDebug() << "终止FFmpeg进程...";
@@ -200,8 +200,8 @@ bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
     m_reconnectCount = 0;
     // 启动30秒超时计时器
     m_timeoutTimer->start();
-    qDebug() << "⏱️ 启动30秒超时计时器";
-    qDebug() << "=== startRecognition 成功 ===";
+    // qDebug() << "⏱️ 启动30秒超时计时器";
+    // qDebug() << "=== startRecognition 成功 ===";
     emit statusMessage("开始识别...");
     return true;
 }
@@ -496,10 +496,14 @@ void RealtimeSpeechRecognizer::onSendTimerTimeout()
         static int emptyCount = 0;
         emptyCount++;
 
-        if (emptyCount > 300) {  // 连续3次没有数据
-            qDebug() << "🔇 连续" << emptyCount << "次无数据，发送静音帧保持连接";
+        if (emptyCount > 500) {  // 连续3次没有数据
+            qDebug() << "🔇 连续" << emptyCount << "次无数据 手动停止识别";
             QByteArray silence(m_frameSize, 0);
-            sendAudioFrame(silence);
+          //  sendAudioFrame(silence);
+         //   sendEndFrame();
+         //   qDebug() << "⏰ 超时后未收到服务器响应，强制结束";
+            emit sessionCompleted();
+            stopRecognition();
         }
     }
 }
@@ -514,7 +518,7 @@ void RealtimeSpeechRecognizer::sendStartFrame()
     business["language"] = "zh_cn";
     business["domain"] = "iat";
     business["accent"] = "mandarin";
-    business["vad_eos"] = 2000;//停顿多久结束
+    business["vad_eos"] = 10000;//停顿多久结束
     business["ptt"] = 1;
     business["dwa"] = "wpgs";  // 动态修正
 

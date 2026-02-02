@@ -9,7 +9,6 @@
 #include <QCloseEvent>
 #include <QSystemTrayIcon>
 #include "ai_bragger.h"
-
 /****************************子窗口控件*/
 #include "UIclass/devicelistdialog.h"
 #include "UIclass/commandlsit.h"
@@ -455,8 +454,10 @@ void MainWindow::on_pushButton_openmqtt_clicked()
             if (p_mqtt_cli) {
                 connect(p_mqtt_cli, &mqttclient::programInfoGenerated,p_ai, &AI_bragger::onProgramInfoGenerated);
                 connect(p_ai, &AI_bragger::sCommadSend,p_mqtt_cli, &mqttclient::devcommandsend);
-                p_ai->sethostpath(ip,"8554");
+                connect(p_mqtt_cli, &mqttclient::programEnded,p_ai, &AI_bragger::onProgramEnded);
 
+                p_ai->sethostpath(ip,"8554");
+                p_ai->setDeviceVector(&p_http->deviceVector);
 
                 qDebug() << "成功连接 programInfoGenerated 信号";
             } else {
@@ -469,10 +470,13 @@ void MainWindow::on_pushButton_openmqtt_clicked()
                                           "• 地址：%1:%3")
                                       .arg(ip).arg(httpPort).arg(mqttPort);
             QMessageBox::information(this, "服务器启动成功", successInfo);
+
+
         } else {
             // 有服务启动失败
             QMessageBox::critical(this, "服务器启动失败",
                                   QString("部分服务器启动失败：\n\n%1").arg(errorMessages));
+
         }
 
     } else {
@@ -1266,7 +1270,8 @@ void MainWindow::on_pushButton_clicked()
     a.scene = "旅游社交平台分享";
     a.num = 3;
     a.commandid = "TEST_001";
-    xunfeiAIprase(a);
+  //  xunfeiAIprase(a);
+    deepseekAIprase(a);
 }
 
 #include <QCryptographicHash>
@@ -1455,12 +1460,89 @@ void MainWindow::updateProgramVoiceText(const QString &commandId, const QString 
 
     for (ProgramInfo& prog : p_ai->ProgramList) {
         if (prog.commandId == commandId) {
+            // 获取当前时间
+            QString timestamp = QDateTime::currentDateTime().toString("[hh:mm:ss]");
+
+            // 将新内容追加到历史记录
+            prog.historyVoice += timestamp + "\n" + text + "\n\n";
+
+            // 更新当前语音文本
             prog.voicetotext = text;
+
             break;
         }
     }
 }
+void MainWindow::deepseekAIprase(const AIpost &aiPost)
+{
+    QString commandId = aiPost.commandid;
 
+    qDebug() << "DeepSeek AI生成请求 - 节目:" << commandId;
+
+    // 使用相同的提示词构建逻辑
+    QString prompt;
+    prompt = "请帮我生成用户评论：\n\n";
+
+    // 添加主题要求
+    if (!aiPost.theme.isEmpty()) {
+        prompt += QString("【主题要求】%1\n").arg(aiPost.theme);
+    }
+
+    // 添加场景要求
+    if (!aiPost.scene.isEmpty()) {
+        prompt += QString("【使用场景】%1\n").arg(aiPost.scene);
+    }
+
+    // 添加情绪要求
+    if (!aiPost.motion.isEmpty()) {
+        prompt += QString("【情感基调】%1\n").arg(aiPost.motion);
+    }
+    // 添加情绪要求
+    if (!aiPost.guide.isEmpty()) {
+        prompt += QString("【重要参考】%1\n").arg(aiPost.guide);
+    }
+    // 添加内容参考
+    prompt += QString("【视频内容 由声音识别得到】%1\n\n").arg(aiPost.text);
+
+    // 添加数量要求
+    prompt += QString("【生成数量】%1条\n\n").arg(aiPost.num);
+
+    // 通用要求
+    prompt += "【具体要求】\n";
+    prompt += "1. 每条评论都要独特、不重复\n";
+    prompt += "2. 语言自然口语化，像真人写的\n";
+    prompt += "3. 每条评论长度2-3字\n";
+    prompt += "4. 符合指定的主题、场景和情感基调\n\n";
+    prompt += "5. 无法理解文本内容的时候 可以用啊“👍👍👍” “666加油啊😁😁😁”“❤❤😊😊🌹”等回复\n\n";
+    prompt += "6. 严禁发送标点符号\n\n";
+    prompt += "7. 可以加emotion\n\n";
+    prompt += "8. 结合我给你的参数对自己生成的评论打个分 回复格式 score=7   满分10分\n\n";
+
+    // 格式要求
+    prompt += "【回复格式】\n";
+    prompt += "请严格按照以下格式回复，每条评论用方括号包裹：\n";
+    prompt += "[第一条评论内容]\n";
+    prompt += "[第二条评论内容]\n";
+    prompt += "[...]\n";
+    connect(&deepseekAI, &DeepSeekAI::responseReceived,
+            this, [this, commandId](const QString &response) {
+                qDebug() << "收到DeepSeek AI回复，节目:" << commandId;
+             //    qDebug() << "收到DeepSeek AI回复，:" << response;
+
+                updateProgramBragger(commandId, response);
+                disconnect(&deepseekAI, &DeepSeekAI::responseReceived, this, 0);
+            });
+
+    connect(&deepseekAI, &DeepSeekAI::errorOccurred,
+            this, [this, commandId](const QString &error) {
+                qDebug() << "DeepSeek AI请求错误，节目:" << commandId << "错误:" << error;
+                resetProgramGenerating(commandId);
+            });
+
+    // 发送请求
+    qDebug() << "DeepSeek AI post" << prompt;
+    deepseekAI.askQuestion(prompt);
+}
 void MainWindow::xunfeiAIprase(const AIpost &aiPost)
 {
     QString commandId = aiPost.commandid;
@@ -1499,7 +1581,7 @@ void MainWindow::xunfeiAIprase(const AIpost &aiPost)
     }
     // 添加情绪要求
     if (!aiPost.guide.isEmpty()) {
-        prompt += QString("【其他参考】%1\n").arg(aiPost.guide);
+        prompt += QString("【重要参考】%1\n").arg(aiPost.guide);
     }
     // 添加内容参考
     prompt += QString("【视频内容】%1\n\n").arg(aiPost.text);
@@ -1511,8 +1593,11 @@ void MainWindow::xunfeiAIprase(const AIpost &aiPost)
     prompt += "【具体要求】\n";
     prompt += "1. 每条评论都要独特、不重复\n";
     prompt += "2. 语言自然口语化，像真人写的\n";
-    prompt += "3. 每条评论长度8-20字\n";
+    prompt += "3. 每条评论长度2-3字\n";
     prompt += "4. 符合指定的主题、场景和情感基调\n\n";
+    prompt += "5. 无法理解文本内容的时候 可以用啊“👍👍👍” “666加油啊😁😁😁”“❤❤😊😊🌹”等回复\n\n";
+    prompt += "6. 严禁发送标点符号\n\n";
+    prompt += "7. 可以加emotion\n\n";
 
     // 格式要求
     prompt += "【回复格式】\n";
@@ -1585,8 +1670,11 @@ void MainWindow::updateProgramBragger(const QString &commandId, const QString &c
     if (!p_ai) return;
     for (ProgramInfo &program : p_ai->ProgramList) {
         if (program.commandId == commandId) {
+                        QString timestamp = QDateTime::currentDateTime().toString("[hh:mm:ss]");
             program.bragger = comments;
             program.isGenerating = false;
+            program.historyAI += timestamp + "\n" + comments + "\n\n";
+
             break;
         }
     }
@@ -1658,7 +1746,8 @@ void MainWindow::checkAndGenerateBragger()
             qDebug() << QString("  设备数: %1, 主题: %2").arg(aiRequest.num).arg(aiRequest.theme);
 #endif
 
-            xunfeiAIprase(aiRequest);
+           // xunfeiAIprase(aiRequest);
+            deepseekAIprase(aiRequest);
             break;
         }
     }

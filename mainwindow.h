@@ -12,6 +12,7 @@
 #include "./UIclass/livingcontrol.h"
 #include "ai_bragger.h"
 #include "simplexfai.h"
+#include "DeepSeekAI.h"
 
 namespace Ui {
 class MainWindow;
@@ -56,8 +57,10 @@ private slots:
     void checkAndStartProgramSpeechRecognition();
 private:
     Ui::MainWindow *ui;
-
+/******/
+    DeepSeekAI deepseekAI;
     SimpleXFAI ai;
+/*****/
     QString IP;
     QString MQTT_PORT;
     QString HTTP_PORT;
@@ -110,5 +113,6 @@ private:
     QStringList parseBracketComments(const QString &response);
     void checkAndGenerateBragger();
     void resetProgramGenerating(const QString &commandId);
+    void deepseekAIprase(const AIpost &aiPost);
 };
 #endif // MAINWINDOW_H

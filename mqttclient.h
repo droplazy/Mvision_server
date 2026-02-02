@@ -65,7 +65,7 @@ signals:
     void mqttclientconnted(bool);
     void applogginstatus(QString commid,bool);
      void programInfoGenerated(const ProgramInfo &programInfo);
-
+    void programEnded(QString commid);
 };
 
 #endif // MQTTCLIENT_H

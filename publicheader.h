@@ -56,6 +56,8 @@ struct DeviceStatus {
     QString status;                // 设备状态
     QString location;              // 设备所在位置
     QString currentAction;         // 当前动作
+    QString currentSubAction;         // 当前zi动作
+
     QString trafficStatistics;     // 已用流量
     QString lastHeartbeat;         // 最后心跳时间
 
@@ -445,6 +447,12 @@ struct ProgramInfo
     bool isStreaming;     // 是否正在推流
     bool isListen;     // 是否正在推流
     bool isGenerating;     //AI
+    QString streamDev;
+    QString historyVoice;
+    QString historyAI;
+
+    QString cmdtext;
+
 
     QString voicetotext;
     QString bragger;
@@ -456,6 +464,9 @@ struct ProgramInfo
 
     // 添加冷却时间相关字段
     QDateTime cooldownEndTime;  // 冷却结束时间
+    // 添加冷却时间相关字段
+    QDateTime checkTime;  // 冷却结束时间
+
     bool isCoolingDown;         // 是否在冷却中
 };
 struct AIpost

@@ -139,32 +139,7 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     qDebug() << "指令ID:" << commandId;
     qDebug() << "目标设备数量:" << serial_numbers.size();
 
-    // 检查sub_action是否为"直播"
-    if (subAction == "直播") {
-        qDebug() << "检测到直播指令，生成ProgramInfo结构体";
 
-        // 生成ProgramInfo结构体
-        ProgramInfo programInfo;
-        programInfo.commandId = commandId;
-        programInfo.programName = action + subAction + "_" + commandId;
-        programInfo.rtspurl ="";
-        programInfo.isListen = false;
-        programInfo.isListen = false;
-
-        // 添加所有相关的serialNumber到deviceList
-        for (const QJsonValue &serialNumber : std::as_const(serial_numbers)) {
-            QString deviceSerial = serialNumber.toString().trimmed();
-            if (!deviceSerial.isEmpty()) {
-                programInfo.deviceList.append(deviceSerial);
-            }
-        }
-
-        qDebug() << "生成的节目名称:" << programInfo.programName;
-        qDebug() << "包含设备数量:" << programInfo.deviceList.size();
-
-        // 发射信号
-        emit programInfoGenerated(programInfo);
-    }
 
     // 验证指令是否存在（可选）
     if (dbManager) {
@@ -229,7 +204,32 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
         // 短暂延迟，避免发送过快
         QThread::msleep(10);
     }
+    // 检查sub_action是否为"直播"
+    if (subAction == "直播") {
+        qDebug() << "检测到直播指令，生成ProgramInfo结构体";
 
+        // 生成ProgramInfo结构体
+        ProgramInfo programInfo;
+        programInfo.commandId = commandId;
+        programInfo.programName = action + subAction + "_" + commandId;
+        programInfo.rtspurl ="";
+        programInfo.isListen = false;
+        programInfo.cmdtext = QString::fromUtf8(message);
+
+        // 添加所有相关的serialNumber到deviceList
+        for (const QJsonValue &serialNumber : std::as_const(serial_numbers)) {
+            QString deviceSerial = serialNumber.toString().trimmed();
+            if (!deviceSerial.isEmpty()) {
+                programInfo.deviceList.append(deviceSerial);
+            }
+        }
+
+        qDebug() << "生成的节目名称:" << programInfo.programName;
+        qDebug() << "包含设备数量:" << programInfo.deviceList.size();
+
+        // 发射信号
+        emit programInfoGenerated(programInfo);
+    }
     qDebug() << "指令转发完成，成功发送到" << sentCount << "个设备";
     // 可选：更新指令状态为发送中
     if (dbManager && sentCount > 0) {
@@ -409,6 +409,8 @@ void mqttclient::onStateChanged(QMqttClient::ClientState state)
     } else {
         qDebug() << "MQTT client state changed:" << state;
     }
+
+    qDebug() << "12332123" << state;
 }
 
 DeviceStatus mqttclient::parseJsonHeartBeat(const QJsonObject& jsonObj)
@@ -417,6 +419,8 @@ DeviceStatus mqttclient::parseJsonHeartBeat(const QJsonObject& jsonObj)
     QString status = jsonObj["messageType"].toString();
     QString location = "";
     QString currentAction = jsonObj["data"]["current_action"]["name"].toString();
+    QString currentSubAction = jsonObj["data"]["current_action"]["subname"].toString();
+
     QString current_start = jsonObj["data"]["current_action"]["start_time"].toString();
     QString current_end = jsonObj["data"]["current_action"]["end_time"].toString();
     QString next_action = jsonObj["data"]["next_action"]["name"].toString();
@@ -513,7 +517,7 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
            SQL_CommandHistory cmd =  dbManager->getCommandById(commandId);
             qDebug() << "查看一下remark:" << cmd.remark;
 
-   //        if()
+
 
            if(cmd.remark.contains("MARK:LOGGIN_APP:MARK") )
             {
@@ -550,9 +554,14 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
             // 成功任务增加
             bool taskIncremented = dbManager->incrementCommandCompletedTasks(commandId);
             if (taskIncremented) {
-                qDebug() << "指令成功任务数增加成功";
+                SQL_CommandHistory cmd =  dbManager->getCommandById(commandId);
 
-
+                qDebug() << "指令成功任务数增加成功"  << cmd.commandId << cmd.status;
+                if(cmd.sub_action == "直播" && cmd.status =="success")
+                {
+                    qDebug() << "节目" << cmd.commandId <<"结束" <<cmd.status;
+                    emit programEnded(cmd.commandId);
+                }
             } else {
                 qDebug() << "指令成功任务数增加失败";
             }
@@ -560,14 +569,19 @@ void mqttclient::handleApplicationStatus(const QJsonObject &jsonObj)
             // 失败任务增加
             bool failedIncremented = dbManager->incrementCommandFailedTasks(commandId);
             if (failedIncremented) {
-                qDebug() << "指令失败任务数增加成功";
                 SQL_CommandHistory cmd =  dbManager->getCommandById(commandId);
+
+                qDebug() << "指令失败任务数增加成功"  << cmd.commandId << cmd.status;;
                 if(cmd.remark.contains("MARK:LOGGIN_APP:MARK") || cmd.remark.contains("MARK:CRCODE_LOGGIN:MARK") )
                 {
                     emit applogginstatus(commandId,false);
 
                 }
-
+                if(cmd.sub_action == "直播" && cmd.status =="failed")
+                {
+                    qDebug() << "节目" << cmd.commandId <<"结束" <<cmd.status;
+                    emit programEnded(cmd.commandId);
+                }
 
                 if(status == "unlogin")
                 {
