@@ -19,7 +19,7 @@ HttpServer::
 HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
     //handleCreateTestOrdersSimple();
-    handleCreateProductDebug();
+    //handleCreateProductDebug();
     initVerificationSystem();//邮箱验证码生成
     generateTextData();
     createDownloadDirectoryIfNeeded();
@@ -619,7 +619,7 @@ void HttpServer::onReadyRead() {
         // 读取请求
         QByteArray request = clientSocket->readAll();
 
-       // qDebug() << "收到的原文 : " << request;
+        qDebug() << "收到的原文 : " << request;
         // 发送请求信息信号（在完整处理之前）
         QString reqInfo = QString("IP: %1").arg(clientIp);
         emit sendreqInfo(reqInfo);
@@ -2415,14 +2415,51 @@ void HttpServer::handleGetAuthPromote(QTcpSocket *clientSocket, const QUrlQuery 
 }
 void HttpServer::handleGetWithDraw(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
+    qDebug() << "[GET  query =" << query.toString();
+    QString username = query.queryItemValue("username");
+    qDebug() << "请求用户名: " << username;
+
+    // 检查参数是否为空
+    if (username.isEmpty()) {
+        QJsonObject errorJson;
+        errorJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        errorJson["error"] = "参数错误";
+        errorJson["message"] = "必须传递username参数";
+        sendJsonResponse(clientSocket, 400, errorJson);
+        return;
+    }
+
     // 从数据库获取提现记录列表
     QList<SQL_WithdrawRecord> withdrawRecords;
+
     if (dbManager) {
-        withdrawRecords = dbManager->getAllWithdrawRecords();
+        if (username == "ALL") {
+            // 如果username为ALL，获取全部记录
+            withdrawRecords = dbManager->getAllWithdrawRecords();
+        } else {
+            // 检查用户是否存在
+            SQL_MallUser user = dbManager->getMallUserByUsername(username);
+
+            // 判断用户是否存在（通过检查用户名是否为空）
+            if (user.username.isEmpty()) {
+                // 用户不存在，返回错误
+                QJsonObject errorJson;
+                errorJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+                errorJson["error"] = "用户不存在";
+                errorJson["message"] = QString("用户名 '%1' 不存在").arg(username);
+                sendJsonResponse(clientSocket, 404, errorJson);
+                return;
+            }
+
+            // 用户存在，获取该用户的记录
+            withdrawRecords = dbManager->getWithdrawRecordsByUsername(username);
+        }
     }
+
     // 构建返回的JSON
     QJsonObject responseJson;
     responseJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
     // 构建data数组
     QJsonArray dataArray;
     for (const SQL_WithdrawRecord &record : withdrawRecords) {
@@ -2440,12 +2477,20 @@ void HttpServer::handleGetWithDraw(QTcpSocket *clientSocket, const QUrlQuery &qu
 
     QJsonObject dataObject;
     dataObject["list"] = dataArray;
+    dataObject["recordCount"] = dataArray.size();
+
+    if (username != "ALL") {
+        dataObject["username"] = username;
+        dataObject["userExists"] = true;
+    } else {
+        dataObject["isAllRecords"] = true;
+    }
+
     responseJson["data"] = dataObject;
 
     // 发送响应
-    sendJsonResponse(clientSocket, 200,  responseJson);
+    sendJsonResponse(clientSocket, 200, responseJson);
 }
-
 void HttpServer::handleGetpaidOK(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     qDebug() << "[GET /debug/orderPaid] query =" << query.toString();
@@ -3536,7 +3581,12 @@ void HttpServer::handleGetMallProducts(QTcpSocket *clientSocket, const QUrlQuery
         for (auto it = productsByCategory.begin(); it != productsByCategory.end(); ++it) {
             QJsonObject categoryObj;
             categoryObj["categoryId"] = it.key();
-            categoryObj["categoryName"] = "未命名分类"; // 可以根据需要添加分类名
+            if (!it.value().isEmpty()) {
+                // 从该分类的第一个商品获取分类名称
+                categoryObj["categoryName"] = it.value().first().categoryName;
+            } else {
+                categoryObj["categoryName"] = ""; // 或者 it.key() 作为备用
+            }
 
             QJsonArray productArray;
             for (const auto& product : it.value()) {
@@ -3570,7 +3620,9 @@ QJsonObject HttpServer::productToJson(const SQL_Product &product)
     productObj["status"] = product.status;
     productObj["description"] = product.description;
     productObj["categoryId"] = product.categoryId;
-    productObj["categoryName"] = "未命名分类"; // 可以根据需要添加分类名
+    productObj["description"] = product.description;
+
+    productObj["categoryName"] = product.categoryName;
 
     // 修改部分：将imageUrl改为数组，遍历文件夹下的图片
     QDir currentDir(QDir::currentPath());
@@ -3583,12 +3635,19 @@ QJsonObject HttpServer::productToJson(const SQL_Product &product)
         QStringList imageFilters;
         imageFilters << "*.jpg" << "*.jpeg" << "*.png" << "*.gif" << "*.bmp" << "*.webp";
         QStringList imageFiles = imageDir.entryList(imageFilters, QDir::Files, QDir::Name);
-
+        qDebug() << imageFiles;
         // 构建完整的图片URL路径
         for (const QString& imageFile : imageFiles) {
-            QString fullImagePath = "/product_images/" + product.imageUrl  + imageFile;
+            QString fullImagePath = "/product_images/" + product.imageUrl  +"/"+ imageFile;
             imageUrlsArray.append(fullImagePath);
         }
+ //       qDebug() << imageFiles;
+//        qDebug() << fullImagePath;
+
+    }
+    else
+    {
+        qDebug() << "没有找到目录" <<imageDir;
     }
 
     // 如果没有图片，保持原 imageUrl 作为字符串

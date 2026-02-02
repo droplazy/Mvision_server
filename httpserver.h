@@ -19,7 +19,7 @@
 #ifdef QT_DEBUG
 #define DEBUG_MODE 1
 #else
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 #endif
 
 struct FrontendTask {

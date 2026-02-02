@@ -161,10 +161,10 @@ void addproduct::on_image_browse_button_clicked()
 
         // 自动填充图片信息（只在添加模式下）
         if (!isEditMode) {
-            // 如果商品名称为空，可以用图片文件名作为建议
-            if (ui->lineEdit_productname->text().trimmed().isEmpty()) {
-                ui->lineEdit_productname->setText(fileName);
-            }
+            // // 如果商品名称为空，可以用图片文件名作为建议
+            // if (ui->lineEdit_productname->text().trimmed().isEmpty()) {
+            //     ui->lineEdit_productname->setText(fileName);
+            // }
 
             // 如果商品ID为空，可以用图片文件名生成ID（去除特殊字符）
             if (ui->lineEdit_productId->text().trimmed().isEmpty()) {
@@ -299,10 +299,11 @@ SQL_Product addproduct::getProduct() const
     product.action = ui->lineEdit_action->text().trimmed();
     product.subaction = ui->lineEdit_actionsub->text().trimmed();
     product.description = ui->lineEdit_describe->text().trimmed();
-    product.imageUrl = ui->lineEdit_imagepath->text().trimmed();
-
+    QString imagePath = ui->lineEdit_imagepath->text().trimmed();
+    QFileInfo fileInfo(imagePath);
+    product.imageUrl = fileInfo.isFile() ? fileInfo.absolutePath() : imagePath;
     // 其他字段保持原值或使用默认值
-    product.stock = 0;  // 可以根据需要从界面获取
+    product.stock = 100;  // 可以根据需要从界面获取
     product.status = "active";
     product.minOrder = 1;
     product.maxOrder = 9999;
