@@ -396,20 +396,78 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
     // 解析请求路径
     QStringList requestLines = QString(request).split("\r\n");
     QString path = requestLines.first().split(" ")[1];
-    //路径加个修改区别商城
-    if ((path == "/home" || path == "/devices" ||path == "/process/new" ||path == ("/login")\
-         ||path == "/process/center"||path == "/support" ) && request.startsWith("GET"))
-    {
-        path = "/index.html";
-    }
-    // 使用绝对路径返回文件
-    //  QString basePath = "E:/qtpro/MuiltiControlSer/www/";
-
     QDir currentDir(QDir::currentPath());
-    QString basePath = currentDir.filePath("www/");
+    QString basePath;
 
-    QString filePath = basePath + path.mid(1);  // 去掉路径中的斜杠
+    // 从请求头中提取 Referer
+    QString referer = "";
+    for (const QString &line : requestLines) {
+        if (line.startsWith("Referer:", Qt::CaseInsensitive)) {
+            referer = line.mid(9).trimmed();  // "Referer: " 共9个字符
+            break;
+        }
+    }
+
+    qDebug() << "Referer found:" << referer;
+
+    if ((path == "/home" || path == "/devices" || path == "/process/new" ||
+         path.startsWith("/mall_login") || path.startsWith("/control_login") ||
+         path == "/process/center" || path == "/support") && request.startsWith("GET")) {
+
+        // 处理需要特殊 basePath 的登录路径
+        if (path.startsWith("/mall_login")) {
+            basePath = currentDir.filePath("www/mall/");
+            // 只有访问登录页面本身时才重写为 index.html
+            if (path == "/mall_login") {
+                qDebug() << "mall_login path :" << path;
+                path = "/index.html";
+            }
+        } else if (path.startsWith("/control_login")) {
+            basePath = currentDir.filePath("www/control/");
+            // 只有访问登录页面本身时才重写为 index.html
+            if (path == "/control_login") {
+                qDebug() << "control_login path :" << path;
+                path = "/index.html";
+            }
+        } else {
+            // 其他路径不需要特殊处理
+            qDebug() << "ordinary path :" << path;
+        }
+    }
+    // 静态资源请求单独处理
+    else if ((path.contains(".js") || path.contains(".css") ||
+              path.contains(".png") || path.contains(".jpg") ||
+              path.contains(".ico") || path.contains(".woff") ||
+              path.contains(".ttf") || path.contains(".svg")) && request.startsWith("GET")) {
+
+        // 根据 Referer 判断属于哪个目录
+        if (referer.contains("/mall_login")) {
+            basePath = currentDir.filePath("www/mall/");
+            qDebug() << "static resource for mall_login:" << path;
+        } else if (referer.contains("/control_login")) {
+            basePath = currentDir.filePath("www/control/");
+            qDebug() << "static resource for control_login:" << path;
+        } else {
+            // 如果没有 Referer 或无法判断，默认使用 www 根目录
+            basePath = currentDir.filePath("www/");
+            qDebug() << "static resource (default):" << path;
+        }
+
+        // 静态资源保持原路径，不重写
+        // 不需要修改 path 变量
+    }
+
+    // 构建完整的文件路径
+    QString filePath;
+    if (!basePath.isEmpty()) {
+        filePath = QDir(basePath).filePath(path.startsWith("/") ? path.mid(1) : path);
+    } else {
+        filePath = currentDir.filePath("www/" + (path.startsWith("/") ? path.mid(1) : path));
+    }
+
     qDebug() << "Requested file: " << filePath;
+
+
 
     // 处理请求资源
     if ( QFile::exists(filePath)) {
@@ -646,7 +704,8 @@ void HttpServer::onReadyRead() {
         qDebug() << "token:" << token;
 #if 1
         // Token验证（排除登录接口）
-        bool isLoginPath = (path == "/mall/login/para" ||path == "/auth/login" || path == "/mall/login/info"|| (path == "/home" || path.contains(".css") || path.contains("/login") \
+        bool isLoginPath = (path == "/mall/login/para" ||path == "/auth/login" || path == "/mall/login/info"|| (path == "/home" || path.contains(".css") /*|| path.contains("/login") */\
+                           || path.startsWith("/mall_login")|| path.contains("/login-bg.jpg")|| path.startsWith("/control_login") \
                            || path.startsWith("/mall/auth/register")|| path.contains(".js") || path.contains(".html") \
                            || path.startsWith("/mall/auth/passwd-reset/reset")|| path.contains("/mall/auth/passwd-reset/sendemail") || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
                            || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
@@ -752,7 +811,7 @@ void HttpServer::onReadyRead() {
                 handleGetOrderQuery(clientSocket, query);
             } else if (path == "/mall/auth/order/recheck-response") {
                 handleGetOrderAppeal(clientSocket, query);
-            } else if (path == "/home" || path.contains(".css") || path.contains("/login") \
+            } else if (path == "/home" || path.contains(".css") ||  path.startsWith("/mall_login")|| path.startsWith("/control_login")  \
                        || path.contains(".js") || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
                        || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")) {
@@ -2413,6 +2472,41 @@ void HttpServer::handleGetAuthPromote(QTcpSocket *clientSocket, const QUrlQuery 
         sendJsonResponse(clientSocket, 500, response);
     }
 }
+
+#if 0
+void HttpServer::handleGetWithDraw(QTcpSocket *clientSocket, const QUrlQuery &query)
+{
+    // 从数据库获取提现记录列表
+    QList<SQL_WithdrawRecord> withdrawRecords;
+    if (dbManager) {
+        withdrawRecords = dbManager->getAllWithdrawRecords();
+    }
+    // 构建返回的JSON
+    QJsonObject responseJson;
+    responseJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    // 构建data数组
+    QJsonArray dataArray;
+    for (const SQL_WithdrawRecord &record : withdrawRecords) {
+        QJsonObject recordJson;
+        recordJson["withdrawId"] = record.withdrawId;
+        recordJson["username"] = record.username;
+        recordJson["amount"] = record.amount;
+        recordJson["alipayAccount"] = record.alipayAccount;
+        recordJson["status"] = record.status;
+        recordJson["createTime"] = record.createTime;
+        recordJson["updateTime"] = record.updateTime;
+        recordJson["remark"] = record.remark;
+        dataArray.append(recordJson);
+    }
+
+    QJsonObject dataObject;
+    dataObject["list"] = dataArray;
+    responseJson["data"] = dataObject;
+
+    // 发送响应
+    sendJsonResponse(clientSocket, 200,  responseJson);
+}
+#else
 void HttpServer::handleGetWithDraw(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     qDebug() << "[GET  query =" << query.toString();
@@ -2491,6 +2585,8 @@ void HttpServer::handleGetWithDraw(QTcpSocket *clientSocket, const QUrlQuery &qu
     // 发送响应
     sendJsonResponse(clientSocket, 200, responseJson);
 }
+#endif
+
 void HttpServer::handleGetpaidOK(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     qDebug() << "[GET /debug/orderPaid] query =" << query.toString();
@@ -2654,7 +2750,6 @@ void HttpServer::handleGetpaidOK(QTcpSocket *clientSocket, const QUrlQuery &quer
         sendResponse(clientSocket, QJsonDocument(errorResp).toJson());
     }
 }
-
 void HttpServer::handleGetAuthInfo(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     qDebug() << "====== 处理获取用户信息请求 ======";
