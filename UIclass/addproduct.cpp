@@ -5,6 +5,10 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDebug>
+#include <QDir>
+#include <QProcess>
+#include <QDesktopServices>
+#include <QUrl>
 
 // 在构造函数中添加
 addproduct::addproduct(DatabaseManager *dbManager, QWidget *parent)
@@ -23,9 +27,13 @@ addproduct::addproduct(DatabaseManager *dbManager, QWidget *parent)
         QMessageBox::critical(this, "错误", "数据库管理器为空！");
     }
 
+    // lineEdit_imagepath 设置为只读，禁止编辑
+    ui->lineEdit_imagepath->setReadOnly(true);
+
     // 设置连接
     setupConnections();
 }
+
 // 设置编辑模式
 void addproduct::setEditMode(const SQL_Product &product)
 {
@@ -35,11 +43,16 @@ void addproduct::setEditMode(const SQL_Product &product)
 
     // 填充商品数据
     fillProductData(product);
+
+    // 编辑模式下，imagepath保持可查看但不可编辑
+    ui->lineEdit_imagepath->setReadOnly(true);
 }
+
 addproduct::~addproduct()
 {
     delete ui;
 }
+
 // 填充商品数据到界面
 void addproduct::fillProductData(const SQL_Product &product)
 {
@@ -48,17 +61,41 @@ void addproduct::fillProductData(const SQL_Product &product)
     ui->lineEdit_categoryid->setText(product.categoryId);
     ui->lineEdit_categoryname->setText(product.categoryName);
     ui->lineEdit_unitprice->setText(QString::number(product.unitPrice, 'f', 2));
+    ui->lineEdit_stock->setText(QString::number(product.stock));  // 添加库存显示
     ui->lineEdit_action->setText(product.action);
     ui->lineEdit_actionsub->setText(product.subaction);
     ui->lineEdit_describe->setText(product.description);
-    ui->lineEdit_imagepath->setText(product.imageUrl);
+
+    // 显示相对路径（如果是绝对路径，转换为相对路径）
+    QString imagePath = product.imageUrl;
+    if (QFileInfo(imagePath).isAbsolute()) {
+        // 如果是绝对路径，尝试转换为相对于当前目录的路径
+        QDir currentDir(QDir::currentPath());
+        imagePath = currentDir.relativeFilePath(imagePath);
+    }
+    ui->lineEdit_imagepath->setText(imagePath);
 
     // 在编辑模式下，商品ID不可编辑
     ui->lineEdit_productId->setEnabled(false);
 }
+
 void addproduct::setupConnections()
 {
     // 可以在这里添加额外的信号连接
+    connect(ui->lineEdit_productId, &QLineEdit::textChanged, [this](const QString &text) {
+        if (!isEditMode) {
+            // 添加模式下，商品ID改变时更新图片路径
+            updateImagePath();
+        }
+    });
+
+    connect(ui->lineEdit_categoryid, &QLineEdit::textChanged, [this](const QString &text) {
+        if (!isEditMode) {
+            // 添加模式下，分类ID改变时更新图片路径
+            updateImagePath();
+        }
+    });
+
     connect(ui->lineEdit_productId, &QLineEdit::returnPressed, [this]() {
         ui->lineEdit_productname->setFocus();
     });
@@ -76,6 +113,10 @@ void addproduct::setupConnections()
     });
 
     connect(ui->lineEdit_unitprice, &QLineEdit::returnPressed, [this]() {
+        ui->lineEdit_stock->setFocus();  // 添加库存输入框的焦点切换
+    });
+
+    connect(ui->lineEdit_stock, &QLineEdit::returnPressed, [this]() {
         ui->lineEdit_action->setFocus();
     });
 
@@ -88,100 +129,96 @@ void addproduct::setupConnections()
     });
 }
 
+// 更新图片路径（添加模式下自动生成）
+void addproduct::updateImagePath()
+{
+    if (!isEditMode) {
+        QString productId = ui->lineEdit_productId->text().trimmed();
+        QString categoryId = ui->lineEdit_categoryid->text().trimmed();
+
+        if (!productId.isEmpty() && !categoryId.isEmpty()) {
+            // 生成相对路径：Products/分类ID_商品ID
+            QString relativePath = QString("Products/%1_%2").arg(categoryId).arg(productId);
+            ui->lineEdit_imagepath->setText(relativePath);
+        } else if (!productId.isEmpty()) {
+            // 只有商品ID，使用 Products/商品ID
+            ui->lineEdit_imagepath->setText(QString("Products/%1").arg(productId));
+        } else {
+            // 都没有，使用默认路径
+            ui->lineEdit_imagepath->setText("Products");
+        }
+    }
+}
+
 void addproduct::on_image_browse_button_clicked()
 {
-    // 获取商品信息
-    QString productId = ui->lineEdit_productId->text().trimmed();
-    QString categoryId = ui->lineEdit_categoryid->text().trimmed();
+    // 获取当前设置的相对路径
+    QString relativePath = ui->lineEdit_imagepath->text().trimmed();
 
-    // 确定目标目录路径
-    QString targetDir;
-
-    if (!productId.isEmpty() && !categoryId.isEmpty()) {
-        // 如果商品ID和分类ID都不为空，则使用 Products/categoryId_productId/ 目录
-        targetDir = QString("Products/%1_%2").arg(categoryId).arg(productId);
-    } else if (!productId.isEmpty()) {
-        // 如果只有商品ID，则使用 Products/productId/ 目录
-        targetDir = QString("Products/%1").arg(productId);
-    } else {
-        // 如果商品ID为空，使用默认的Products目录
-        targetDir = "Products";
-    }
-
-    // 确保目录存在
-    QDir dir;
-    if (!dir.exists(targetDir)) {
-        if (dir.mkpath(targetDir)) {
-            qDebug() << "创建目录:" << targetDir;
-        } else {
-            QMessageBox::warning(this, "警告",
-                                 QString("无法创建目录：\n%1\n\n将使用当前目录。").arg(targetDir));
-            targetDir = QDir::currentPath();
-        }
-    }
-
-    // 打开文件对话框，直接定位到目标目录
-    QString filePath = QFileDialog::getOpenFileName(
-        this,
-        "选择商品图片",
-        targetDir,
-        "图片文件 (*.jpg *.jpeg *.png *.bmp *.gif *.webp);;所有文件 (*.*)"
-        );
-
-    if (!filePath.isEmpty()) {
-        // 显示选中的文件路径
-        ui->lineEdit_imagepath->setText(filePath);
-
-        // 获取文件信息
-        QFileInfo fileInfo(filePath);
-        QString fileName = fileInfo.completeBaseName(); // 不含扩展名的文件名
-        QString fileDir = fileInfo.dir().path(); // 文件所在目录
-
-        // 检查文件是否在正确的目录中
-        if (!fileDir.contains(targetDir)) {
-            // 如果文件不在目标目录中，询问是否要复制
-            QMessageBox::StandardButton reply;
-            reply = QMessageBox::question(this, "确认",
-                                          QString("图片不在商品目录中。\n是否要复制到商品目录？\n\n原路径：%1\n目标目录：%2")
-                                              .arg(filePath)
-                                              .arg(targetDir),
-                                          QMessageBox::Yes | QMessageBox::No);
-
-            if (reply == QMessageBox::Yes) {
-                // 复制文件到商品目录
-                QString newFilePath = QDir(targetDir).filePath(fileInfo.fileName());
-                if (QFile::copy(filePath, newFilePath)) {
-                    ui->lineEdit_imagepath->setText(newFilePath);
-                    QMessageBox::information(this, "成功", "图片已复制到商品目录！");
-                } else {
-                    QMessageBox::warning(this, "警告", "复制图片失败！");
-                }
-            }
-        }
-
-        // 自动填充图片信息（只在添加模式下）
+    // 如果路径为空，使用默认路径
+    if (relativePath.isEmpty()) {
+        // 添加模式下，尝试自动生成路径
         if (!isEditMode) {
-            // // 如果商品名称为空，可以用图片文件名作为建议
-            // if (ui->lineEdit_productname->text().trimmed().isEmpty()) {
-            //     ui->lineEdit_productname->setText(fileName);
-            // }
+            updateImagePath();
+            relativePath = ui->lineEdit_imagepath->text().trimmed();
+        }
 
-            // 如果商品ID为空，可以用图片文件名生成ID（去除特殊字符）
-            if (ui->lineEdit_productId->text().trimmed().isEmpty()) {
-                QString suggestedId = fileName.replace(QRegularExpression("[^a-zA-Z0-9_]"), "_");
-                ui->lineEdit_productId->setText(suggestedId.toUpper());
-            }
+        // 如果还是为空，使用默认路径
+        if (relativePath.isEmpty()) {
+            relativePath = "Products";
+        }
+    }
 
-            // 如果分类ID为空，可以用目录名作为建议
-            if (ui->lineEdit_categoryid->text().trimmed().isEmpty()) {
-                // 尝试从目录名提取分类信息
-                QString dirName = fileInfo.dir().dirName();
-                if (dirName.contains('_')) {
-                    QString category = dirName.split('_').first();
-                    ui->lineEdit_categoryid->setText(category);
-                    ui->lineEdit_categoryname->setText(category + "分类");
-                }
-            }
+    // 转换为绝对路径
+    QString absolutePath = QDir::current().absoluteFilePath(relativePath);
+    QDir targetDir(absolutePath);
+
+    // 确保目录存在，如果不存在则创建
+    if (!targetDir.exists()) {
+        if (!targetDir.mkpath(".")) {
+            QMessageBox::warning(this, "警告",
+                                 QString("无法创建目录：\n%1").arg(absolutePath));
+            return;
+        }
+    }
+
+    // 使用 QDesktopServices 打开文件夹（跨平台）
+    if (QDesktopServices::openUrl(QUrl::fromLocalFile(absolutePath))) {
+        qDebug() << "成功打开文件夹:" << absolutePath;
+
+        // 显示提示信息
+        QMessageBox::information(this, "提示",
+                                 QString("已打开文件夹：\n%1\n\n请将商品图片放入此文件夹。").arg(relativePath));
+    } else {
+        // 如果 QDesktopServices 失败，尝试使用平台特定命令
+        bool success = false;
+
+#ifdef Q_OS_WINDOWS
+        QString cmd = "explorer";
+        QString nativePath = QDir::toNativeSeparators(absolutePath);
+
+        // 移除末尾的斜杠
+        if (nativePath.endsWith('\\') || nativePath.endsWith('/')) {
+            nativePath.chop(1);
+        }
+
+        QStringList args;
+        args << nativePath;
+        success = QProcess::startDetached(cmd, args);
+
+#elif defined(Q_OS_MAC)
+        success = QProcess::startDetached("open", QStringList() << absolutePath);
+#else
+        success = QProcess::startDetached("xdg-open", QStringList() << absolutePath);
+#endif
+
+        if (!success) {
+            QMessageBox::warning(this, "错误",
+                                 QString("无法打开文件夹：\n%1\n\n请检查路径是否正确。").arg(relativePath));
+        } else {
+            qDebug() << "使用系统命令打开文件夹:" << absolutePath;
+            QMessageBox::information(this, "提示",
+                                     QString("已打开文件夹：\n%1\n\n请将商品图片放入此文件夹。").arg(relativePath));
         }
     }
 }
@@ -215,6 +252,21 @@ void addproduct::on_ok_button_clicked()
             return;
         }
 
+        // 在添加模式下，创建图片文件夹
+        QString imagePath = ui->lineEdit_imagepath->text().trimmed();
+        if (!imagePath.isEmpty()) {
+            QString absolutePath = QDir::current().absoluteFilePath(imagePath);
+            QDir dir(absolutePath);
+            if (!dir.exists()) {
+                if (!dir.mkpath(".")) {
+                    QMessageBox::warning(this, "注意",
+                                         QString("无法创建图片文件夹：\n%1\n\n商品仍会被添加，但需要手动创建文件夹。").arg(imagePath));
+                } else {
+                    qDebug() << "创建图片文件夹:" << absolutePath;
+                }
+            }
+        }
+
         // 插入数据库
         if (dbManager->insertProduct(product)) {
             QMessageBox::information(this, "成功", "商品添加成功！");
@@ -224,6 +276,7 @@ void addproduct::on_ok_button_clicked()
         }
     }
 }
+
 bool addproduct::validateInput()
 {
     // 检查必填字段
@@ -268,6 +321,31 @@ bool addproduct::validateInput()
         return false;
     }
 
+    // 验证价格是否为有效数字
+    bool ok;
+    double price = ui->lineEdit_unitprice->text().toDouble(&ok);
+    if (!ok || price < 0) {
+        QMessageBox::warning(this, "警告", "请输入有效的价格！");
+        ui->lineEdit_unitprice->setFocus();
+        ui->lineEdit_unitprice->selectAll();
+        return false;
+    }
+
+    // 验证库存是否为有效数字
+    if (ui->lineEdit_stock->text().trimmed().isEmpty()) {
+        QMessageBox::warning(this, "警告", "库存不能为空！");
+        ui->lineEdit_stock->setFocus();
+        return false;
+    }
+
+    int stock = ui->lineEdit_stock->text().toInt(&ok);
+    if (!ok || stock < 0) {
+        QMessageBox::warning(this, "警告", "请输入有效的库存数量！");
+        ui->lineEdit_stock->setFocus();
+        ui->lineEdit_stock->selectAll();
+        return false;
+    }
+
     if (ui->lineEdit_action->text().trimmed().isEmpty()) {
         QMessageBox::warning(this, "警告", "action不能为空！");
         ui->lineEdit_action->setFocus();
@@ -296,14 +374,24 @@ SQL_Product addproduct::getProduct() const
     product.categoryId = ui->lineEdit_categoryid->text().trimmed();
     product.categoryName = ui->lineEdit_categoryname->text().trimmed();
     product.unitPrice = ui->lineEdit_unitprice->text().toDouble();
+    product.stock = ui->lineEdit_stock->text().toInt();  // 从界面获取库存
     product.action = ui->lineEdit_action->text().trimmed();
     product.subaction = ui->lineEdit_actionsub->text().trimmed();
     product.description = ui->lineEdit_describe->text().trimmed();
+
+    // 获取相对路径（imagepath是只读的，显示相对路径）
     QString imagePath = ui->lineEdit_imagepath->text().trimmed();
-    QFileInfo fileInfo(imagePath);
-    product.imageUrl = fileInfo.isFile() ? fileInfo.absolutePath() : imagePath;
+
+    // 确保路径是相对路径
+    if (QFileInfo(imagePath).isAbsolute()) {
+        // 如果是绝对路径，转换为相对路径
+        QDir currentDir(QDir::currentPath());
+        imagePath = currentDir.relativeFilePath(imagePath);
+    }
+
+    product.imageUrl = imagePath;  // 保存相对路径
+
     // 其他字段保持原值或使用默认值
-    product.stock = 100;  // 可以根据需要从界面获取
     product.status = "active";
     product.minOrder = 1;
     product.maxOrder = 9999;
@@ -312,6 +400,8 @@ SQL_Product addproduct::getProduct() const
     product.ratingCount = 0;
     product.tags = "";
     product.specifications = "";
+    product.createTime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+    product.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
 
     return product;
 }

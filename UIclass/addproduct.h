@@ -36,6 +36,7 @@ private:
     void setupConnections();  // 设置信号连接
     void fillProductData(const SQL_Product &product);  // 填充商品数据
     QString getDefaultStatus();
+    void updateImagePath();
 };
 
 #endif // ADDPRODUCT_H
