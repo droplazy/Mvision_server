@@ -401,14 +401,30 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
 
     // 从请求头中提取 Referer
     QString referer = "";
+
+
+
     for (const QString &line : requestLines) {
         if (line.startsWith("Referer:", Qt::CaseInsensitive)) {
             referer = line.mid(9).trimmed();  // "Referer: " 共9个字符
             break;
         }
     }
+    // 特殊处理：如果是根路径重定向到 /mall_login，直接返回重定向响应
+    if (path == "/" && request.startsWith("GET")) {
+        qDebug() << "Root path requested, redirecting to /mall_login";
 
+        QByteArray redirectResponse = "HTTP/1.1 302 Found\r\n";
+        redirectResponse += "Location: /mall_login\r\n";
+        redirectResponse += "Content-Length: 0\r\n";
+        redirectResponse += "Connection: close\r\n\r\n";
+
+        clientSocket->write(redirectResponse);
+        clientSocket->flush();
+        return;
+    }
     qDebug() << "Referer found:" << referer;
+    qDebug() << "path found:" << path;
 
     if ((path == "/home" || path == "/devices" || path == "/process/new" ||
          path.startsWith("/mall_login") || path.startsWith("/control_login") ||
@@ -702,6 +718,8 @@ void HttpServer::onReadyRead() {
         // 获取token参数
         QString token = query.queryItemValue("token");
         qDebug() << "token:" << token;
+        qDebug() << "path:" << path;
+
 #if 1
         // Token验证（排除登录接口）
         bool isLoginPath = (path == "/mall/login/para" ||path == "/auth/login" || path == "/mall/login/info"|| (path == "/home" || path.contains(".css") /*|| path.contains("/login") */\
@@ -715,9 +733,14 @@ void HttpServer::onReadyRead() {
             {
 
             }
+            else if (token.isEmpty() && (path=="/" ||path.isEmpty())) {
+                qDebug() << "修改原始请求，将根路径改为 /mall_login";
+                path = "/mall_login";
+            }
             else if (token.isEmpty() || !dbManager || !dbManager->validateToken(token)) {
                 qDebug() << "Token验证失败或不存在，返回401";
-                sendUnauthorized(clientSocket);
+                //sendUnauthorized(clientSocket);
+                send404(clientSocket);
                 clientSocket->disconnectFromHost();
                 return;
             }
