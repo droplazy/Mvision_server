@@ -1286,11 +1286,135 @@ QString recognizeImage(const QString &imagePath)
     }
     return result;
 }*/
+
+#include "wechatpay.h"
+#include <QPixmap>
+#include "QRCode/qrencode.h"
+QPixmap createQRCode(const QString &text)
+{
+    int margin = 2;
+    if (text.length() == 0)
+    {
+        return QPixmap();
+    }
+    QRcode *qrcode = QRcode_encodeString(text.toLocal8Bit(), 2, QR_ECLEVEL_L, QR_MODE_8, 0);
+    if (qrcode == NULL) {
+        return QPixmap();
+    }
+    unsigned char *p, *q;
+    p = NULL;
+    q = NULL;
+    int x, y, bit;
+    int realwidth;
+
+    realwidth = qrcode->width;
+    QImage image = QImage(realwidth, realwidth, QImage::Format_Indexed8);
+    QRgb value;
+    value = qRgb(255,255,255);
+    image.setColor(0, value);
+    value = qRgb(0,0,0);
+    image.setColor(1, value);
+    image.setColor(2, value);
+    image.fill(0);
+    p = qrcode->data;
+    for(y=0; y<qrcode->width; y++)
+    {
+        bit = 7;
+        q += margin / 8;
+        bit = 7 - (margin % 8);
+        for(x=0; x<qrcode->width; x++)
+        {
+            if ((*p & 1) << bit)
+                image.setPixel(x, y, 1);
+            else
+                image.setPixel(x, y, 0);
+            bit--;
+            if(bit < 0)
+            {
+                q++;
+                bit = 7;
+            }
+            p++;
+        }
+    }
+    return QPixmap::fromImage(image.scaledToWidth(200));
+}
 void MainWindow::on_pushButton_clicked()
 {
+    qDebug() << "开始测试微信支付...";
 
+    // 创建支付对象
+    WeChatPay *pay = new WeChatPay(this);
+
+    // 连接信号
+    connect(pay, &WeChatPay::nativeOrderFinished, this,
+            [this](bool success, const QString &codeUrl, const QString &errorMsg) {
+                if (success) {
+                    qDebug() << "✅ 下单成功!";
+                    qDebug() << "二维码链接:" << codeUrl;
+                    QMessageBox::information(this, "成功", "二维码链接:\n" + codeUrl);
+                    QPixmap qrcode = createQRCode(codeUrl);
+                    // 弹出一个窗口显示二维码
+                    QDialog dialog(this);
+                    dialog.setWindowTitle("微信支付二维码");
+                    dialog.resize(300, 350);
+
+                    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+
+                    // 显示二维码
+                    QLabel *qrLabel = new QLabel(&dialog);
+                    qrLabel->setPixmap(qrcode);
+                    qrLabel->setAlignment(Qt::AlignCenter);
+                    layout->addWidget(qrLabel);
+
+                    // 显示提示文字
+                    QLabel *textLabel = new QLabel("请使用微信扫码支付", &dialog);
+                    textLabel->setAlignment(Qt::AlignCenter);
+                    layout->addWidget(textLabel);
+
+                    // 显示二维码链接（备选）
+                    QLabel *urlLabel = new QLabel(QString("链接: %1").arg(codeUrl), &dialog);
+                    urlLabel->setWordWrap(true);
+                    urlLabel->setAlignment(Qt::AlignCenter);
+                    layout->addWidget(urlLabel);
+
+                    // 执行对话框
+                    dialog.exec();
+
+                } else {
+                    qDebug() << "❌ 失败:" << errorMsg;
+                    QMessageBox::warning(this, "失败", errorMsg);
+                }
+            });
+
+    connect(pay, &WeChatPay::errorOccurred, this,
+            [this](const QString &error) {
+                qDebug() << "❌ 错误:" << error;
+                QMessageBox::critical(this, "错误", error);
+            });
+
+    // 初始化（替换成您的真实信息）
+    pay->initialize(
+        "1106426124",                                    // 商户号
+        "ww57f759ba26ab8662",                            // APPID
+        "C:/Windows/SysWOW64/WXCertUtil/cert/1106426124_20260215_cert/apiclient_key.pem",      // 私钥路径
+        "2D641F75283524A8BB2EF089E83863A041C0B3FA"                                    // 证书序列号
+        );
+
+    // 生成订单号
+    QString outTradeNo = QString("TEST%1").arg(QDateTime::currentSecsSinceEpoch());
+
+    // 发起支付（1分钱测试）
+    pay->nativeOrder(
+        "测试商品",          // 商品描述
+        outTradeNo,         // 订单号
+        1,                  // 1分钱
+        "https://yourdomain.com/notify",  // 回调地址
+        "127.0.0.1"         // 客户端IP
+        );
+
+    qDebug() << "订单号:" << outTradeNo;
 }
-
 #include <QCryptographicHash>
 #include <QMessageAuthenticationCode>
 

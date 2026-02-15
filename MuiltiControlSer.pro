@@ -7,8 +7,28 @@ RC_ICONS = rainbow.ico
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
+win32 {
+    # OpenSSL 配置
+    INCLUDEPATH += "C:/Program Files/OpenSSL/include"
+    LIBS += -L"C:/Program Files/OpenSSL/lib" -llibcrypto -llibssl
 
+    # qrcode 配置
+    INCLUDEPATH += "C:/Program Files/qrcode/include"
+    LIBS += -L"C:/Program Files/qrcode/lib" -lqrencode
+
+    # 添加 Windows 系统库（解决 __imp_WSAStartup 错误）
+    LIBS += -lws2_32 -luser32 -lcrypt32 -ladvapi32
+}
 SOURCES += \
+    QRCode/bitstream.c \
+    QRCode/mask.c \
+    QRCode/mmask.c \
+    QRCode/mqrspec.c \
+    QRCode/qrencode.c \
+    QRCode/qrinput.c \
+    QRCode/qrspec.c \
+    QRCode/rscode.c \
+    QRCode/split.c \
     UIclass/addproduct.cpp \
     UIclass/appacount.cpp \
     UIclass/applogin2.cpp \
@@ -40,9 +60,21 @@ SOURCES += \
     mqtt_server.cpp \
     mqttclient.cpp \
     privilegehelper.cpp \
-    simplexfai.cpp
+    simplexfai.cpp \
+    wechatpay.cpp
 
 HEADERS += \
+    QRCode/bitstream.h \
+    QRCode/config.h \
+    QRCode/mask.h \
+    QRCode/mmask.h \
+    QRCode/mqrspec.h \
+    QRCode/qrencode.h \
+    QRCode/qrencode_inner.h \
+    QRCode/qrinput.h \
+    QRCode/qrspec.h \
+    QRCode/rscode.h \
+    QRCode/split.h \
     UIclass/addproduct.h \
     UIclass/appacount.h \
     UIclass/applogin2.h \
@@ -74,7 +106,8 @@ HEADERS += \
     mqttclient.h \
     privilegehelper.h \
     publicheader.h \
-    simplexfai.h
+    simplexfai.h \
+    wechatpay.h
 
 FORMS += \
     UIclass/appacount.ui \
@@ -132,8 +165,12 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 DISTFILES += \
+    QRCode/QRCode.pri \
     htmldoc/forget.html \
     htmldoc/lanmu.html \
     htmldoc/login.html \
     htmldoc/logsuccess.html \
     htmldoc/register.html
+
+
+
