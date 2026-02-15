@@ -20,7 +20,8 @@ devicelistdialog::devicelistdialog(DatabaseManager* dbManager, QVector<DeviceSta
 
     // 设置窗口标题
     setWindowTitle("设备列表");
-    setFixedSize(this->size());
+    setFixedSize(SUB_WIGET_WIDTH ,SUB_WIGET_HEITH );
+    ui->tableView->setFixedSize(SUB_WIGET_TABLE_WIDTH,SUB_WIGET_TABLE_HEITH);
     // 设置表格
     setupTableView();
 
@@ -186,7 +187,7 @@ void devicelistdialog::updatedeviceinfo()
 
             // ... 其他列的初始化与 loadDeviceList 中类似 ...
             QStandardItem* actionItem = new QStandardItem(
-                device.currentAction.isEmpty() ? "空闲" : device.currentAction);
+                device.currentAction.isEmpty() ? "空闲" : (device.currentAction + device.currentSubAction));
             actionItem->setEditable(false);
             model->setItem(newRow, 3, actionItem);
 

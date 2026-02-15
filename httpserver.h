@@ -13,14 +13,12 @@
 #include "databasemanager.h"
 #include <QTimer>
 #include <QMutex>
+#include <QTcpSocket>
+#include <QPointer>
 // 在 HttpServer.h 中添加：
 
 
-#ifdef QT_DEBUG
-#define DEBUG_MODE 1
-#else
-#define DEBUG_MODE 0
-#endif
+
 
 struct FrontendTask {
     QString taskId;          // 任务ID
@@ -33,7 +31,15 @@ struct FrontendTask {
     QString remark;          // 备注信息
     QString commandid;
     QString username;
+    QString method;
 
+    bool postCRcode=false;
+    bool postResult=false;
+
+
+    //QTcpSocket *clientinfo;
+    QPointer<QTcpSocket> clientinfo;
+    // qintptr socketDescriptor;  // 这个最安全
     void print() {
         qDebug() << "FrontendTask:";
         qDebug() << "  taskId:" << taskId;
@@ -60,7 +66,8 @@ public:
     
     void sendResponse(QTcpSocket *clientSocket, const QByteArray &json);
     void sendNotFound(QTcpSocket *clientSocket);
-    
+    QString askDeepSeek(const QString &question);
+
     // 创建 DeviceStatus 对象的 QVector
     QVector<DeviceStatus> deviceVector;
     QVector<Machine_Process_Total> processVector;
@@ -211,6 +218,12 @@ private:
     void handlecmdSnap(QTcpSocket *clientSocket, const QUrlQuery &query);
     QJsonObject productToJson(const SQL_Product &product);
   //  void sendJsonResponse(QTcpSocket *clientSocket, int statusCode, const QJsonObject &json, bool keepAlive = false);
+    void handlePostXUNFEIocr(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
+    void handlePostXUNFEIocrLvingroom(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
+    FrontendTask *findTaskById(const QString &taskId);
+    bool QueryCRcodePic(FrontendTask task);
+    QTcpSocket *getSocketByDescriptor(qintptr descriptor);
+    bool isSocketValid(const FrontendTask &task);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
@@ -220,6 +233,7 @@ signals:
     void updateDev();
     void getCRcodeImg(QString);
     void forwardJsonToMQTT(const QString& deviceSerial, const QString& jsonString);
+    void ORCbraggerresult(const QString& commandid, const QStringList& text);
     
 };
 

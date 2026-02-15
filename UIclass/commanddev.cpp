@@ -33,7 +33,8 @@ commanddev::commanddev(DatabaseManager *db, QVector<DeviceStatus> *devices, QWid
         qDebug() << "  UI 对象创建成功";
 
         qDebug() << "[3] 设置固定大小...";
-        setFixedSize(1000,620);
+        setFixedSize(SUB_WIGET_WIDTH ,SUB_WIGET_HEITH );
+     //   ui->tableWidget->setFixedSize(SUB_WIGET_TABLE_WIDTH,SUB_WIGET_TABLE_HEITH);
         qDebug() << "  大小设置完成";
 
         qDebug() << "[4] 调用 setupUi...";

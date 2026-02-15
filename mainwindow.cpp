@@ -455,6 +455,7 @@ void MainWindow::on_pushButton_openmqtt_clicked()
                 connect(p_mqtt_cli, &mqttclient::programInfoGenerated,p_ai, &AI_bragger::onProgramInfoGenerated);
                 connect(p_ai, &AI_bragger::sCommadSend,p_mqtt_cli, &mqttclient::devcommandsend);
                 connect(p_mqtt_cli, &mqttclient::programEnded,p_ai, &AI_bragger::onProgramEnded);
+                connect(p_http, &HttpServer::ORCbraggerresult,p_ai, &AI_bragger::updateOtherbragger);
 
                 p_ai->sethostpath(ip,"8554");
                 p_ai->setDeviceVector(&p_http->deviceVector);
@@ -1259,10 +1260,7 @@ void MainWindow::on_pushButton_withdraw_clicked()
     // 4. 显示
     ui->sub_widget->setVisible(true);
 }
-
-void MainWindow::on_pushButton_clicked()
-{
-    // 创建测试数据
+/*    // 创建测试数据
     AIpost a;
     a.theme = "旅游体验";
     a.text = "最近去了一趟黄山，看到了美丽的云海和奇特的松树，山上空气清新，风景如画";
@@ -1272,6 +1270,25 @@ void MainWindow::on_pushButton_clicked()
     a.commandid = "TEST_001";
   //  xunfeiAIprase(a);
     deepseekAIprase(a);
+*/
+/*
+QString recognizeImage(const QString &imagePath)
+{
+    XFOCR ocr;
+    ocr.setAuthInfo("318eeb03",
+                    "0731bdabe8a186215737d1edeb15b9ea",
+                    "MGM2NGNlYWM4NTA3Mzc3ZmY4ODIzZmZh");
+
+    QString result = ocr.recognizeImageSync(imagePath);
+    if (result.startsWith("Error:")) {
+        qDebug() << "失败:" << result;
+        return "";
+    }
+    return result;
+}*/
+void MainWindow::on_pushButton_clicked()
+{
+
 }
 
 #include <QCryptographicHash>
@@ -1499,8 +1516,29 @@ void MainWindow::deepseekAIprase(const AIpost &aiPost)
     }
     // 添加情绪要求
     if (!aiPost.guide.isEmpty()) {
-        prompt += QString("【重要参考】%1\n").arg(aiPost.guide);
+        prompt += QString("【注释】%1\n").arg(aiPost.guide);
     }
+    // 其他用户的弹幕
+
+        prompt += QString("【其他用户弹幕】\n");
+    prompt += "{";
+
+        for (const QString &str : aiPost.bragger)
+        {
+            prompt +=str;
+            prompt +="\n";
+        }
+            prompt += "}";
+        prompt += QString("【已经产生的弹幕  - 不要与这些雷同】\n");
+                prompt += "{";
+        for (const QString &str : aiPost.sentList)
+        {
+            prompt +=str;
+            prompt +="\n";
+        }
+        prompt += "}";
+
+
     // 添加内容参考
     prompt += QString("【视频内容 由声音识别得到】%1\n\n").arg(aiPost.text);
 
@@ -1511,12 +1549,14 @@ void MainWindow::deepseekAIprase(const AIpost &aiPost)
     prompt += "【具体要求】\n";
     prompt += "1. 每条评论都要独特、不重复\n";
     prompt += "2. 语言自然口语化，像真人写的\n";
-    prompt += "3. 每条评论长度2-3字\n";
+    prompt += "3. 每条评论保持一句话 尽量在五个字左右  ，不要太显眼 不要太突兀\n";
     prompt += "4. 符合指定的主题、场景和情感基调\n\n";
-    prompt += "5. 无法理解文本内容的时候 可以用啊“👍👍👍” “666加油啊😁😁😁”“❤❤😊😊🌹”等回复\n\n";
+    prompt += "5. 无法理解文本内容的时候 可以用啊“👍👍👍” “😁😁😁”“❤❤😊😊🌹”   ...等回复\n\n";
     prompt += "6. 严禁发送标点符号\n\n";
-    prompt += "7. 可以加emotion\n\n";
-    prompt += "8. 结合我给你的参数对自己生成的评论打个分 回复格式 score=7   满分10分\n\n";
+    prompt += "7. 可以加emotion   但是不要全都加！ 比如表情🤞🤣😍😢🐱‍🏍🐱‍💻💖😘😘💕🐱‍👓🎂😒😂👌😉😉🤷‍♂️😊👏👀😃😃✨✔🐱‍🚀👱‍♂️🤴🤶🚛💜🧡☪\n\n";
+    prompt += "8. 着重参考其他用户的弹幕【重中之重】\n\n";
+    prompt += "9. 着重参考其他用户的弹幕\n\n";
+    prompt += "10. 生成的文本 过滤掉语句不通顺的句子\n\n";
 
     // 格式要求
     prompt += "【回复格式】\n";
@@ -1524,7 +1564,7 @@ void MainWindow::deepseekAIprase(const AIpost &aiPost)
     prompt += "[第一条评论内容]\n";
     prompt += "[第二条评论内容]\n";
     prompt += "[...]\n";
-    connect(&deepseekAI, &DeepSeekAI::responseReceived,
+   /* connect(&deepseekAI, &DeepSeekAI::responseReceived,
             this, [this, commandId](const QString &response) {
                 qDebug() << "收到DeepSeek AI回复，节目:" << commandId;
              //    qDebug() << "收到DeepSeek AI回复，:" << response;
@@ -1537,11 +1577,20 @@ void MainWindow::deepseekAIprase(const AIpost &aiPost)
             this, [this, commandId](const QString &error) {
                 qDebug() << "DeepSeek AI请求错误，节目:" << commandId << "错误:" << error;
                 resetProgramGenerating(commandId);
-            });
+            });*/
 
     // 发送请求
     qDebug() << "DeepSeek AI post" << prompt;
-    deepseekAI.askQuestion(prompt);
+
+    QString response = p_http->askDeepSeek(prompt);
+    if(response.isEmpty())
+    resetProgramGenerating(commandId);
+    else
+    updateProgramBragger(commandId, response);
+
+
+
+  //  deepseekAI.askQuestion(prompt);
 }
 void MainWindow::xunfeiAIprase(const AIpost &aiPost)
 {
@@ -1741,6 +1790,8 @@ void MainWindow::checkAndGenerateBragger()
             aiRequest.motion = program.motion;
             aiRequest.guide = program.guideword;
             aiRequest.num = program.deviceList.size();
+            aiRequest.bragger = program.otherbragger;
+            aiRequest.sentList = program.sentbrager;
 
 #ifdef DEBUG_AI_GENERATE
             qDebug() << QString("  设备数: %1, 主题: %2").arg(aiRequest.num).arg(aiRequest.theme);

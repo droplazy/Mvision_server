@@ -14,7 +14,8 @@ withdraw::withdraw(QWidget *parent, DatabaseManager *dbManager)
     , tableModel(nullptr)
 {
     ui->setupUi(this);
-
+    setFixedSize(SUB_WIGET_WIDTH ,SUB_WIGET_HEITH );
+    ui->tableView->setFixedSize(SUB_WIGET_TABLE_WIDTH,SUB_WIGET_TABLE_HEITH);
     // 初始化表格模型
     tableModel = new QStandardItemModel(this);
     ui->tableView->setModel(tableModel);

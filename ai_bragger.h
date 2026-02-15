@@ -14,7 +14,7 @@ public:
     AI_bragger();
     ~AI_bragger();
 
-    int cooldownTimer=300;
+    int cooldownTimer=90;
 
 
     void sethostpath(QString ip, QString port);
@@ -25,6 +25,8 @@ public slots:
     void onProgramInfoGenerated(const ProgramInfo &programInfo);
     void checkProgramList();  // 定时检查节目列表
     void onProgramEnded(const QString &commandId);
+    void updateOtherbragger(const QString cmdid, const QStringList &text);
+
 protected:
     void run() override;
 
@@ -47,6 +49,7 @@ private:
     QStringList splitBraggerByDevices(const QString &bragger, int deviceCount);
     QTimer* aiCooldownTimer;  // 新增：AI冷却计时器
     void checkCoolDown();
+    bool isProgramTimeout(const QString &p_endtime);
 signals:
     void sCommadSend(QString topic, QString msg);
 private slots:

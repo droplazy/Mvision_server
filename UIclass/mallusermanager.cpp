@@ -16,7 +16,9 @@ mallusermanager::mallusermanager(DatabaseManager *dbManager, QWidget *parent)
 
     // 设置窗口属性
     setWindowTitle("商城用户管理");
-    // 禁止窗口拉伸
+    setFixedSize(SUB_WIGET_WIDTH ,SUB_WIGET_HEITH );
+    setFixedSize(SUB_WIGET_WIDTH ,SUB_WIGET_HEITH );
+    ui->tableView->setFixedSize(SUB_WIGET_TABLE_WIDTH,SUB_WIGET_TABLE_HEITH);    // 禁止窗口拉伸
     setFixedSize(this->size());
     if (!dbManager) {
         QMessageBox::critical(this, "错误", "数据库管理器为空！");

@@ -27,6 +27,7 @@ SOURCES += \
     UIclass/realtimespeechrecognizer.cpp \
     UIclass/userappeal.cpp \
     UIclass/withdraw.cpp \
+    UIclass/xfocr.cpp \
     ai_bragger.cpp \
     databasemanager.cpp \
     deepseekai.cpp \
@@ -60,6 +61,7 @@ HEADERS += \
     UIclass/realtimespeechrecognizer.h \
     UIclass/userappeal.h \
     UIclass/withdraw.h \
+    UIclass/xfocr.h \
     ai_bragger.h \
     databasemanager.h \
     deepseekai.h \

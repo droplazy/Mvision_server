@@ -97,12 +97,12 @@ void RealtimeSpeechRecognizer::stopSendingAudio()
 {
     if (m_sendTimer->isActive()) {
         m_sendTimer->stop();
-        qDebug() << "⏹️ 停止发送音频定时器";
+       // qDebug() << "⏹️ 停止发送音频定时器";
     }
 
     if (m_timeoutTimer->isActive()) {
         m_timeoutTimer->stop();
-        qDebug() << "⏹️ 停止超时计时器";
+     //   qDebug() << "⏹️ 停止超时计时器";
     }
 }
 bool RealtimeSpeechRecognizer::startRecognition(const QString &rtspUrl)
@@ -285,7 +285,7 @@ bool RealtimeSpeechRecognizer::startFFmpegStream(const QString &rtspUrl)
 }
 void RealtimeSpeechRecognizer::onWebSocketConnected()
 {
-    qDebug() << "✅ WebSocket连接成功";
+  //  qDebug() << "✅ WebSocket连接成功";
     emit statusMessage("WebSocket连接成功");
 
     // 立即发送开始帧
@@ -295,17 +295,17 @@ void RealtimeSpeechRecognizer::onWebSocketConnected()
     QTimer::singleShot(500, [this]() {
         if (m_isRecognizing && m_hasSentStartFrame) {
             m_sendTimer->start();
-            qDebug() << "🚀 开始发送音频数据，定时器启动";
+        //    qDebug() << "🚀 开始发送音频数据，定时器启动";
             emit statusMessage("开始发送音频数据");
         } else {
-            qDebug() << "❌ 开始帧未发送成功或识别已停止";
+        //    qDebug() << "❌ 开始帧未发送成功或识别已停止";
             emit errorOccurred("开始帧未发送成功");
         }
     });
 }
 void RealtimeSpeechRecognizer::onWebSocketDisconnected()
 {
-    qDebug() << "🔌 WebSocket断开连接";
+  //  qDebug() << "🔌 WebSocket断开连接";
     emit statusMessage("WebSocket断开");
 }
 void RealtimeSpeechRecognizer::reconnect()
@@ -496,7 +496,7 @@ void RealtimeSpeechRecognizer::onSendTimerTimeout()
         static int emptyCount = 0;
         emptyCount++;
 
-        if (emptyCount > 500) {  // 连续3次没有数据
+        if (emptyCount > 1000) {  // 连续3次没有数据
             qDebug() << "🔇 连续" << emptyCount << "次无数据 手动停止识别";
             QByteArray silence(m_frameSize, 0);
           //  sendAudioFrame(silence);
@@ -536,8 +536,8 @@ void RealtimeSpeechRecognizer::sendStartFrame()
     QJsonDocument doc(root);
     QString jsonStr = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
 
-    qDebug() << "📤 发送第一帧(status=0), JSON长度:" << jsonStr.length();
-    qDebug() << "第一帧内容:" << jsonStr;
+    // qDebug() << "📤 发送第一帧(status=0), JSON长度:" << jsonStr.length();
+    // qDebug() << "第一帧内容:" << jsonStr;
 
     m_webSocket->sendTextMessage(jsonStr);
     m_hasSentStartFrame = true;

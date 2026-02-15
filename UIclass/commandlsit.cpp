@@ -17,8 +17,8 @@ commandlsit::commandlsit(DatabaseManager* dbManager, QWidget *parent)
 
     // 设置窗口标题
     setWindowTitle("指令历史列表");
-    setFixedSize(1000,620);
-    // 设置表格
+    setFixedSize(SUB_WIGET_WIDTH ,SUB_WIGET_HEITH );
+    ui->tableWidget->setFixedSize(SUB_WIGET_TABLE_WIDTH,SUB_WIGET_TABLE_HEITH);    // 设置表格
     setupTableWidget();
 
     // 连接搜索按钮

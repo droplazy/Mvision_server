@@ -173,13 +173,19 @@ void AI_bragger::checkAndDistributeBraggers()
             !program.isListen &&                    // 不在识别中
             !program.isGenerating &&               // 不在AI生成中
             !program.isCoolingDown &&              // 不在冷却中
-            !program.deviceList.isEmpty()) {       // 有设备
+            !program.deviceList.isEmpty() &&
+            !isProgramTimeout(program.p_endtime)) {       // 有设备
 
             qDebug() << "🎯 满足分发条件，节目:" << program.commandId;
 
             // 计算结束时间（当前时间+10分钟）  执行时间
-            QString endTime = currentTime.addSecs(600).toString("hh:mm:ss");
-            QString startTime = currentTime.toString("hh:mm:ss");
+
+
+
+
+            int randomValue = QRandomGenerator::global()->bounded(90, 301); // 注意：301 是上限（不包含）
+       //     QString endTime = currentTime.addSecs(randomValue).toString("hh:mm:ss");
+       //     QString startTime = currentTime.toString("hh:mm:ss");
 
             // 将bragger按设备数量切片
             QStringList braggerSlices = splitBraggerByDevices(program.bragger, program.deviceList.size());
@@ -195,12 +201,25 @@ void AI_bragger::checkAndDistributeBraggers()
                         // 构建JSON
                         QJsonObject payloadObj;
                         QJsonObject dataObj;
-                        dataObj["action"] = "XXXAAAA";
+                        dataObj["action"] = program.action;
                         dataObj["sub_action"] = "弹幕";
-                        dataObj["start_time"] = startTime;
-                        dataObj["end_time"] = endTime;
+                        dataObj["start_time"] = program.p_startime;
+                        dataObj["end_time"] = program.p_endtime;
                         dataObj["commandid"] = program.commandId;
-                        dataObj["remark"] = QString("MSG:%1:MSG").arg(braggerSlice);
+
+
+                        QString cmdtext = program.cmdtext;
+
+                        // 1. 直接提取remark（假设JSON格式固定）
+                        int start = cmdtext.indexOf("\"remark\": \"") + 11;
+                        int end = cmdtext.indexOf("\",", start);
+                        QString remark = cmdtext.mid(start, end - start);
+
+                        // 2. 替换MSG::MSG
+                        QString finalRemark = remark.replace("MSG::MSG", QString(" MSG:%1:MSG").arg(braggerSlice));
+
+
+                        dataObj["remark"] =finalRemark;
 
                         payloadObj["data"] = dataObj;
                         payloadObj["messageType"] = "command";
@@ -211,12 +230,14 @@ void AI_bragger::checkAndDistributeBraggers()
                         QJsonDocument doc(payloadObj);
                         QString payload = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
                         QString topic = QString("Device/Dispatch/%1").arg(deviceSerial);
-
+                        program.sentbrager.append(braggerSlice);
                         // 发送信号
-                        //emit sCommadSend(topic, payload);
+                        emit sCommadSend(topic, payload);
 
                         qDebug() << "  📤 发送评论到设备" << deviceSerial;
                         qDebug() << "    评论切片:" << braggerSlice.left(50) << "...";
+                        // qDebug() << "    检查弹幕容器:" <<program.otherbragger << "...";
+
                     }
                 }
             }
@@ -231,8 +252,8 @@ void AI_bragger::checkAndDistributeBraggers()
             program.isGenerating = true;
             program.isListen = true;
 
-            qDebug() << "✅ 分发完成，启动1分钟冷却";
-            qDebug() << "  冷却结束时间:" << program.cooldownEndTime.toString("hh:mm:ss");
+            // qDebug() << "✅ 分发完成，启动1分钟冷却";
+              qDebug() << "  冷却结束时间:" << program.cooldownEndTime.toString("hh:mm:ss");
         }
     }
 }
@@ -367,6 +388,26 @@ void AI_bragger::onProgramEnded(const QString &commandId)
 
     qDebug() << "⚠️ 未找到commandId为" << commandId << "的节目";
 }
+
+void AI_bragger::updateOtherbragger(const QString cmdid, const QStringList &textList)
+{
+    for (int i = 0; i < ProgramList.size(); ++i) {
+        if (ProgramList[i].commandId == cmdid) {
+            // 遍历QStringList中的每个字符串
+            for (const QString &text : textList) {
+                // 检查是否已存在相同的文本
+                if (!ProgramList[i].otherbragger.contains(text)) {
+                    ProgramList[i].otherbragger.append(text);
+                   // qDebug() << "已为节目单" << cmdid << "添加otherbragger:" << text;
+                } else {
+                  //  qDebug() << "otherbragger中已存在相同文本:" << text;
+                }
+            }
+            return;
+        }
+    }
+    qWarning() << "未找到commandId为" << cmdid << "的节目单";
+}
 void AI_bragger::setDeviceVector(QVector<DeviceStatus>* vector) {
     deviceVector = vector;
     if (deviceVector) {
@@ -398,10 +439,24 @@ void AI_bragger::checkDeviceStatusForPrograms()
         if (program.deviceList.isEmpty()) continue;
 
         // 检查该节目是否需要检查（默认60秒检查一次）
-        if (program.checkTime.isValid() && program.checkTime.secsTo(now) < 180) {
+        if (program.checkTime.isValid() && program.checkTime.secsTo(now) < 300 ) {
             continue; // 距离上次检查不到60秒，跳过
         }
+        if(isProgramTimeout(program.p_endtime))
+        {
+            // 获取当前时间
+            QTime currentTime = QTime::currentTime();
 
+            // 将字符串转换为QTime
+            QTime endTime = QTime::fromString(program.p_endtime, "HH:mm:ss");
+            // 计算时间差（毫秒）
+            int diffInMilliseconds = currentTime.msecsTo(endTime);
+
+            // 计算时间差（秒）
+            int diffInSeconds = diffInMilliseconds / 1000;
+            qDebug() << "已经超时 " << diffInSeconds;
+             continue; // 距离上次检查不到60秒，跳过
+        }
         // 更新该节目的检查时间
         program.checkTime = now;
 
@@ -448,7 +503,7 @@ void AI_bragger::checkDeviceStatusForPrograms()
                 {
                     qDebug() << "检测到异常设备为推流设备" << deviceId;
                     qDebug() << "需要补发一条推流命令";
-
+                     QThread::sleep(1);
                     // 创建JSON payload
                     QJsonObject payloadObj;
                     QJsonObject dataObj;
@@ -474,4 +529,15 @@ void AI_bragger::checkDeviceStatusForPrograms()
             }
         }
     }
+}
+bool AI_bragger::isProgramTimeout(const QString& p_endtime)
+{
+    // 获取当前时间
+    QTime currentTime = QTime::currentTime();
+
+    // 将字符串转换为QTime
+    QTime endTime = QTime::fromString(p_endtime, "HH:mm:ss");
+
+    // 比较时间，如果当前时间大于结束时间则返回true
+    return currentTime > endTime;
 }

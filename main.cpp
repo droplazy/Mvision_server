@@ -6,7 +6,7 @@
 #include "loghandler.h"
 #include "privilegehelper.h"
 #include <QMessageBox>
-
+#include "publicheader.h"
 
 int main(int argc, char *argv[])
 {
@@ -43,9 +43,10 @@ int main(int argc, char *argv[])
             break;
         }
     }
-
-      // qInstallMessageHandler(LogHandler::messageHandler);
-      // LogHandler::instance()->setLogFile("app_log.txt");
+#if DEBUG_MODE
+       qInstallMessageHandler(LogHandler::messageHandler);
+       LogHandler::instance()->setLogFile("app_log.txt");
+#endif
     MainWindow w;
     w.show();
 

@@ -8,6 +8,21 @@
 #include <QDebug>
 #include <QVector>
 
+
+#ifdef QT_DEBUG
+#define DEBUG_MODE 0
+#else
+#define DEBUG_MODE 1
+#endif
+
+
+
+#define SUB_WIGET_WIDTH 1230
+#define SUB_WIGET_HEITH 810
+
+#define SUB_WIGET_TABLE_WIDTH 1200
+#define SUB_WIGET_TABLE_HEITH 740
+
 struct VerificationCode {
     QString code;           // 验证码（4位数字）
     QString username;       // 用户名
@@ -450,9 +465,14 @@ struct ProgramInfo
     QString streamDev;
     QString historyVoice;
     QString historyAI;
+    QString action;
+    QStringList otherbragger;
+    QStringList sentbrager;
+
 
     QString cmdtext;
-
+    QString p_startime;;
+    QString p_endtime;;
 
     QString voicetotext;
     QString bragger;
@@ -477,6 +497,9 @@ struct AIpost
     QString commandid;
     QString scene;
     QString guide;
+    QStringList bragger;
+    QStringList sentList;
+
     int num;
 };
 // // 产品ID到名称的映射（这里需要你根据实际情况完善）

@@ -15,8 +15,15 @@
 #include <QCryptographicHash>
 #include <QSslServer>  // 修改：使用QSslServer
 #include <QSslSocket>  // 修改：使用QSslSocket
-HttpServer::
-HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
+#include "./UIclass/XFOCR.h"
+#include "DeepSeekAI.h"
+#include "qthread.h"
+#include <QEventLoop>
+#include <QTimer>
+#include <QDebug>
+
+
+HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
     //handleCreateTestOrdersSimple();
     //handleCreateProductDebug();
@@ -584,8 +591,8 @@ void HttpServer::handleGetDownload(QTcpSocket *clientSocket, const QUrlQuery &qu
     }
 
     QString filePath = downloadDir.filePath(baseName);
+    qDebug () << "post file " <<baseName;
     QFile file(filePath);
-
     // 5. 检查文件是否存在且可读
     if (!file.exists()) {
         sendHttpResponse(clientSocket, 404, "Not Found",
@@ -594,6 +601,7 @@ void HttpServer::handleGetDownload(QTcpSocket *clientSocket, const QUrlQuery &qu
         for (const QString &filename : files) {
             qDebug() << "  -" << filename;
         }
+        qDebug() <<baseName << "this ";
         return;
     }
 
@@ -693,7 +701,7 @@ void HttpServer::onReadyRead() {
         // 读取请求
         QByteArray request = clientSocket->readAll();
 
-        qDebug() << "收到的原文 : " << request;
+        //  qDebug() << "收到的原文 : " << request;
         // 发送请求信息信号（在完整处理之前）
         QString reqInfo = QString("IP: %1").arg(clientIp);
         emit sendreqInfo(reqInfo);
@@ -723,10 +731,10 @@ void HttpServer::onReadyRead() {
 #if 1
         // Token验证（排除登录接口）
         bool isLoginPath = (path == "/mall/login/para" ||path == "/auth/login" || path == "/mall/login/info"|| (path == "/home" || path.contains(".css") /*|| path.contains("/login") */\
-                           || path.startsWith("/mall_login")|| path.contains("/login-bg.jpg")|| path.startsWith("/control_login") \
-                           || path.startsWith("/mall/auth/register")|| path.contains(".js") || path.contains(".html") \
-                           || path.startsWith("/mall/auth/passwd-reset/reset")|| path.contains("/mall/auth/passwd-reset/sendemail") || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
-                           || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
+                                                                                                                || path.startsWith("/mall_login")|| path.contains("/login-bg.jpg")|| path.startsWith("/control_login") \
+                                                                                                                || path.startsWith("/mall/auth/register")|| path.contains(".js") || path.contains(".html") \
+                                                                                                                || path.startsWith("/mall/auth/passwd-reset/reset")|| path.contains("/mall/auth/passwd-reset/sendemail") || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
+                                                                                                                || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
         if (!isLoginPath) {
             // 非登录接口需要验证token
             if(token=="GXFC")
@@ -740,8 +748,9 @@ void HttpServer::onReadyRead() {
             else if (token.isEmpty() || !dbManager || !dbManager->validateToken(token)) {
                 qDebug() << "Token验证失败或不存在，返回401";
                 //sendUnauthorized(clientSocket);
-                send404(clientSocket);
+                sendErrorResponse(clientSocket, 401, "Token验证失败或不存在");
                 clientSocket->disconnectFromHost();
+
                 return;
             }
         }
@@ -777,9 +786,9 @@ void HttpServer::onReadyRead() {
                 handleGetLoginUI(clientSocket,query );
             }else if (path.startsWith("/product_images/")) {
                 QString imagePath = path.mid(16); // 去掉 "/product_images/" 这16个字符
-                   QUrlQuery newQuery;
-                   newQuery.addQueryItem("path", imagePath);
-                   handleGetProductsPic(clientSocket, newQuery);
+                QUrlQuery newQuery;
+                newQuery.addQueryItem("path", imagePath);
+                handleGetProductsPic(clientSocket, newQuery);
             }else if (path == "/platform/request_CRcode") {
                 handleGetCRCODE(clientSocket,query );
             }else if (path == "/platform/taskquery") {
@@ -789,7 +798,7 @@ void HttpServer::onReadyRead() {
             }else if (path == "/platform/cancel_dev") {
                 handleGetCancelDev(clientSocket, query);
             }else if (path == "/platform/get_vaild") {
-                            handleGetidleDev(clientSocket );
+                handleGetidleDev(clientSocket );
             }else if (path == "/device/iptest") {
                 handleGetIPTEST(clientSocket, clientIp );
             }else if (path.startsWith("/images")) {
@@ -813,8 +822,8 @@ void HttpServer::onReadyRead() {
                 handleGetDownload(clientSocket, query);
             }else if (path.startsWith("/cmdsnap")) {
                 QString imagePath = path.mid(8); // 去掉 "/product_images/" 这16个字符
-                   QUrlQuery newQuery;
-                   newQuery.addQueryItem("path", imagePath);
+                QUrlQuery newQuery;
+                newQuery.addQueryItem("path", imagePath);
                 handlecmdSnap(clientSocket, newQuery);
             }else if (path == "/command/history") {
                 handleGetCommandList(clientSocket, query);
@@ -914,13 +923,67 @@ void HttpServer::onReadyRead() {
                     handlePostMallSendwithdraw(clientSocket, body);
                 } else if (path == "/mall/product/order-checkout") {
                     handlePostMallOrderCheckout(clientSocket, body);
-                } else if (path == "/order/dispose/Verify") {
+                }
+                else if (path.startsWith("/ocr_xunfei/AI_comments")) {
+                    // 如果已经接收的body不完整，继续读取
+                    if (contentLength > 0 && body.size() < contentLength) {
+                        qDebug() << "Need to read more data. Current:" << body.size()
+                                 << "Expected:" << contentLength;
+
+                        // 设置读取超时
+                        int timeout = 5000; // 5秒
+                        qint64 remaining = contentLength - body.size();
+
+                        while (remaining > 0 && clientSocket->waitForReadyRead(timeout)) {
+                            QByteArray moreData = clientSocket->readAll();
+                            if (!moreData.isEmpty()) {
+                                body.append(moreData);
+                                remaining = contentLength - body.size();
+                            } else {
+                                break;
+                            }
+                        }
+
+                        if (body.size() != contentLength) {
+                            qDebug() << "Warning: Body incomplete! Expected:" << contentLength
+                                     << "Actual:" << body.size();
+                        }
+                    }
+                    handlePostXUNFEIocr(clientSocket, body, query);
+                }
+                else if (path.startsWith("/ocr_xunfei/livingOrc")) {
+                    // 如果已经接收的body不完整，继续读取
+                    if (contentLength > 0 && body.size() < contentLength) {
+                        qDebug() << "Need to read more data. Current:" << body.size()
+                                 << "Expected:" << contentLength;
+
+                        // 设置读取超时
+                        int timeout = 5000; // 5秒
+                        qint64 remaining = contentLength - body.size();
+
+                        while (remaining > 0 && clientSocket->waitForReadyRead(timeout)) {
+                            QByteArray moreData = clientSocket->readAll();
+                            if (!moreData.isEmpty()) {
+                                body.append(moreData);
+                                remaining = contentLength - body.size();
+                            } else {
+                                break;
+                            }
+                        }
+
+                        if (body.size() != contentLength) {
+                            qDebug() << "Warning: Body incomplete! Expected:" << contentLength
+                                     << "Actual:" << body.size();
+                        }
+                    }
+                    handlePostXUNFEIocrLvingroom(clientSocket, body, query);
+                }else if (path == "/order/dispose/Verify") {
                     handlePostOrderVerify(clientSocket, body);
                 }else if (path == "/mall/auth/order/appeal/text") {
                     handlePostMallUserAppealtext(clientSocket, body, query);
                 } else if (path == "/platform/request") {
                     handlePostPlatformReq(clientSocket, body);
-                 }
+                }
                 else if (path == "/platform/request_sendcode") {
                     handlePostPlatformReqSendcode(clientSocket, body);
                 }else if (path == "/mall/auth/order/appeal/picture") {
@@ -953,35 +1016,35 @@ void HttpServer::onReadyRead() {
                     handlePostMallUserAppealPic(clientSocket, body, query);
                     qDebug() << "After handlePostFileUpload";
                 }else if (path == "/withdraw_dispose") {
-                            // 如果已经接收的body不完整，继续读取
-                            if (contentLength > 0 && body.size() < contentLength) {
-                                qDebug() << "Need to read more data. Current:" << body.size()
-                                         << "Expected:" << contentLength;
+                    // 如果已经接收的body不完整，继续读取
+                    if (contentLength > 0 && body.size() < contentLength) {
+                        qDebug() << "Need to read more data. Current:" << body.size()
+                                 << "Expected:" << contentLength;
 
-                                // 设置读取超时
-                                int timeout = 5000; // 5秒
-                                qint64 remaining = contentLength - body.size();
+                        // 设置读取超时
+                        int timeout = 5000; // 5秒
+                        qint64 remaining = contentLength - body.size();
 
-                                while (remaining > 0 && clientSocket->waitForReadyRead(timeout)) {
-                                    QByteArray moreData = clientSocket->readAll();
-                                    if (!moreData.isEmpty()) {
-                                        body.append(moreData);
-                                        remaining = contentLength - body.size();
-                                    } else {
-                                        break;
-                                    }
-                                }
-
-                                if (body.size() != contentLength) {
-                                    qDebug() << "Warning: Body incomplete! Expected:" << contentLength
-                                             << "Actual:" << body.size();
-                                }
+                        while (remaining > 0 && clientSocket->waitForReadyRead(timeout)) {
+                            QByteArray moreData = clientSocket->readAll();
+                            if (!moreData.isEmpty()) {
+                                body.append(moreData);
+                                remaining = contentLength - body.size();
+                            } else {
+                                break;
                             }
+                        }
 
-                            qDebug() << "Before calling handlePostWithDrawPic, body size:" << body.size();
-                            handlePostWithDrawPic(clientSocket, body, query);
-                            qDebug() << "After handlePostWithDrawPic";
-                        } else {
+                        if (body.size() != contentLength) {
+                            qDebug() << "Warning: Body incomplete! Expected:" << contentLength
+                                     << "Actual:" << body.size();
+                        }
+                    }
+
+                    qDebug() << "Before calling handlePostWithDrawPic, body size:" << body.size();
+                    handlePostWithDrawPic(clientSocket, body, query);
+                    qDebug() << "After handlePostWithDrawPic";
+                } else {
                     qDebug() << path << "[POST /process/create] body =" << body;
                     sendNotFound(clientSocket);
                 }
@@ -989,9 +1052,11 @@ void HttpServer::onReadyRead() {
         } else {
             sendNotFound(clientSocket);
         }
-
-        // 断开与客户端的连接
-        clientSocket->disconnectFromHost();
+        if(path != "/platform/request_CRcode" && path != "/platform/taskquery")
+        {
+            // 断开与客户端的连接
+            clientSocket->disconnectFromHost();
+        }
     }
 }
 
@@ -1639,10 +1704,10 @@ void HttpServer::handleGetidleDev(QTcpSocket *clientSocket)
 
         // 统计完全未登录任何平台的设备（所有平台都是"未登录"状态）
         if (device.tiktok == "未登录" &&
-            device.bilibili == "未登录" &&
-            device.xhs == "未登录" &&
-            device.weibo == "未登录" &&
-            device.kuaishou == "未登录") {
+                device.bilibili == "未登录" &&
+                device.xhs == "未登录" &&
+                device.weibo == "未登录" &&
+                device.kuaishou == "未登录") {
             FFF++;
         }
     }
@@ -1777,25 +1842,42 @@ void HttpServer::handleGetTaskSta(QTcpSocket *clientSocket, const QUrlQuery &que
         return;
     }
 
-    // 查找任务
-    QString status = "not_found";
 
-    for ( auto& task : frontendTasks) {
-        task.print();
-
-        if (task.taskId == taskId) {
-            status = task.status;
-            break;
-        }
+    FrontendTask* task = findTaskById(taskId);
+    if (task) {
+        task->print(); // 找到了，打印任务信息
+    } else {
+        qDebug() << "Task id not found";
+        sendErrorResponse(clientSocket, 404, "Task not found");
+        return ;
     }
 
-    // 返回响应
-    QJsonObject response;
-    response["code"] = 200;
-    response["taskid"] = taskId;
-    response["status"] = status;
+    task->updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+    task->clientinfo =clientSocket;
+    task->postResult=true;
 
-    sendJsonResponse(clientSocket, 200, response);
+
+    // 查找任务
+    // QString status = "not_found";
+
+    // for ( auto& task : frontendTasks) {
+    //     task.print();
+
+    //     if (task.taskId == taskId) {
+    //         //status = task.status;
+    //         break;
+    //     }
+    // }
+
+
+
+    // // 返回响应
+    // QJsonObject response;
+    // response["code"] = 200;
+    // response["taskid"] = taskId;
+    // response["status"] = status;
+
+    // sendJsonResponse(clientSocket, 200, response);
 }
 
 #include <QPainter>
@@ -1852,15 +1934,15 @@ void HttpServer::sendErrorImage(QTcpSocket *clientSocket, int errorCode, const Q
 
     // 构建HTTP响应
     QString response = QString("HTTP/1.1 %1\r\n"
-                              "Content-Type: %2\r\n"
-                              "Access-Control-Allow-Origin: *\r\n"
-                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-                              "Access-Control-Allow-Headers: Content-Type\r\n"
-                              "Content-Length: %3\r\n"
-                              "\r\n")
-                      .arg(errorCode)
-                      .arg(contentType)
-                      .arg(imageData.size());
+                               "Content-Type: %2\r\n"
+                               "Access-Control-Allow-Origin: *\r\n"
+                               "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                               "Access-Control-Allow-Headers: Content-Type\r\n"
+                               "Content-Length: %3\r\n"
+                               "\r\n")
+            .arg(errorCode)
+            .arg(contentType)
+            .arg(imageData.size());
 
     // 发送响应
     clientSocket->write(response.toUtf8());
@@ -1869,131 +1951,163 @@ void HttpServer::sendErrorImage(QTcpSocket *clientSocket, int errorCode, const Q
 
     qDebug() << "错误图片已发送，大小:" << imageData.size() << "bytes";
 }
+
+FrontendTask* HttpServer::findTaskById(const QString& taskId) {
+    for (auto& task : frontendTasks) {
+        if (task.taskId == taskId) {
+            return &task;
+        }
+    }
+    return nullptr; // 没找到返回空指针
+}
+
 void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &query)
 {
     qDebug() << "=== handleGetCRCODE 开始处理 ===";
+    qDebug() << "客户端:" << clientSocket->peerAddress().toString()
+             << ":" << clientSocket->peerPort();
+
+    // 2. 打印URL查询参数
+    qDebug() << "URL查询参数:";
+    if (query.isEmpty()) {
+        qDebug() << "  无查询参数";
+    } else {
+        for (const auto &item : query.queryItems()) {
+            qDebug() << "  " << item.first << "=" << item.second;
+        }
+    }
+    /*
+    // 检查指针是否为空
+    qDebug() <<"1";
+    if (!clientSocket) {
+        qDebug("this is empty pointer..");
+    }
+    qDebug() <<"2";
+
+    // 检查socket状态
+    if (clientSocket->state() != QAbstractSocket::ConnectedState) {
+        qDebug("tcp has disconnected..");
+    }
+    qDebug() <<"3";
+
+  //  检查是否可写（可选）
+    if (!clientSocket->isWritable()) {
+        qDebug("tcp cannot writable..");
+    }
+    qDebug() <<"5";
+*/
+
+
 
     // 提取taskid参数
     QString taskId = query.queryItemValue("taskid");
 
-    if (taskId.isEmpty()) {
-        qWarning() << "缺少taskid参数";
-        sendErrorResponse(clientSocket, 400, "Missing taskid parameter");
-        return;
-    }
-
-    qDebug() << "请求的taskid:" << taskId;
-
-    // 遍历FrontendTask查找对应的commandid
-    QString commandId;
-    bool taskFound = false;
-
-    for (const auto& task : frontendTasks) {
-        if (task.taskId == taskId) {
-            taskFound = true;
-            commandId = task.commandid;
-            qDebug() << "找到任务，commandid:" << commandId;
-            break;
-        }
-    }
-
-    if (!taskFound) {
-        qWarning() << "未找到对应的任务:" << taskId;
+    FrontendTask* task = findTaskById(taskId);
+    if (task) {
+        task->print(); // 找到了，打印任务信息
+    } else {
+        qDebug() << "Task id not found";
         sendErrorResponse(clientSocket, 404, "Task not found");
-        return;
+        return ;
     }
 
-    if (commandId.isEmpty()) {
-        qWarning() << "任务commandid为空:" << taskId;
-        sendErrorResponse(clientSocket, 500, "Task commandid is empty");
-        return;
-    }
+    task->updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+    task->clientinfo =clientSocket;
+    task->postCRcode= true;
 
+
+    // 构建MQTT JSON
+    QJsonObject mqttData;
+    mqttData["command_id"] = task->commandid;
+    mqttData["action"] = task->platform;
+
+    // 根据method设置sub_action
+    QString subAction;
+    if (task->method == "message") {
+        subAction = "登录";
+    } else if (task->method == "crcode") {
+        subAction = "二维码登录";
+    } else {
+        subAction = "退出"; // 默认
+    }
+    mqttData["sub_action"] = subAction;
+
+    mqttData["start_time"] = "00:00:00";
+    mqttData["end_time"] = "23:59:00";
+
+    // 构建remark，根据method添加不同的标记
+    QString remark;
+    if (task->method == "message") {
+        remark = QString("ID:%1 MARK:LOGGIN_APP:MARK").arg(task->account);
+    } else if (task->method == "crcode") {
+        remark = QString("ID:%1 MARK:CRCODE_LOGGIN:MARK").arg(task->account);
+    } else {
+        remark = QString("ERR").arg(task->account);
+    }
+    mqttData["remark"] = remark;
+
+    QJsonObject mqttJson;
+    mqttJson["messageType"] = "command";
+    mqttJson["password"] = "securePassword123";
+    mqttJson["username"] = "user123";
+    mqttJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    mqttJson["data"] = mqttData;
+
+    // 发射信号
+    emit forwardJsonToMQTT(task->deviceSerial, QString::fromUtf8(QJsonDocument(mqttJson).toJson()));
+
+
+    if (dbManager) {
+        qDebug() << "数据库管理器可用";
+
+        SQL_CommandHistory commandHistory;
+        commandHistory.commandId = task->commandid;
+        commandHistory.status = "executing";  // 状态设为执行中
 #if DEBUG_MODE
-    // ... debug代码 ...
-    QString imageFilePath = QDir::current().filePath("images/debugpic.png");
-    QTimer::singleShot(5000, [this]() {
-        if (!frontendTasks.isEmpty()) {
-            FrontendTask& task = frontendTasks[QRandomGenerator::global()->bounded(frontendTasks.size())];
-            task.status = QRandomGenerator::global()->bounded(2) ? "success" : "failed";
-            qDebug() << "DEBUG: 任务" << task.taskId << "状态设为" << task.status;
-        }
-    });
-    QString imageFileName = "debugpic.png";
-    //QString imageFilePath = commandDir.filePath(imageFileName);
-
+        commandHistory.action = "act";
+        commandHistory.sub_action = "sub_act";
 #else
-    // ... 原查找图片逻辑 ...
-    QDir currentDir = QDir::current();
-    QString uploadDirPath = currentDir.filePath("Upload");
-    QString commandDirPath = QDir(uploadDirPath).filePath(commandId);
-
-    // 检查目录和文件是否存在
-    if (!QDir(uploadDirPath).exists()) {
-        sendErrorResponse(clientSocket, 404, "Upload directory not found");
-        return;
-    }
-
-    QDir commandDir(commandDirPath);
-    if (!commandDir.exists()) {
-        sendErrorResponse(clientSocket, 404, "QR code not ready");
-        return;
-    }
-
-    QStringList imageFilters;
-    imageFilters << "*.jpg" << "*.jpeg" << "*.png" << "*.bmp" << "*.gif";
-    QStringList imageFiles = commandDir.entryList(imageFilters, QDir::Files);
-
-    if (imageFiles.isEmpty()) {
-        sendErrorResponse(clientSocket, 404, "QR image not found");
-        return;
-    }
-    QString imageFileName = imageFiles.first();
-    QString imageFilePath = commandDir.filePath(imageFileName);
-
-
+        commandHistory.action = task->platform;
+        commandHistory.sub_action = subAction;
 #endif
-    // 读取图片
-    QFile imageFile(imageFilePath);
-    if (!imageFile.open(QIODevice::ReadOnly)) {
-        sendErrorResponse(clientSocket, 500, "Cannot open image");
-        return;
+        commandHistory.start_time = "00:00:00";
+        commandHistory.end_time = "23:59:59";
+        commandHistory.remark = remark;
+        commandHistory.completeness = "0%";  // 初始完成度0%
+        commandHistory.completed_url = "";   // 初始为空
+        commandHistory.total_tasks = 1;      // 总任务数设为1
+        commandHistory.completed_tasks = 0;  // 已完成任务数设为0
+        commandHistory.failed_tasks = 0;     // 失败任务数设为0
+
+        qDebug() << "命令历史记录信息:";
+        qDebug() << "  commandId:" << commandHistory.commandId;
+        qDebug() << "  status:" << commandHistory.status;
+        qDebug() << "  action:" << commandHistory.action;
+        qDebug() << "  sub_action:" << commandHistory.sub_action;
+        qDebug() << "  completeness:" << commandHistory.completeness;
+        qDebug() << "  total_tasks:" << commandHistory.total_tasks;
+        qDebug() << "  completed_tasks:" << commandHistory.completed_tasks;
+        qDebug() << "  failed_tasks:" << commandHistory.failed_tasks;
+
+        // 插入数据库
+        bool insertSuccess = dbManager->insertCommandHistory(commandHistory);
+
+        if (insertSuccess) {
+            qDebug() << "命令历史记录插入成功! commandId:" << task->commandid;
+        } else {
+            qWarning() << "命令历史记录插入失败! commandId:" <<  task->commandid;
+        }
+    } else {
+        qWarning() << "数据库管理器不可用，跳过命令历史记录插入";
     }
-
-    QByteArray imageData = imageFile.readAll();
-    imageFile.close();
-
-    if (imageData.isEmpty()) {
-        sendErrorResponse(clientSocket, 500, "Image is empty");
-        return;
-    }
-
-    qDebug() << "图片文件大小:" << imageData.size() << "bytes";
-
-    // 根据文件扩展名确定Content-Type
-    QString contentType = "image/jpeg";
-    if (imageFileName.endsWith(".png", Qt::CaseInsensitive)) contentType = "image/png";
-    else if (imageFileName.endsWith(".gif", Qt::CaseInsensitive)) contentType = "image/gif";
-    else if (imageFileName.endsWith(".bmp", Qt::CaseInsensitive)) contentType = "image/bmp";
-
-    // 统一返回图片格式
-    QString response = QString("HTTP/1.1 200 OK\r\n"
-                              "Content-Type: %1\r\n"
-                              "Access-Control-Allow-Origin: *\r\n"
-                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-                              "Access-Control-Allow-Headers: Content-Type\r\n"
-                              "Content-Length: %2\r\n"
-                              "\r\n")
-                      .arg(contentType)
-                      .arg(imageData.size());
-
-    clientSocket->write(response.toUtf8());
-    clientSocket->write(imageData);
-    clientSocket->flush();
-
-    qDebug() << "已返回二维码图片，大小:" << imageData.size() << "bytes";
-    qDebug() << "=== handleGetCRCODE 处理完成 ===";
+    qDebug() << "数据库操作完成";
 }
+
+
+
+
+
+
 
 
 
@@ -2001,10 +2115,10 @@ void HttpServer::handleGetCRCODE(QTcpSocket *clientSocket, const QUrlQuery &quer
 QString HttpServer::getHttpStatusText(int code)
 {
     switch(code) {
-        case 400: return "Bad Request";
-        case 404: return "Not Found";
-        case 500: return "Internal Server Error";
-        default: return "Error";
+    case 400: return "Bad Request";
+    case 404: return "Not Found";
+    case 500: return "Internal Server Error";
+    default: return "Error";
     }
 }
 
@@ -2088,12 +2202,12 @@ void HttpServer::handleGetProductsPic(QTcpSocket *clientSocket, const QUrlQuery 
 
     // 构建并发送HTTP响应
     QString header = QString(
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: %1\r\n"
-        "Content-Length: %2\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-    ).arg(contentType).arg(fileData.size());
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: %1\r\n"
+                "Content-Length: %2\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+                ).arg(contentType).arg(fileData.size());
 
     clientSocket->write(header.toUtf8());
     clientSocket->write(fileData);
@@ -3759,8 +3873,8 @@ QJsonObject HttpServer::productToJson(const SQL_Product &product)
             QString fullImagePath = "/product_images/" + product.imageUrl  +"/"+ imageFile;
             imageUrlsArray.append(fullImagePath);
         }
- //       qDebug() << imageFiles;
-//        qDebug() << fullImagePath;
+        //       qDebug() << imageFiles;
+        //        qDebug() << fullImagePath;
 
     }
     else
@@ -3819,7 +3933,7 @@ void HttpServer::handlePostPlatformReqSendcode(QTcpSocket *clientSocket, const Q
     qDebug() << "提取的字段值:";
     qDebug() << "  method:" << method;
     qDebug() << "  code:" << code;
-//    qDebug() << "  platform:" << platform;
+    //    qDebug() << "  platform:" << platform;
     qDebug() << "  taskid:" << taskId;
 
     // 验证必要字段
@@ -3947,12 +4061,12 @@ void HttpServer::handlePostPlatformReqSendcode(QTcpSocket *clientSocket, const Q
     // 通过信号发送到MQTT
 #if DEBUG_MODE
     QTimer::singleShot(5000, [this]() {
-                if (!frontendTasks.isEmpty()) {
-                    FrontendTask& task = frontendTasks[QRandomGenerator::global()->bounded(frontendTasks.size())];
-                    task.status = QRandomGenerator::global()->bounded(2) ? "success" : "failed";
-                    qDebug() << "DEBUG: 任务" << task.taskId << "状态设为" << task.status;
-                }
-            });
+        if (!frontendTasks.isEmpty()) {
+            FrontendTask& task = frontendTasks[QRandomGenerator::global()->bounded(frontendTasks.size())];
+            task.status = QRandomGenerator::global()->bounded(2) ? "success" : "failed";
+            qDebug() << "DEBUG: 任务" << task.taskId << "状态设为" << task.status;
+        }
+    });
 #else
     emit forwardJsonToMQTT(device, jsonString);
     qDebug() << "已发射forwardJsonToMQTT信号";
@@ -3970,7 +4084,7 @@ void HttpServer::handlePostPlatformReqSendcode(QTcpSocket *clientSocket, const Q
     successResponse["taskid"] = taskId;
     successResponse["status"] = "dispose";
     if(platform== "抖音")
-    platform ="AAA";
+        platform ="AAA";
     successResponse["platform"] = platform;
     successResponse["commandId"] = commandId;  // 添加命令ID到响应中
 
@@ -4025,8 +4139,8 @@ void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArra
 #if DEBUG_MODE
     QString deviceSerial = "1234567890"; // findAvailableDevice(platformCode);
 #else
-   // QString deviceSerial = findAvailableDevice(platformCode);
-    QString deviceSerial ="JMCR202601050005";// findAvailableDevice(platformCode);
+    // QString deviceSerial = findAvailableDevice(platformCode);
+    QString deviceSerial ="JMCR202601050003";// findAvailableDevice(platformCode);
 
 #endif
     if (deviceSerial.isEmpty()) {
@@ -4038,24 +4152,7 @@ void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArra
     QString commandId = QString("CMD_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss_zzz"));
     QString taskId = QString("task_%1").arg(QDateTime::currentMSecsSinceEpoch());
 
-    // 构建MQTT JSON
-    QJsonObject mqttData;
-    mqttData["command_id"] = commandId;
-    mqttData["action"] = platform;
 
-    // 根据method设置sub_action
-    QString subAction;
-    if (method == "message") {
-        subAction = "登录";
-    } else if (method == "crcode") {
-        subAction = "二维码登录";
-    } else {
-        subAction = "退出"; // 默认
-    }
-    mqttData["sub_action"] = subAction;
-
-    mqttData["start_time"] = "00:00:00";
-    mqttData["end_time"] = "23:59:00";
 
     // 构建remark，根据method添加不同的标记
     QString remark;
@@ -4066,17 +4163,14 @@ void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArra
     } else {
         remark = QString("ERR").arg(account);
     }
-    mqttData["remark"] = remark;
-
-    QJsonObject mqttJson;
-    mqttJson["messageType"] = "command";
-    mqttJson["password"] = "securePassword123";
-    mqttJson["username"] = "user123";
-    mqttJson["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-    mqttJson["data"] = mqttData;
-
-    // 发射信号
-    emit forwardJsonToMQTT(deviceSerial, QString::fromUtf8(QJsonDocument(mqttJson).toJson()));
+    QString subAction;
+    if (method == "message") {
+        subAction = "登录";
+    } else if (method == "crcode") {
+        subAction = "二维码登录";
+    } else {
+        subAction = "退出"; // 默认
+    }
 
     // 创建任务并添加到容器
     FrontendTask newTask;
@@ -4087,10 +4181,12 @@ void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArra
     newTask.status = "wait";
     newTask.username =username;
     newTask.createTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-    newTask.updateTime = newTask.createTime;
-    newTask.remark = QString("%1 - %2").arg(subAction).arg(remark);
+    newTask.updateTime = "";//newTask.createTime;
+    newTask.remark = QString("%1 - %2").arg(subAction, remark);
     newTask.commandid = commandId;
-
+    newTask.method = method;
+    // newTask.clientinfo = clientSocket;
+    //newTask.socketDescriptor = clientSocket->socketDescriptor(); // 只保存描述符
     // 添加到容器
     frontendTasks.append(newTask);
 
@@ -4104,61 +4200,19 @@ void HttpServer::handlePostPlatformReq(QTcpSocket *clientSocket, const QByteArra
     qDebug() << "方法:" << method;
     qDebug() << "子动作:" << subAction;
     qDebug() << "当前容器任务数量:" << frontendTasks.size();
-    if (dbManager) {
-        qDebug() << "数据库管理器可用";
 
-        SQL_CommandHistory commandHistory;
-        commandHistory.commandId = commandId;
-        commandHistory.status = "executing";  // 状态设为执行中
-#if DEBUG_MODE
-        commandHistory.action = "act";
-        commandHistory.sub_action = "sub_act";
-#else
-        commandHistory.action = platform;
-        commandHistory.sub_action = subAction;
-#endif
-        commandHistory.start_time = "00:00:00";
-        commandHistory.end_time = "23:59:59";
-        commandHistory.remark = remark;
-        commandHistory.completeness = "0%";  // 初始完成度0%
-        commandHistory.completed_url = "";   // 初始为空
-        commandHistory.total_tasks = 1;      // 总任务数设为1
-        commandHistory.completed_tasks = 0;  // 已完成任务数设为0
-        commandHistory.failed_tasks = 0;     // 失败任务数设为0
 
-        qDebug() << "命令历史记录信息:";
-        qDebug() << "  commandId:" << commandHistory.commandId;
-        qDebug() << "  status:" << commandHistory.status;
-        qDebug() << "  action:" << commandHistory.action;
-        qDebug() << "  sub_action:" << commandHistory.sub_action;
-        qDebug() << "  completeness:" << commandHistory.completeness;
-        qDebug() << "  total_tasks:" << commandHistory.total_tasks;
-        qDebug() << "  completed_tasks:" << commandHistory.completed_tasks;
-        qDebug() << "  failed_tasks:" << commandHistory.failed_tasks;
 
-        // 插入数据库
-        bool insertSuccess = dbManager->insertCommandHistory(commandHistory);
-
-        if (insertSuccess) {
-            qDebug() << "命令历史记录插入成功! commandId:" << commandId;
-        } else {
-            qWarning() << "命令历史记录插入失败! commandId:" << commandId;
-        }
-    } else {
-        qWarning() << "数据库管理器不可用，跳过命令历史记录插入";
-    }
-    qDebug() << "数据库操作完成";
-    // ============ 插入命令历史记录结束 ============
     // 响应
     QJsonObject response;
     response["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
     QJsonObject responseData;
     responseData["taskId"] = taskId;
-  //  responseData["commandId"] = commandId;  // 添加命令ID到响应
-   // responseData["platform"] = platform;
+    //  responseData["commandId"] = commandId;  // 添加命令ID到响应
+    // responseData["platform"] = platform;
     responseData["account"] = account;
- //   responseData["deviceSerial"] = deviceSerial;
+    //   responseData["deviceSerial"] = deviceSerial;
     responseData["method"] = method;
     responseData["subAction"] = subAction;
     responseData["status"] = "wait";
@@ -4474,6 +4528,240 @@ void HttpServer::handlePostWithDrawPic(QTcpSocket *clientSocket, const QByteArra
 
     sendJsonResponse(clientSocket, 200, responseJson);
     qDebug() << "处理完成";
+}
+void HttpServer::handlePostXUNFEIocrLvingroom(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
+{
+    qDebug() << "Handling POST XUNFEI OCR request";
+
+    QString commanid = query.queryItemValue("commandid");
+    // 1. 提取图片数据
+    QByteArray imageData;
+    int emptyLinePos = body.indexOf("\r\n\r\n");
+
+    if (emptyLinePos != -1) {
+        imageData = body.mid(emptyLinePos + 4);
+    } else {
+        // 检查常见图片格式
+        if (body.startsWith("\xFF\xD8\xFF")) { // JPEG
+            imageData = body;
+        } else if (body.startsWith("\x89PNG")) { // PNG
+            imageData = body;
+        } else {
+            QJsonObject errorResponse;
+            errorResponse["error"] = "Invalid image format";
+            errorResponse["code"] = 400;
+            sendJsonResponse(clientSocket, 400, errorResponse);
+            return;
+        }
+    }
+
+    if (imageData.isEmpty()) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "No image data";
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    // 2. 保存临时图片文件
+    QString tempDir = QDir::tempPath() + "/xf_ocr";
+    QDir().mkpath(tempDir);
+
+    QString tempFile = tempDir + "/" + QUuid::createUuid().toString(QUuid::WithoutBraces) + ".jpg";
+
+    QFile file(tempFile);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Failed to save temp file";
+        errorResponse["code"] = 500;
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        return;
+    }
+
+    file.write(imageData);
+    file.close();
+
+    // 3. 调用OCR识别
+    XFOCR ocr;
+    ocr.setAuthInfo("318eeb03",
+                    "0731bdabe8a186215737d1edeb15b9ea",
+                    "MGM2NGNlYWM4NTA3Mzc3ZmY4ODIzZmZh");
+
+    QString result = ocr.recognizeImageSync(tempFile, 30000);
+    //  qDebug() << "图片识别:" <<result ;
+    //  qDebug() << "commandid:" <<commanid ;
+
+
+    QString text = "请帮我提取图片中直播弹幕 以json格式回复我 {data:[text1:xxxxx, ....]}  弹幕往往以 用户名：牛逼！ 这样的格式出现 以下是图文识别的内容：" +result;
+
+    //QString text = "请帮我提取图片中直播的内容和弹幕 以[主播名称:XXXX \n 直播主题:XXXX \n  弹幕内容:1.XXXXXX 2.XXXXXX 3.XXXXX ....]弹幕提取应该前面会有一个：也可能是英文:  这样的格式回复我，一下是图文识别的内容" +result;
+    result =  askDeepSeek(text);
+    //  qDebug() << "内容提取:" <<result ;
+    /*    text = "请根据这些 评论的内容新生成一条评论，如果是[没有识别到有效评论] 继续回复我[没有识别到有效评论]即可，不要和原有评论重复。简短就行 可以加点表情，也可以不加😁🤣😒✌🎂🐱‍👓🤦‍♂️🙌💕🤞🤞 以下是原文" +result;
+    result =  askDeepSeek(text);
+    qDebug() << "评论生成:" <<result ;
+*/
+    // 4. 清理临时文件
+    QFile::remove(tempFile);
+
+    // 5. 返回结果
+    QJsonObject response;
+    response["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    response["code"] = 200;
+
+    QJsonObject data;
+    if (result.startsWith("Error:")) {
+        data["success"] = false;
+        data["error"] = result.mid(6); // 去掉"Error:"
+    } else {
+        data["success"] = true;
+        data["text"] = result;
+        QJsonDocument doc = QJsonDocument::fromJson(result.toUtf8());
+        QJsonObject jsonObj = doc.object();
+        QJsonArray dataArray = jsonObj["data"].toArray();
+
+        QStringList cleanList;
+        for (const QJsonValue &value : dataArray) {
+            QString text = value.toObject()["text"].toString();
+            if (!text.isEmpty()) {
+                cleanList.append(text);
+            }
+        }
+        //    qDebug () << cleanList;
+
+        emit ORCbraggerresult(commanid, cleanList);
+    }
+    response["data"] = data;
+
+    sendJsonResponse(clientSocket, 200, response);
+}
+void HttpServer::handlePostXUNFEIocr(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
+{
+    qDebug() << "Handling POST XUNFEI OCR request";
+
+    // 1. 提取图片数据
+    QByteArray imageData;
+    int emptyLinePos = body.indexOf("\r\n\r\n");
+
+    if (emptyLinePos != -1) {
+        imageData = body.mid(emptyLinePos + 4);
+    } else {
+        // 检查常见图片格式
+        if (body.startsWith("\xFF\xD8\xFF")) { // JPEG
+            imageData = body;
+        } else if (body.startsWith("\x89PNG")) { // PNG
+            imageData = body;
+        } else {
+            QJsonObject errorResponse;
+            errorResponse["error"] = "Invalid image format";
+            errorResponse["code"] = 400;
+            sendJsonResponse(clientSocket, 400, errorResponse);
+            return;
+        }
+    }
+
+    if (imageData.isEmpty()) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "No image data";
+        errorResponse["code"] = 400;
+        sendJsonResponse(clientSocket, 400, errorResponse);
+        return;
+    }
+
+    // 2. 保存临时图片文件
+    QString tempDir = QDir::tempPath() + "/xf_ocr";
+    QDir().mkpath(tempDir);
+
+    QString tempFile = tempDir + "/" + QUuid::createUuid().toString(QUuid::WithoutBraces) + ".jpg";
+
+    QFile file(tempFile);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QJsonObject errorResponse;
+        errorResponse["error"] = "Failed to save temp file";
+        errorResponse["code"] = 500;
+        sendJsonResponse(clientSocket, 500, errorResponse);
+        return;
+    }
+
+    file.write(imageData);
+    file.close();
+
+    // 3. 调用OCR识别
+    XFOCR ocr;
+    ocr.setAuthInfo("318eeb03",
+                    "0731bdabe8a186215737d1edeb15b9ea",
+                    "MGM2NGNlYWM4NTA3Mzc3ZmY4ODIzZmZh");
+
+    QString result = ocr.recognizeImageSync(tempFile, 30000);
+    qDebug() << "图片识别:" <<result ;
+
+    QString text = "1.请帮我提取其中每段评论，如果一段都提取不到，请回答[没有识别到有效评论] 以下是原文" +result;
+    result =  askDeepSeek(text);
+    qDebug() << "评论提取:" <<result ;
+    text = "请根据这些 评论的内容新生成一条评论，如果是[没有识别到有效评论] 继续回复我[没有识别到有效评论]即可，不要和原有评论重复。简短就行 可以加点表情，也可以不加😁🤣😒✌🎂🐱‍👓🤦‍♂️🙌💕🤞🤞 以下是原文" +result;
+    result =  askDeepSeek(text);
+    qDebug() << "评论生成:" <<result ;
+
+    // 4. 清理临时文件
+    QFile::remove(tempFile);
+
+    // 5. 返回结果
+    QJsonObject response;
+    response["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    response["code"] = 200;
+
+    QJsonObject data;
+    if (result.startsWith("Error:")) {
+        data["success"] = false;
+        data["error"] = result.mid(6); // 去掉"Error:"
+    } else {
+        data["success"] = true;
+        data["text"] = result;
+    }
+    response["data"] = data;
+
+    sendJsonResponse(clientSocket, 200, response);
+}
+QString HttpServer::askDeepSeek(const QString &question)
+{
+    // 创建DeepSeekAI对象
+    DeepSeekAI deepseek;
+    deepseek.setApiKey("sk-02d007d6f3a547e6a2d4395e57c79e93");  // 你的API密钥
+
+    // 准备事件循环
+    QEventLoop eventLoop;
+    QString result;
+    QString error;
+
+    // 连接信号
+    QObject::connect(&deepseek, &DeepSeekAI::responseReceived,
+                     [&eventLoop, &result](const QString &response) {
+        result = response;
+        eventLoop.quit();
+    });
+
+    QObject::connect(&deepseek, &DeepSeekAI::errorOccurred,
+                     [&eventLoop, &error](const QString &errorMsg) {
+        error = errorMsg;
+        eventLoop.quit();
+    });
+
+    // 设置超时（30秒）
+    QTimer::singleShot(30000, &eventLoop, &QEventLoop::quit);
+
+    // 发送请求
+    deepseek.askQuestion(question);
+
+    // 等待响应
+    eventLoop.exec();
+
+    // 返回结果
+    if (!error.isEmpty()) {
+        qDebug() << "失败:" << error;
+        return "";
+    }
+
+    return result;
 }
 void HttpServer::handlePostMallUserAppealPic(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
 {
@@ -7223,7 +7511,7 @@ void HttpServer::handleCreateProductDebug()
 void HttpServer::initTimer()
 {
     m_tenSecondTimer = new QTimer(this);
-    m_tenSecondTimer->setInterval(10000);  // 10秒 = 10000毫秒
+    m_tenSecondTimer->setInterval(1000);
 
     // 连接定时器信号到槽函数
     connect(m_tenSecondTimer, &QTimer::timeout,
@@ -7261,7 +7549,7 @@ void HttpServer::tenSecondTimerFunction()
         int secondsDiff = heartbeatTime.secsTo(currentTime);
 
         // 超过35秒标记离线
-        if (secondsDiff > 35) {
+        if (secondsDiff > 60) {
             if (device.status != "离线") {
                 markDeviceOffline(device);
             }
@@ -7302,7 +7590,302 @@ void HttpServer::tenSecondTimerFunction()
         qDebug() << "定时器清理了" << removedCount << "个超时任务";
         qDebug() << "当前剩余任务数:" << frontendTasks.size();
     }
+
+    for (int i = frontendTasks.size() - 1; i >= 0; i--) {
+        FrontendTask &task = frontendTasks[i];
+
+        if(task.postCRcode)
+        {
+            if (task.updateTime.isEmpty()  ||  !(QDateTime::fromString(task.updateTime, Qt::ISODate)).isValid())
+            {
+                continue;
+            }
+            qDebug() << " check socket correct" ;
+
+            if(!isSocketValid(task))
+            {
+                qDebug() << "无效的socket!";
+                task.postCRcode= false;
+            }
+            else
+            {
+                qDebug() << " socker is valid" ;
+
+                bool iscompleted = QueryCRcodePic(task);
+                if (iscompleted) {
+
+
+                    qDebug() << "任务已经返回";
+                    qDebug() << "  任务ID:" << task.taskId;
+
+                    task.clientinfo->disconnectFromHost();
+                    task.postCRcode =false;
+                    // frontendTasks.removeAt(i);
+                    // removedCount++;
+                }
+            }
+        }
+        else if(task.postResult)
+        {
+            if (task.updateTime.isEmpty()  ||  !(QDateTime::fromString(task.updateTime, Qt::ISODate)).isValid())
+            {
+                continue;
+            }
+            qDebug() << " check socket correct" ;
+
+            if(!isSocketValid(task))
+            {
+                qDebug() << "无效的socket!";
+            }
+            else
+            {
+#if DEBUG_MODE
+                // 解析创建时间
+                QDateTime updateTime = QDateTime::fromString(task.updateTime, "yyyy-MM-dd HH:mm:ss");
+
+                // 计算时间差（分钟）
+                QDateTime currentTime = QDateTime::currentDateTime();
+
+                int secondsDiff = updateTime.secsTo(currentTime) ;
+                if (secondsDiff > 10) {
+                    int random = QRandomGenerator::global()->bounded(3); // 0,1,2
+
+                    if (random == 0) {
+                        // 三分之一概率成功
+                        QJsonObject response;
+                        response["code"] = 200;
+                        response["taskid"] = task.taskId;
+                        response["status"] = "success";
+
+                        qDebug() << "随机返回成功，任务编号:" << task.taskId;
+                        sendJsonResponse(task.clientinfo, 200, response);
+                    }
+                    else if (random == 1) {
+                        // 三分之一概率失败
+                        QJsonObject response;
+                        response["code"] = 200;
+                        response["taskid"] = task.taskId;
+                        response["status"] = "failed";
+
+                        qDebug() << "随机返回失败，任务编号:" << task.taskId;
+                        sendJsonResponse(task.clientinfo, 200, response);
+                    }
+                    else {
+                        // 三分之一概率超时
+                        qDebug() << "获取登录状态超时，任务编号:" << task.taskId;
+                        sendErrorResponse(task.clientinfo, 500, "task over time");
+                    }
+
+                    task.clientinfo->disconnectFromHost();
+                    frontendTasks.removeAt(i);
+                    removedCount++;
+                }
+#else
+
+                qDebug() << " socker is valid" ;
+                qDebug() << "now the task status result = " << task.status;
+                if(task.status == "success" || task.status == "failed")
+                {
+                // 返回响应
+                QJsonObject response;
+                response["code"] = 200;
+                response["taskid"] = task.taskId;
+                response["status"] = task.status;
+
+                sendJsonResponse(task.clientinfo, 200, response);
+                task.clientinfo->disconnectFromHost();
+                frontendTasks.removeAt(i);
+                removedCount++;
+                }
+                else
+                {
+                    // 解析创建时间
+                    QDateTime updateTime = QDateTime::fromString(task.updateTime, "yyyy-MM-dd HH:mm:ss");
+
+                    // 计算时间差（分钟）
+                    QDateTime currentTime = QDateTime::currentDateTime();
+
+                    int secondsDiff = updateTime.secsTo(currentTime) ;
+
+                    // 超过10分钟则删除
+                    if (secondsDiff > 60) {
+                        qDebug() << "获取登录状态超时  任务编号 "  << task.taskId;
+                        sendErrorResponse(task.clientinfo, 500, "task over time");
+                        task.clientinfo->disconnectFromHost();
+                        frontendTasks.removeAt(i);
+                        removedCount++;
+                    }
+                }
+#endif
+            }
+        }
+    }
+
+
+    // for (int i = frontendTasks.size() - 1; i >= 0; i--) {
+    //     FrontendTask &task = frontendTasks[i];
+
+    //     //   qDebug() <<"check " << task.updateTime.isEmpty() << (QDateTime::fromString(task.updateTime, Qt::ISODate)).isValid();
+
+    //     qDebug() <<"task.status :" <<task.status;
+    //     if(task.status == "success" || task.status == "failed")
+    //     {
+
+    //     }
+    // }
 }
+// 或者保留单独的函数
+bool HttpServer::isSocketValid(const FrontendTask& task) {
+    // QPointer会自动处理野指针问题
+    if (!task.clientinfo) {
+        qDebug() << "Socket object has been deleted";
+        return false;
+    }
+
+    // 对象存在，安全访问
+    return task.clientinfo->state() == QAbstractSocket::ConnectedState &&
+            task.clientinfo->isWritable();
+}
+/*
+bool HttpServer::isSocketValid(const FrontendTask& task) {
+    // 先检查指针是否为空
+    if (!task.clientinfo) {
+        qDebug() << "socket pointer is null";
+        return false;
+    }
+
+    // 安全检查：尝试访问对象的有效字段（不调用虚函数）
+    // 检查对象是否可能有效（简单但不可靠）
+
+    // 使用try-catch包装（如果编译器支持）
+    try {
+        // 检查socket状态
+        qDebug() << task.clientinfo->isValid();
+
+        if (task.clientinfo->state() != QAbstractSocket::ConnectedState) {
+            qDebug() << "tcp has disconnected";
+            return false;
+        }
+
+        // 检查是否可写
+        if (!task.clientinfo->isWritable()) {
+            qDebug() << "tcp cannot writable";
+            return false;
+        }
+
+        return true;
+    } catch (...) {
+        qDebug() << "socket object may have been deleted";
+        return false;
+    }
+}*/
+
+bool HttpServer::QueryCRcodePic(FrontendTask task)
+{
+
+    // 解析创建时间
+    QDateTime updateTime = QDateTime::fromString(task.updateTime, "yyyy-MM-dd HH:mm:ss");
+
+    // 计算时间差（分钟）
+    QDateTime currentTime = QDateTime::currentDateTime();
+
+    int secondsDiff = updateTime.secsTo(currentTime) ;
+
+    // 超过10分钟则删除
+    if (secondsDiff > 300) {
+        qDebug() << "获取二维码超时  任务编号 "  << task.taskId;
+        sendErrorResponse(task.clientinfo, 500, "task over time");
+        return true;
+    }
+
+
+#if DEBUG_MODE
+    //#if 1
+     QString imageFileName;
+     QString imageFilePath;
+    if (secondsDiff > 35)
+    {
+         imageFilePath = QDir::current().filePath("images/debugpic.png");
+         imageFileName = "debugpic.png";
+    }
+    else
+    {
+        qDebug()<< "qr code  not ready  found path : debug mode " ;
+        return false;
+    }
+
+#else
+    // ... 原查找图片逻辑 ...
+    QDir currentDir = QDir::current();
+    QString uploadDirPath = currentDir.filePath("Upload");
+    QString commandDirPath = QDir(uploadDirPath).filePath(task.commandid);
+
+
+    QDir commandDir(commandDirPath);
+    if (!commandDir.exists()) {
+        qDebug()<< "qr code  not ready  found path :" <<commandDirPath;
+        return false;
+    }
+
+    QStringList imageFilters;
+    imageFilters << "*.jpg" << "*.jpeg" << "*.png" << "*.bmp" << "*.gif";
+    QStringList imageFiles = commandDir.entryList(imageFilters, QDir::Files);
+
+    if (imageFiles.isEmpty()) {
+        sendErrorResponse(task.clientinfo, 404, "QR image failed");
+        return true;
+    }
+
+    QString imageFileName = imageFiles.first();
+    QString imageFilePath = commandDir.filePath(imageFileName);
+
+
+#endif
+    // 读取图片
+    QFile imageFile(imageFilePath);
+    if (!imageFile.open(QIODevice::ReadOnly)) {
+        sendErrorResponse(task.clientinfo, 500, "Cannot open image");
+        return true;
+    }
+
+    QByteArray imageData = imageFile.readAll();
+    imageFile.close();
+
+    if (imageData.isEmpty()) {
+        sendErrorResponse(task.clientinfo, 500, "Image is empty");
+        return true;
+    }
+
+    qDebug() << "图片文件大小:" << imageData.size() << "bytes";
+
+    // 根据文件扩展名确定Content-Type
+    QString contentType = "image/jpeg";
+    if (imageFileName.endsWith(".png", Qt::CaseInsensitive)) contentType = "image/png";
+    else if (imageFileName.endsWith(".gif", Qt::CaseInsensitive)) contentType = "image/gif";
+    else if (imageFileName.endsWith(".bmp", Qt::CaseInsensitive)) contentType = "image/bmp";
+
+    // 统一返回图片格式
+    QString response = QString("HTTP/1.1 200 OK\r\n"
+                               "Content-Type: %1\r\n"
+                               "Access-Control-Allow-Origin: *\r\n"
+                               "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                               "Access-Control-Allow-Headers: Content-Type\r\n"
+                               "Content-Length: %2\r\n"
+                               "\r\n")
+            .arg(contentType)
+            .arg(imageData.size());
+
+    task.clientinfo->write(response.toUtf8());
+    task.clientinfo->write(imageData);
+    task.clientinfo->flush();
+
+    qDebug() << "已返回二维码图片，大小:" << imageData.size() << "bytes";
+    qDebug() << "=== handleGetCRCODE 处理完成 ===";
+
+    return true;
+}
+
+
 
 QDateTime HttpServer::parseHeartbeatTime(const QString &timeStr)
 {

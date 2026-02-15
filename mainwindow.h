@@ -14,6 +14,8 @@
 #include "simplexfai.h"
 #include "DeepSeekAI.h"
 
+
+
 namespace Ui {
 class MainWindow;
 }
@@ -59,7 +61,7 @@ private:
     Ui::MainWindow *ui;
 /******/
     DeepSeekAI deepseekAI;
-    SimpleXFAI ai;
+    SimpleXFAI ai;  //讯飞的AI 慢 不智能 不好用
 /*****/
     QString IP;
     QString MQTT_PORT;

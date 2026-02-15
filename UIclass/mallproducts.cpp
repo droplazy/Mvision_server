@@ -22,7 +22,8 @@ mallproducts::mallproducts(DatabaseManager *dbManager, QWidget *parent)
     ui->setupUi(this);
 
     // 1. 禁止拉伸
-    setFixedSize(this->size());
+    setFixedSize(SUB_WIGET_WIDTH ,SUB_WIGET_HEITH );
+    ui->tableView->setFixedSize(SUB_WIGET_TABLE_WIDTH,SUB_WIGET_TABLE_HEITH);
     setWindowTitle("商城商品管理");
 
     if (!dbManager) {

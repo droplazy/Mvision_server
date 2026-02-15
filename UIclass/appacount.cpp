@@ -46,7 +46,8 @@ appacount::~appacount()
 // 初始化表格
 void appacount::initTable()
 {
-     setFixedSize(1000,620);
+     setFixedSize(SUB_WIGET_WIDTH ,SUB_WIGET_HEITH );
+    ui->tableWidget->setFixedSize(SUB_WIGET_TABLE_WIDTH,SUB_WIGET_TABLE_HEITH);
     // 设置表格列数和标题
     ui->tableWidget->setColumnCount(9);
     QStringList headers;

@@ -84,7 +84,7 @@ void mqttclient::subscribeALLTopic()
 void mqttclient::publishMessage(QMqttTopicName topicName, QByteArray message)
 {
     if (mqttClient->state() == QMqttClient::Connected) {
-        mqttClient->publish(topicName, message, 0, false);
+        mqttClient->publish(topicName, message, 1, false);
     } else {
         qDebug() << "Failed to publish message, MQTT client is not connected.";
     }
@@ -135,6 +135,10 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     QString action = dataObj["action"].toString();
     QString subAction = dataObj.value("sub_action").toString();
     QJsonArray serial_numbers = dataObj["serial_numbers"].toArray();
+    QString startTime = dataObj.value("start_time").toString();
+
+    QString endTime = dataObj.value("end_time").toString();
+
 
     qDebug() << "指令ID:" << commandId;
     qDebug() << "目标设备数量:" << serial_numbers.size();
@@ -159,8 +163,8 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
     sendData["command_id"] = commandId;
     sendData["action"] = action;
     sendData["sub_action"] = subAction;  // 使用获取到的subAction
-    sendData["start_time"] = dataObj.value("start_time").toString();
-    sendData["end_time"] = dataObj.value("end_time").toString();
+    sendData["start_time"] =startTime;
+    sendData["end_time"] = endTime;
     sendData["remark"] = dataObj.value("remark").toString();
 
     // 移除serial_numbers字段，设备不需要这个
@@ -212,6 +216,12 @@ void mqttclient::CommandMuiltSend(QJsonObject json)
         ProgramInfo programInfo;
         programInfo.commandId = commandId;
         programInfo.programName = action + subAction + "_" + commandId;
+        programInfo.action = action;
+
+        programInfo.p_startime = startTime;
+        programInfo.p_endtime = endTime;
+
+
         programInfo.rtspurl ="";
         programInfo.isListen = false;
         programInfo.cmdtext = QString::fromUtf8(message);
@@ -442,7 +452,7 @@ DeviceStatus mqttclient::parseJsonHeartBeat(const QJsonObject& jsonObj)
                               next_action_start, next_action_end, usedProcess, ProcessID, temp);
     deviceStatus.hardversion  =HardVersion;
     deviceStatus.checksum  =CheckSum;
-
+    deviceStatus.currentSubAction = currentSubAction;
     return deviceStatus;
 }
 
