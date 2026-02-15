@@ -1372,6 +1372,9 @@ bool DatabaseManager::createTable5()
     qDebug() << "Table Orders created successfully.";
     return true;
 }
+
+
+
 bool DatabaseManager::insertOrder(const SQL_Order &order)
 {
          //QMutexLocker locker(&m_mutex);

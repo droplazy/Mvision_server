@@ -741,7 +741,7 @@ void HttpServer::onReadyRead() {
         || path.startsWith("/mall_login")|| path.contains("/login-bg.jpg")|| path.startsWith("/control_login") \
         || path.startsWith("/mall/auth/register")|| path.contains(".js") || path.contains(".html") || path.startsWith("/wechat_payment") \
         || path.startsWith("/mall/auth/passwd-reset/reset")|| path.contains("/mall/auth/passwd-reset/sendemail") || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
-        || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
+        || path.contains("/support")|| path.contains("/payment_qrcode")  || path.contains("/vite.svg") || path.contains("/favicon.ico")));
         if (!isLoginPath) {
             // 非登录接口需要验证token
             if(token=="GXFC")
@@ -2930,7 +2930,7 @@ void HttpServer::handleGetpaidOK(QTcpSocket *clientSocket, const QUrlQuery &quer
         order.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
 
         // 将订单保存到数据库
-        if (!dbManager->insertOrder(order)) {
+        if (!dbManager->updateOrder(order)) {
             QJsonObject errorResp;
             errorResp["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
             errorResp["code"] = 500;
@@ -4379,7 +4379,7 @@ QString HttpServer::findAvailableDevice(const QString &platform)
 }
 void HttpServer::handlePostWechatPayOK(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
 {
-    qDebug() << "\n=== 微信支付回调 ===";
+    qDebug() << "\n========== 收到微信支付回调 ==========";
 
     // 解析JSON
     QJsonParseError parseError;
@@ -4393,7 +4393,6 @@ void HttpServer::handlePostWechatPayOK(QTcpSocket *clientSocket, const QByteArra
 
     QJsonObject obj = doc.object();
 
-    // 获取resource对象
     if (!obj.contains("resource") || !obj["resource"].isObject()) {
         qDebug() << "缺少resource字段";
         QJsonObject errorObj{{"code", "FAIL"}, {"message", "缺少resource字段"}};
@@ -4432,7 +4431,6 @@ void HttpServer::handlePostWechatPayOK(QTcpSocket *clientSocket, const QByteArra
 
     QJsonObject result = resultDoc.object();
     QString outTradeNo = result["out_trade_no"].toString();
-    QString transactionId = result["transaction_id"].toString();
 
     qDebug() << "订单:" << outTradeNo << "支付成功";
 
@@ -4443,10 +4441,10 @@ void HttpServer::handlePostWechatPayOK(QTcpSocket *clientSocket, const QByteArra
         // 更新订单状态
         order.status = "paid";
         order.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-        order.verifier = "wechat_paid";
+        order.verifier = "unverifed";
 
         // 保存到数据库
-        if (dbManager && dbManager->insertOrder(order)) {
+        if (dbManager && dbManager->updateOrder(order)) {
             qDebug() << "订单已保存到数据库";
         } else {
             qDebug() << "订单保存失败";
@@ -4459,7 +4457,7 @@ void HttpServer::handlePostWechatPayOK(QTcpSocket *clientSocket, const QByteArra
         qDebug() << "订单不在待支付列表中:" << outTradeNo;
     }
 
-    // 返回成功响应（微信支付要求200无包体）
+    // 返回成功响应
     QByteArray response;
     response.append("HTTP/1.1 200 OK\r\n");
     response.append("Content-Length: 0\r\n");
@@ -8252,59 +8250,77 @@ QByteArray HttpServer::aes256GcmDecrypt(const QByteArray &ciphertext,
                                          const QByteArray &nonce,
                                          const QByteArray &aad)
 {
-    QByteArray plaintext;
-
-    // OpenSSL EVP接口解密
-    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-    if (!ctx) return plaintext;
-
-    // 初始化解密，AES-256-GCM
-    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL)) {
-        EVP_CIPHER_CTX_free(ctx);
-        return plaintext;
-    }
-
-    // 设置IV长度（GCM标准是12字节）
-    if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, nonce.size(), NULL)) {
-        EVP_CIPHER_CTX_free(ctx);
-        return plaintext;
-    }
-
-    // 设置key和nonce
-    if (1 != EVP_DecryptInit_ex(ctx, NULL, NULL,
-                                 reinterpret_cast<const unsigned char*>(key.constData()),
-                                 reinterpret_cast<const unsigned char*>(nonce.constData()))) {
-        EVP_CIPHER_CTX_free(ctx);
-        return plaintext;
-    }
-
-    // 设置附加数据（AAD）
-    int outLen = 0;
-    if (!aad.isEmpty()) {
-        if (1 != EVP_DecryptUpdate(ctx, NULL, &outLen,
-                                    reinterpret_cast<const unsigned char*>(aad.constData()),
-                                    aad.size())) {
-            EVP_CIPHER_CTX_free(ctx);
-            return plaintext;
-        }
-    }
-
-    // 解密
-    plaintext.resize(ciphertext.size());
-    if (1 != EVP_DecryptUpdate(ctx,
-                                reinterpret_cast<unsigned char*>(plaintext.data()),
-                                &outLen,
-                                reinterpret_cast<const unsigned char*>(ciphertext.constData()),
-                                ciphertext.size())) {
-        EVP_CIPHER_CTX_free(ctx);
+    if (ciphertext.size() < 16) {
+        qDebug() << "密文太短";
         return QByteArray();
     }
 
-    plaintext.resize(outLen);
+    // GCM模式：密文最后16字节是认证标签
+    QByteArray tag = ciphertext.right(16);  // 最后16字节是tag
+    QByteArray encryptedData = ciphertext.left(ciphertext.size() - 16);  // 前面的部分是真正的密文
 
-    // 验证GCM标签（密文的最后16字节是认证标签）
-    // 注意：微信支付的ciphertext已经包含了认证标签
-    // 需要在解密后验证
+    QByteArray plaintext;
+    plaintext.resize(encryptedData.size());
+
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) return QByteArray();
+
+    int outLen = 0;
+    int ret = 0;
+
+    do {
+        // 初始化解密，AES-256-GCM
+        if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL)) {
+            break;
+        }
+
+        // 设置IV长度
+        if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, nonce.size(), NULL)) {
+            break;
+        }
+
+        // 设置key和nonce
+        if (1 != EVP_DecryptInit_ex(ctx, NULL, NULL,
+                                     reinterpret_cast<const unsigned char*>(key.constData()),
+                                     reinterpret_cast<const unsigned char*>(nonce.constData()))) {
+            break;
+        }
+
+        // 设置附加数据（AAD）
+        if (!aad.isEmpty()) {
+            if (1 != EVP_DecryptUpdate(ctx, NULL, &outLen,
+                                        reinterpret_cast<const unsigned char*>(aad.constData()),
+                                        aad.size())) {
+                break;
+            }
+        }
+
+        // 解密
+        if (1 != EVP_DecryptUpdate(ctx,
+                                    reinterpret_cast<unsigned char*>(plaintext.data()),
+                                    &outLen,
+                                    reinterpret_cast<const unsigned char*>(encryptedData.constData()),
+                                    encryptedData.size())) {
+            break;
+        }
+        plaintext.resize(outLen);
+
+        // 设置预期的认证标签
+        if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, tag.size(),
+                                      const_cast<char*>(tag.constData()))) {
+            break;
+        }
+
+        // 验证并完成解密
+        ret = EVP_DecryptFinal_ex(ctx, reinterpret_cast<unsigned char*>(plaintext.data()) + outLen, &outLen);
+        if (ret > 0) {
+            plaintext.resize(plaintext.size() + outLen);
+        } else {
+            plaintext.clear();
+            qDebug() << "GCM认证失败，密文可能被篡改";
+        }
+
+    } while (false);
 
     EVP_CIPHER_CTX_free(ctx);
     return plaintext;
