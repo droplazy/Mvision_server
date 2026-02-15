@@ -7,7 +7,7 @@
 #include <QJsonValue>
 #include <QDebug>
 #include <QVector>
-
+#include <QPixmap>
 
 #ifdef QT_DEBUG
 #define DEBUG_MODE 0
@@ -306,6 +306,14 @@ struct SQL_Order {
     QString createTime;
     QString updateTime;
     QString verifier;
+
+    /**/
+    QPixmap qr_code;
+    QString expireTime;
+    int method;//1 alipay 2 wechat
+    QString pay_link;
+    //QString qr_code_url;
+   /**/
 
  QString snapshot;
        QString productName;

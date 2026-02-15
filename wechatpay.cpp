@@ -1,19 +1,25 @@
 // wechatpay.cpp
 #include "wechatpay.h"
 #include <QDebug>
+#include <qrencode.h>
 
-// OpenSSL 头文件已经在 wechatpay.h 中包含了
+#include <QEventLoop>
 
 WeChatPay::WeChatPay(QObject *parent)
     : QObject(parent)
     , m_manager(new QNetworkAccessManager(this))
 {
-    connect(m_manager, &QNetworkAccessManager::finished,
-            this, &WeChatPay::onNetworkReply);
-
     // 初始化 OpenSSL
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
+
+    initialize(
+        MCHID,
+        APPID_WECHAT,
+        //"C:/Windows/SysWOW64/WXCertUtil/cert/1106426124_20260215_cert/apiclient_key.pem",
+        "./apiclient_key.pem",
+        seriral_no
+        );
 }
 
 WeChatPay::~WeChatPay()
@@ -35,16 +41,13 @@ void WeChatPay::initialize(const QString &mchid,
     // 加载私钥文件内容
     QFile file(privateKeyPath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        emit errorOccurred("无法打开私钥文件：" + privateKeyPath);
         return;
     }
 
     m_privateKeyData = file.readAll();
     file.close();
 
-    // 注意：我们不再使用 QSslKey，而是直接保存私钥数据供 OpenSSL 使用
     if (m_privateKeyData.isEmpty()) {
-        emit errorOccurred("私钥文件为空");
         return;
     }
 
@@ -52,14 +55,166 @@ void WeChatPay::initialize(const QString &mchid,
     qDebug() << "商户号:" << m_mchid;
     qDebug() << "APPID:" << m_appid;
     qDebug() << "证书序列号:" << m_serialNo;
-    qDebug() << "私钥长度:" << m_privateKeyData.length() << "字节";
 }
+QPixmap WeChatPay::requestPayment(const SQL_Order &order, const QString &notifyUrl, const QString &clientIp)
+{
+    // 使用订单信息生成支付描述
+    QString description = order.productName;
+    if (description.isEmpty()) {
+        description = QString("商品订单-%1").arg(order.orderId);
+    }
 
+    // 金额转换为分
+    int totalFee = static_cast<int>(order.totalPrice * 100);
+
+    // 调用同步支付接口获取二维码链接
+    QString codeUrl = nativeOrderSync(description, order.orderId, totalFee, notifyUrl, clientIp);
+
+    if (codeUrl.isEmpty()) {
+        return QPixmap();  // 返回空图片
+    }
+
+    // 生成二维码图片
+    return createQRCode(codeUrl, 250);
+}
+QPixmap WeChatPay::createQRCode(const QString &text, int size)
+{
+    if (text.isEmpty()) {
+        return QPixmap();
+    }
+
+    // 生成二维码数据
+    QRcode *qrcode = QRcode_encodeString(text.toUtf8().constData(),
+                                         2,  // 版本
+                                         QR_ECLEVEL_L,  // 纠错级别
+                                         QR_MODE_8,     // 编码模式
+                                         0);            // 区分大小写
+
+    if (!qrcode) {
+        qDebug() << "二维码生成失败";
+        return QPixmap();
+    }
+
+    // 创建图像
+    int width = qrcode->width;
+    QImage image(width, width, QImage::Format_Mono);
+
+    // 设置颜色表
+    image.setColorCount(2);
+    image.setColor(0, qRgb(255, 255, 255));  // 白色
+    image.setColor(1, qRgb(0, 0, 0));        // 黑色
+
+    // 填充白色背景
+    image.fill(0);
+
+    // 绘制二维码
+    unsigned char *data = qrcode->data;
+    for (int y = 0; y < width; y++) {
+        for (int x = 0; x < width; x++) {
+            if (*data & 1) {
+                image.setPixel(x, y, 1);  // 黑色
+            }
+            data++;
+        }
+    }
+
+    // 缩放并转换为QPixmap
+    QPixmap pixmap = QPixmap::fromImage(image.scaled(size, size, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+    // 释放内存
+    QRcode_free(qrcode);
+
+    return pixmap;
+}
 QString WeChatPay::getCurrentTimestamp()
 {
     return QString::number(QDateTime::currentSecsSinceEpoch());
 }
+QString WeChatPay::nativeOrderSync(const QString &description,
+                                   const QString &outTradeNo,
+                                   int totalFee,
+                                   const QString &notifyUrl,
+                                   const QString &clientIp)
+{
+    // 构建请求体
+    QJsonObject amountObj;
+    amountObj["total"] = totalFee;
+    amountObj["currency"] = "CNY";
 
+    QJsonObject sceneObj;
+    sceneObj["payer_client_ip"] = clientIp;
+
+    QJsonObject requestBody;
+    requestBody["appid"] = m_appid;
+    requestBody["mchid"] = m_mchid;
+    requestBody["description"] = description;
+    requestBody["out_trade_no"] = outTradeNo;
+    requestBody["notify_url"] = notifyUrl;
+    requestBody["amount"] = amountObj;
+    requestBody["scene_info"] = sceneObj;
+
+    QJsonDocument doc(requestBody);
+    QByteArray bodyData = doc.toJson(QJsonDocument::Compact);
+
+    qDebug() << "\n=== 发送Native下单请求 ===";
+    qDebug() << "订单号:" << outTradeNo;
+    qDebug() << "金额:" << totalFee << "分";
+    qDebug() << "请求体:" << bodyData;
+
+    // 构建认证token
+    QString token = buildToken("POST", API_NATIVE_ORDER, QString::fromUtf8(bodyData));
+    if (token.isEmpty()) {
+        return QString();
+    }
+
+    // 发送请求
+    QNetworkRequest request;
+    request.setUrl(QUrl(API_BASE_URL + API_NATIVE_ORDER));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Accept", "application/json");
+    request.setRawHeader("Authorization", token.toUtf8());
+
+    QNetworkReply *reply = m_manager->post(request, bodyData);
+
+    // 使用事件循环等待请求完成（同步）
+    QEventLoop loop;
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    // 处理响应
+    QByteArray responseData = reply->readAll();
+    int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+    qDebug() << "\n=== 收到响应 ===";
+    qDebug() << "HTTP状态码:" << statusCode;
+    qDebug() << "响应数据:" << responseData;
+    qDebug() << "================\n";
+
+    QString codeUrl;
+
+    if (reply->error() == QNetworkReply::NoError) {
+        // 解析响应
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(responseData, &parseError);
+
+        if (parseError.error == QJsonParseError::NoError) {
+            QJsonObject obj = doc.object();
+            if (obj.contains("code_url")) {
+                codeUrl = obj["code_url"].toString();
+                qDebug() << "✅ 下单成功，二维码链接:" << codeUrl;
+            } else if (obj.contains("code") && obj.contains("message")) {
+                QString errorCode = obj["code"].toString();
+                QString errorMsg = obj["message"].toString();
+            } else {
+            }
+        } else {
+        }
+    } else {
+    }
+
+    reply->deleteLater();
+    return codeUrl;
+}
 QString WeChatPay::generateNonceStr()
 {
     const QString possibleChars("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789");
@@ -105,48 +260,41 @@ QString WeChatPay::signMessage(const QString &message)
         // 将私钥数据转换为BIO
         bio = BIO_new_mem_buf(m_privateKeyData.constData(), m_privateKeyData.size());
         if (!bio) {
-            emitError("创建BIO失败");
             break;
         }
 
         // 从BIO读取私钥
         pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
         if (!pkey) {
-            emitError("解析私钥失败: " + getLastOpenSSLError());
             break;
         }
 
         // 创建EVP_MD_CTX
         ctx = EVP_MD_CTX_new();
         if (!ctx) {
-            emitError("创建EVP_MD_CTX失败");
             break;
         }
 
         // 初始化签名操作
         if (EVP_DigestSignInit(ctx, NULL, EVP_sha256(), NULL, pkey) <= 0) {
-            emitError("初始化签名失败: " + getLastOpenSSLError());
             break;
         }
 
         // 更新签名数据
         QByteArray msgData = message.toUtf8();
         if (EVP_DigestSignUpdate(ctx, msgData.constData(), msgData.size()) <= 0) {
-            emitError("签名更新失败: " + getLastOpenSSLError());
             break;
         }
 
         // 获取签名长度
         size_t sig_len = 0;
         if (EVP_DigestSignFinal(ctx, NULL, &sig_len) <= 0) {
-            emitError("获取签名长度失败: " + getLastOpenSSLError());
             break;
         }
 
         // 执行签名
         QByteArray sigBuf(sig_len, '\0');
         if (EVP_DigestSignFinal(ctx, (unsigned char*)sigBuf.data(), &sig_len) <= 0) {
-            emitError("执行签名失败: " + getLastOpenSSLError());
             break;
         }
 
@@ -168,11 +316,7 @@ QString WeChatPay::signMessage(const QString &message)
     return signature;
 }
 
-void WeChatPay::emitError(const QString &error)
-{
-    qDebug() << "WeChatPay错误:" << error;
-    emit errorOccurred(error);
-}
+
 
 QString WeChatPay::buildToken(const QString &method,
                               const QString &url,
@@ -195,7 +339,6 @@ QString WeChatPay::buildToken(const QString &method,
     // 签名
     QString signature = signMessage(message);
     if (signature.isEmpty()) {
-        emitError("生成签名失败");
         return QString();
     }
 
@@ -245,7 +388,6 @@ void WeChatPay::nativeOrder(const QString &description,
     // 构建认证token
     QString token = buildToken("POST", API_NATIVE_ORDER, QString::fromUtf8(bodyData));
     if (token.isEmpty()) {
-        emitError("构建认证token失败");
         return;
     }
 
@@ -262,44 +404,81 @@ void WeChatPay::nativeOrder(const QString &description,
     m_manager->post(request, bodyData);
 }
 
-void WeChatPay::onNetworkReply(QNetworkReply *reply)
+bool WeChatPay::closeOrder(const QString &outTradeNo)
 {
-    QByteArray responseData = reply->readAll();
+    qDebug() << "\n=== 开始关闭订单 ===";
+    qDebug() << "订单号:" << outTradeNo;
+
+    // 构建URL路径（注意路径中包含订单号）
+    QString urlPath = QString("/v3/pay/transactions/out-trade-no/%1/close").arg(outTradeNo);
+
+    // 构建请求体（只需要mchid）
+    QJsonObject requestBody;
+    requestBody["mchid"] = m_mchid;
+
+    QJsonDocument doc(requestBody);
+    QByteArray bodyData = doc.toJson(QJsonDocument::Compact);
+
+    qDebug() << "请求体:" << bodyData;
+
+    // 构建认证token
+    QString token = buildToken("POST", urlPath, QString::fromUtf8(bodyData));
+    if (token.isEmpty()) {
+        qDebug("构建认证token失败");
+        return false;
+    }
+
+    // 发送请求
+    QNetworkRequest request;
+    request.setUrl(QUrl(API_BASE_URL + urlPath));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Accept", "application/json");
+    request.setRawHeader("Authorization", token.toUtf8());
+
+    QNetworkReply *reply = m_manager->post(request, bodyData);
+
+    // 使用事件循环等待请求完成（同步）
+    QEventLoop loop;
+    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    // 处理响应
     int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    QByteArray responseData = reply->readAll();
 
-    qDebug() << "\n=== 收到响应 ===";
+    qDebug() << "\n=== 关闭订单响应 ===";
     qDebug() << "HTTP状态码:" << statusCode;
-    qDebug() << "响应数据:" << responseData;
-    qDebug() << "================\n";
-
-    if (reply->error() != QNetworkReply::NoError) {
-        emit nativeOrderFinished(false, "", "网络错误: " + reply->errorString());
-        reply->deleteLater();
-        return;
+    if (!responseData.isEmpty()) {
+        qDebug() << "响应数据:" << responseData;
     }
+    qDebug() << "==================\n";
 
-    // 解析响应
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(responseData, &parseError);
+    bool success = false;
 
-    if (parseError.error != QJsonParseError::NoError) {
-        emit nativeOrderFinished(false, "", "JSON解析失败: " + parseError.errorString());
-        reply->deleteLater();
-        return;
-    }
-
-    QJsonObject obj = doc.object();
-
-    if (obj.contains("code_url")) {
-        QString codeUrl = obj["code_url"].toString();
-        emit nativeOrderFinished(true, codeUrl, "");
-    } else if (obj.contains("code") && obj.contains("message")) {
-        QString errorCode = obj["code"].toString();
-        QString errorMsg = obj["message"].toString();
-        emit nativeOrderFinished(false, "", QString("微信支付错误: %1 - %2").arg(errorCode).arg(errorMsg));
+    if (reply->error() == QNetworkReply::NoError) {
+        // 根据文档，成功关闭订单返回 204 No Content
+        if (statusCode == 204) {
+            qDebug() << "✅ 订单关闭成功";
+            success = true;
+        } else {
+            qDebug() << "❌ 订单关闭失败，非预期的状态码:" << statusCode;
+        }
     } else {
-        emit nativeOrderFinished(false, "", "未知响应格式");
+        // 解析错误信息
+        if (!responseData.isEmpty()) {
+            QJsonParseError parseError;
+            QJsonDocument doc = QJsonDocument::fromJson(responseData, &parseError);
+
+            if (parseError.error == QJsonParseError::NoError) {
+                QJsonObject obj = doc.object();
+                QString errorCode = obj["code"].toString();
+                QString errorMsg = obj["message"].toString();
+            } else {
+            }
+        } else {
+        }
     }
 
     reply->deleteLater();
+    return success;
 }

@@ -17,11 +17,12 @@
 #include <QSslSocket>  // 修改：使用QSslSocket
 #include "./UIclass/XFOCR.h"
 #include "DeepSeekAI.h"
-#include "qthread.h"
+#include "QThread"
 #include <QEventLoop>
 #include <QTimer>
 #include <QDebug>
-
+#include <QPixmap>
+#include "QRCode/qrencode.h"
 
 HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent), dbManager(db)
 {
@@ -38,7 +39,13 @@ HttpServer::HttpServer(DatabaseManager *db,QObject *parent) : QTcpServer(parent)
     initTimer();
     qDebug() << "HttpServer initialized with pending order container";
 
-
+    // pay = new WeChatPay(this);
+    // pay->initialize(
+    //     "1106426124",                                    // 商户号
+    //     "ww57f759ba26ab8662",                            // APPID
+    //     "C:/Windows/SysWOW64/WXCertUtil/cert/1106426124_20260215_cert/apiclient_key.pem",      // 私钥路径
+    //     "2D641F75283524A8BB2EF089E83863A041C0B3FA"                                    // 证书序列号
+    //     );
     //QTimer *debugTimer;
     // 添加调试定时器 - 每500ms触发一次
     // debugTimer = new QTimer(this);
@@ -418,7 +425,7 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
         }
     }
     // 特殊处理：如果是根路径重定向到 /mall_login，直接返回重定向响应
-    if (path == "/" && request.startsWith("GET")) {
+    if ((path == "/" || path == "/login") && request.startsWith("GET")) {
         qDebug() << "Root path requested, redirecting to /mall_login";
 
         QByteArray redirectResponse = "HTTP/1.1 302 Found\r\n";
@@ -441,7 +448,7 @@ void HttpServer::ShowHomepage(QTcpSocket *clientSocket, QByteArray request)
         if (path.startsWith("/mall_login")) {
             basePath = currentDir.filePath("www/mall/");
             // 只有访问登录页面本身时才重写为 index.html
-            if (path == "/mall_login") {
+            if (path == "/mall_login" || path == "/login") {
                 qDebug() << "mall_login path :" << path;
                 path = "/index.html";
             }
@@ -731,17 +738,17 @@ void HttpServer::onReadyRead() {
 #if 1
         // Token验证（排除登录接口）
         bool isLoginPath = (path == "/mall/login/para" ||path == "/auth/login" || path == "/mall/login/info"|| (path == "/home" || path.contains(".css") /*|| path.contains("/login") */\
-                                                                                                                || path.startsWith("/mall_login")|| path.contains("/login-bg.jpg")|| path.startsWith("/control_login") \
-                                                                                                                || path.startsWith("/mall/auth/register")|| path.contains(".js") || path.contains(".html") \
-                                                                                                                || path.startsWith("/mall/auth/passwd-reset/reset")|| path.contains("/mall/auth/passwd-reset/sendemail") || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
-                                                                                                                || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
+        || path.startsWith("/mall_login")|| path.contains("/login-bg.jpg")|| path.startsWith("/control_login") \
+        || path.startsWith("/mall/auth/register")|| path.contains(".js") || path.contains(".html") || path.startsWith("/wechat_payment") \
+        || path.startsWith("/mall/auth/passwd-reset/reset")|| path.contains("/mall/auth/passwd-reset/sendemail") || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
+        || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")));
         if (!isLoginPath) {
             // 非登录接口需要验证token
             if(token=="GXFC")
             {
 
             }
-            else if (token.isEmpty() && (path=="/" ||path.isEmpty())) {
+            else if (token.isEmpty() && (path=="/" ||path.isEmpty() || path.contains ("/login"))) {
                 qDebug() << "修改原始请求，将根路径改为 /mall_login";
                 path = "/mall_login";
             }
@@ -801,6 +808,8 @@ void HttpServer::onReadyRead() {
                 handleGetidleDev(clientSocket );
             }else if (path == "/device/iptest") {
                 handleGetIPTEST(clientSocket, clientIp );
+            }else if (path.startsWith("/payment_qrcode")) {
+                handleGetPayQRCode(clientSocket,path);
             }else if (path.startsWith("/images")) {
                 QString imagePath = path.mid(7);  // 去掉 "/images/"
                 QUrlQuery newQuery;
@@ -843,7 +852,7 @@ void HttpServer::onReadyRead() {
                 handleGetOrderQuery(clientSocket, query);
             } else if (path == "/mall/auth/order/recheck-response") {
                 handleGetOrderAppeal(clientSocket, query);
-            } else if (path == "/home" || path.contains(".css") ||  path.startsWith("/mall_login")|| path.startsWith("/control_login")  \
+            } else if (path == "/home" || path.contains(".css") ||  path.startsWith("/mall_login")||path.startsWith("/control_login")  \
                        || path.contains(".js") || path.contains(".html") \
                        || path.contains("/devices") || path.contains("/process/new") || path.contains("/process/center") \
                        || path.contains("/support") || path.contains("/vite.svg") || path.contains("/favicon.ico")) {
@@ -981,7 +990,10 @@ void HttpServer::onReadyRead() {
                     handlePostOrderVerify(clientSocket, body);
                 }else if (path == "/mall/auth/order/appeal/text") {
                     handlePostMallUserAppealtext(clientSocket, body, query);
-                } else if (path == "/platform/request") {
+                }
+                else if (path.startsWith("/wechat_payment")) {
+                    handlePostWechatPayOK(clientSocket, body, query);
+                }else if (path == "/platform/request") {
                     handlePostPlatformReq(clientSocket, body);
                 }
                 else if (path == "/platform/request_sendcode") {
@@ -2378,6 +2390,116 @@ void HttpServer::handleBGimagesGet(QTcpSocket *clientSocket, const QUrlQuery &qu
              << "大小:" << fileData.size() << "字节"
              << "MIME类型:" << mimeType;
     qDebug() << "=== 请求处理完成 ===";
+}
+void HttpServer::handleGetPayQRCode(QTcpSocket *clientSocket, const QString path)
+{
+    qDebug() << "=== 处理支付二维码请求 ===";
+        qDebug() << "完整请求路径:" << path;
+
+        // 解析订单ID（从路径中提取）
+        // 请求格式: /payment_qrcode/orderid_ORD_20260215191033_6963
+        QString orderId;
+        QStringList pathParts = path.split('/');
+
+        // pathParts 会是: ["", "payment_qrcode", "orderid_ORD_20260215191033_6963"]
+        if (pathParts.size() >= 3) {  // 至少有3部分
+            orderId = pathParts[2];    // 取索引2，即最后一部分
+        }
+
+        qDebug() << "路径分割结果:" << pathParts;
+        qDebug() << "提取的订单ID:" << orderId;
+
+        if (orderId.isEmpty()) {
+            QJsonObject errorObj;
+            errorObj["status"] = "error";
+            errorObj["message"] = "订单ID不能为空";
+            QJsonDocument doc(errorObj);
+            sendResponse(clientSocket, doc.toJson());
+            return;
+        }
+
+    // 遍历待支付订单查找匹配的订单
+    SQL_Order foundOrder;
+    bool orderFound = false;
+
+    QMap<QString, SQL_Order>::iterator it = pendingOrders.begin();
+    while (it != pendingOrders.end()) {
+        if (it.value().orderId == orderId) {
+            foundOrder = it.value();
+            orderFound = true;
+            qDebug() << "找到订单:" << foundOrder.orderId << "状态:" << foundOrder.status;
+            break;
+        }
+        ++it;
+    }
+
+    if (!orderFound) {
+        qDebug() << "订单不存在:" << orderId;
+        QJsonObject errorObj;
+        errorObj["status"] = "error";
+        errorObj["message"] = "订单不存在";
+        errorObj["code"] = 404;
+        QJsonDocument doc(errorObj);
+        sendResponse(clientSocket, doc.toJson());
+        return;
+    }
+
+    // 检查订单是否过期
+    if (!foundOrder.expireTime.isEmpty()) {
+        QDateTime expireTime = QDateTime::fromString(foundOrder.expireTime, Qt::ISODate);
+        if (expireTime < QDateTime::currentDateTime()) {
+            qDebug() << "订单已过期:" << orderId;
+            QJsonObject errorObj;
+            errorObj["status"] = "error";
+            errorObj["message"] = "订单已过期";
+            errorObj["code"] = 410;
+            QJsonDocument doc(errorObj);
+            sendResponse(clientSocket, doc.toJson());
+            return;
+        }
+    }
+
+    // 检查二维码是否存在
+    if (foundOrder.qr_code.isNull()) {
+        qDebug() << "二维码未生成:" << orderId;
+        QJsonObject errorObj;
+        errorObj["status"] = "error";
+        errorObj["message"] = "二维码未生成";
+        errorObj["code"] = 404;
+        QJsonDocument doc(errorObj);
+        sendResponse(clientSocket, doc.toJson());
+        return;
+    }
+
+    qDebug() << "准备返回二维码图片，订单:" << orderId;
+    qDebug() << "支付方式:" << (foundOrder.method == 1 ? "支付宝" : "微信");
+    qDebug() << "二维码大小:" << foundOrder.qr_code.size();
+
+    // 将QPixmap转换为QByteArray (PNG格式)
+    QByteArray imageData;
+    QBuffer buffer(&imageData);
+    buffer.open(QIODevice::WriteOnly);
+    foundOrder.qr_code.save(&buffer, "PNG");
+    buffer.close();
+
+    // 直接使用已有的sendResponse发送图片数据
+    // 注意：sendResponse默认写死Content-Type为JSON，这里需要特殊处理
+    QByteArray response;
+    response.append("HTTP/1.1 200 OK\r\n");
+    response.append("Content-Type: image/png\r\n");  // 覆盖为图片类型
+    response.append("Access-Control-Allow-Origin: *\r\n");
+    response.append("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n");
+    response.append("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With\r\n");
+    response.append("Access-Control-Max-Age: 86400\r\n");
+    response.append("Access-Control-Allow-Credentials: true\r\n");
+    response.append("Content-Length: " + QByteArray::number(imageData.size()) + "\r\n");
+    response.append("\r\n");
+    response.append(imageData);
+
+    clientSocket->write(response);
+    clientSocket->close();
+
+    qDebug() << "二维码图片已发送，大小:" << imageData.size() << "字节";
 }
 
 void HttpServer::handleGetIPTEST(QTcpSocket *clientSocket, const QString &IP)
@@ -4255,7 +4377,99 @@ QString HttpServer::findAvailableDevice(const QString &platform)
     qDebug() << "No available device for platform:" << platform;
     return QString();
 }
+void HttpServer::handlePostWechatPayOK(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
+{
+    qDebug() << "\n=== 微信支付回调 ===";
 
+    // 解析JSON
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(body, &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qDebug() << "JSON解析失败";
+        QJsonObject errorObj{{"code", "FAIL"}, {"message", "JSON解析失败"}};
+        sendJsonResponse(clientSocket, 500, errorObj);
+        return;
+    }
+
+    QJsonObject obj = doc.object();
+
+    // 获取resource对象
+    if (!obj.contains("resource") || !obj["resource"].isObject()) {
+        qDebug() << "缺少resource字段";
+        QJsonObject errorObj{{"code", "FAIL"}, {"message", "缺少resource字段"}};
+        sendJsonResponse(clientSocket, 400, errorObj);
+        return;
+    }
+
+    QJsonObject resource = obj["resource"].toObject();
+
+    // APIv3密钥
+    QString apiV3Key = "123456789012345678901234567890xx";
+
+    // 解密
+    QByteArray decryptedData = aes256GcmDecrypt(
+        QByteArray::fromBase64(resource["ciphertext"].toString().toUtf8()),
+        apiV3Key.toUtf8(),
+        resource["nonce"].toString().toUtf8(),
+        resource["associated_data"].toString().toUtf8()
+    );
+
+    if (decryptedData.isEmpty()) {
+        qDebug() << "解密失败";
+        QJsonObject errorObj{{"code", "FAIL"}, {"message", "解密失败"}};
+        sendJsonResponse(clientSocket, 500, errorObj);
+        return;
+    }
+
+    // 解析支付结果
+    QJsonDocument resultDoc = QJsonDocument::fromJson(decryptedData);
+    if (!resultDoc.isObject()) {
+        qDebug() << "支付结果格式错误";
+        QJsonObject errorObj{{"code", "FAIL"}, {"message", "支付结果格式错误"}};
+        sendJsonResponse(clientSocket, 500, errorObj);
+        return;
+    }
+
+    QJsonObject result = resultDoc.object();
+    QString outTradeNo = result["out_trade_no"].toString();
+    QString transactionId = result["transaction_id"].toString();
+
+    qDebug() << "订单:" << outTradeNo << "支付成功";
+
+    // 从待支付容器中查找并移除订单
+    if (pendingOrders.contains(outTradeNo)) {
+        SQL_Order order = pendingOrders.value(outTradeNo);
+
+        // 更新订单状态
+        order.status = "paid";
+        order.updateTime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+        order.verifier = "wechat_paid";
+
+        // 保存到数据库
+        if (dbManager && dbManager->insertOrder(order)) {
+            qDebug() << "订单已保存到数据库";
+        } else {
+            qDebug() << "订单保存失败";
+        }
+
+        // 从待支付容器中移除
+        pendingOrders.remove(outTradeNo);
+        qDebug() << "待支付订单剩余:" << pendingOrders.size();
+    } else {
+        qDebug() << "订单不在待支付列表中:" << outTradeNo;
+    }
+
+    // 返回成功响应（微信支付要求200无包体）
+    QByteArray response;
+    response.append("HTTP/1.1 200 OK\r\n");
+    response.append("Content-Length: 0\r\n");
+    response.append("Connection: close\r\n");
+    response.append("\r\n");
+
+    clientSocket->write(response);
+    clientSocket->flush();
+    clientSocket->close();
+}
 void HttpServer::handlePostMallUserAppealtext(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query)
 {
     qDebug() << "Handling POST user appeal text request";
@@ -5356,6 +5570,8 @@ void HttpServer::handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QBy
         int quantity = dataObj.value("quantity").toInt();
         QString note = dataObj.value("note").toString();
         QString user = dataObj.value("user").toString();
+
+        int method = dataObj.value("method").toInt(2);
         QString contactInfo = dataObj.value("contactInfo").toString();
 
         qDebug() << "订单结算请求参数:";
@@ -5363,6 +5579,8 @@ void HttpServer::handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QBy
         qDebug() << "  数量:" << quantity;
         qDebug() << "  用户:" << user;
         qDebug() << "  联系方式:" << contactInfo;
+        qDebug() << "  支付方式:" << method;
+
         qDebug() << "  备注:" << (note.isEmpty() ? "无" : note);
 
         // 验证必填字段
@@ -5470,9 +5688,8 @@ void HttpServer::handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QBy
         order.status = "pending";  // 待支付状态
         order.createTime = createTime;
         order.updateTime = createTime;
-
+        order.method =method;
         // 临时存储在待支付容器中
-        pendingOrders.insert(orderId, order);
 
         // 2. 打印重要信息到调试台
         qDebug() << "=== 订单结算详情 ===";
@@ -5502,11 +5719,49 @@ void HttpServer::handlePostMallOrderCheckout(QTcpSocket *clientSocket, const QBy
         qDebug() << "  待支付订单数:" << pendingOrders.size();
         qDebug() << "=========================";
 
+        QPixmap order_qrcode;
+        if(method ==2 )
+        {
+            order_qrcode =wechatPay(order);
+            if(order_qrcode.isNull())
+            {
+                qDebug() << "拉起微信支付失败" ;
+                response["code"] = 400;
+                response["success"] = false;
+                response["message"] = QString("拉起微信支付失败");
+                sendJsonResponse(clientSocket, 400, response);
+                return;
+            }
+        }
+        else if(method ==1)
+        {
+            qDebug() << "Alipay not ready" ;
+            response["code"] = 400;
+            response["success"] = false;
+            response["message"] = QString("Alipay not ready");
+            sendJsonResponse(clientSocket, 400, response);
+            return;
+        }
+        else
+        {
+            qDebug() << "payment not allow" ;
+            response["code"] = 400;
+            response["success"] = false;
+            response["message"] = QString("payment not allow");
+            sendJsonResponse(clientSocket, 400, response);
+            return;
+        }
+        order.expireTime =expireTime;
+        order.qr_code =order_qrcode;
+        order.pay_link ="/payment_qrcode/"+orderId;
+        pendingOrders.insert(orderId, order);
+        order.status = "待支付";
+        dbManager->insertOrder(order);
         // 3. 构建成功响应
         response["code"] = 200;
         response["success"] = true;
 
-        response["pay_link"] = "url:12345679";
+        response["pay_link"] =order.pay_link;
 
         response["message"] = "订单创建成功";
         response["orderId"] = orderId;
@@ -5562,7 +5817,7 @@ void HttpServer::initOrderTimer()
     orderTimeoutTimer = new QTimer(this);
     connect(orderTimeoutTimer, &QTimer::timeout, this, &HttpServer::cleanupExpiredOrders);
     // 每5分钟检查一次过期订单
-    orderTimeoutTimer->start(5 * 60 * 1000);
+    orderTimeoutTimer->start(1000);
     qDebug() << "Order timeout timer initialized";
 }
 
@@ -5576,10 +5831,13 @@ void HttpServer::cleanupExpiredOrders()
     for (auto it = pendingOrders.begin(); it != pendingOrders.end(); ++it) {
         const QString &orderId = it.key();
         const SQL_Order &order = it.value();
+    //    qDebug() << "Order weill expired:" << orderId << "Created:" << order.createTime;
 
         QDateTime createTime = QDateTime::fromString(order.createTime, "yyyy-MM-dd HH:mm:ss");
         if (createTime.addSecs(ORDER_EXPIRY_SECONDS) < currentTime) {
             expiredOrders.append(orderId);
+            dbManager->deleteOrder(orderId);
+            wechatpay_closeOrder(orderId);
             qDebug() << "Order expired:" << orderId << "Created:" << order.createTime;
         }
     }
@@ -6590,7 +6848,8 @@ void HttpServer::handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray 
             response["success"] = true;
             response["message"] = "通过";
             response["token"] = token;
-
+            // 发送响应
+            sendJsonResponse(clientSocket, response["code"].toInt(), response);
         } else {
             // 登录失败时也获取一些调试信息
             bool userExists = dbManager->checkMallUserExists(username);
@@ -6611,11 +6870,13 @@ void HttpServer::handlePostMallLogin(QTcpSocket *clientSocket, const QByteArray 
             // 构建失败响应
             response["code"] = 401;
             response["success"] = false;
-            response["message"] = "账号或者密码失败";
+            response["message"] = "账号或者密码错误";
+
+            sendResponse(clientSocket, "{\"code\":401,\"msg\":\"账号或者密码错误\"}");
+
+
         }
 
-        // 发送响应
-        sendJsonResponse(clientSocket, response["code"].toInt(), response);
 
     } catch (const std::exception& e) {
         qDebug() << "登录处理异常:" << e.what();
@@ -7924,4 +8185,127 @@ void HttpServer::markDeviceOffline(DeviceStatus &device)
         sql_d.ip_address = device.ip;
         dbManager->updateDevice(sql_d);
     }
+}
+QPixmap HttpServer::wechatPay(const SQL_Order &order)
+{
+    qDebug() << "开始微信支付处理，订单号:" << order.orderId;
+
+    // 创建支付对象（使用 this 作为父对象，自动管理内存）
+    WeChatPay pay(this);
+
+    // 初始化微信支付配置
+    // pay.initialize(
+    //     "1106426124",                                                    // 商户号
+    //     "ww57f759ba26ab8662",                                            // APPID
+    //     "C:/Windows/SysWOW64/WXCertUtil/cert/1106426124_20260215_cert/apiclient_key.pem",  // 私钥路径
+    //     "2D641F75283524A8BB2EF089E83863A041C0B3FA"                       // 证书序列号
+    // );
+
+    // 构建回调URL，添加订单相关参数
+    QUrl notifyUrl("http://www.jrelectromall.top/wechat_payment");
+ /*   QUrlQuery query;
+    query.addQueryItem("order_id", order.orderId);
+    query.addQueryItem("command_id", order.commandId);
+    query.addQueryItem("user", order.user);
+    query.addQueryItem("product_id", order.productId);
+    query.addQueryItem("quantity", QString::number(order.quantity));
+    query.addQueryItem("total_price", QString::number(order.totalPrice));
+    query.addQueryItem("timestamp", QString::number(QDateTime::currentSecsSinceEpoch()));
+
+    // 可选：添加签名防止伪造回调（简单示例）
+    QString signString = order.orderId + order.commandId + order.user + "your_secret_key";
+    QString sign = QCryptographicHash::hash(signString.toUtf8(), QCryptographicHash::Md5).toHex();
+    query.addQueryItem("sign", sign);
+
+    notifyUrl.setQuery(query);
+*/
+    QString clientIp = "127.0.0.1";  // 客户端IP，建议动态获取
+
+    qDebug() << "回调URL:" << notifyUrl.toString();
+
+    // 调用支付接口获取二维码
+    QPixmap qrCode = pay.requestPayment(order, notifyUrl.toString(), clientIp);
+
+    if (!qrCode.isNull()) {
+        qDebug() << "微信支付成功，二维码已生成";
+    } else {
+        qDebug() << "微信支付失败";
+    }
+
+    return qrCode;
+}
+void HttpServer::wechatpay_closeOrder(QString outTradeNo)
+{
+  //  QString outTradeNo = "ORDER123456789";  // 要关闭的订单号
+
+    WeChatPay pay(this);
+
+
+    if (pay.closeOrder(outTradeNo)) {
+       qDebug("订单关闭成功");
+    } else {
+          qDebug("订单关闭失败");
+    }
+}
+QByteArray HttpServer::aes256GcmDecrypt(const QByteArray &ciphertext,
+                                         const QByteArray &key,
+                                         const QByteArray &nonce,
+                                         const QByteArray &aad)
+{
+    QByteArray plaintext;
+
+    // OpenSSL EVP接口解密
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) return plaintext;
+
+    // 初始化解密，AES-256-GCM
+    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return plaintext;
+    }
+
+    // 设置IV长度（GCM标准是12字节）
+    if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, nonce.size(), NULL)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return plaintext;
+    }
+
+    // 设置key和nonce
+    if (1 != EVP_DecryptInit_ex(ctx, NULL, NULL,
+                                 reinterpret_cast<const unsigned char*>(key.constData()),
+                                 reinterpret_cast<const unsigned char*>(nonce.constData()))) {
+        EVP_CIPHER_CTX_free(ctx);
+        return plaintext;
+    }
+
+    // 设置附加数据（AAD）
+    int outLen = 0;
+    if (!aad.isEmpty()) {
+        if (1 != EVP_DecryptUpdate(ctx, NULL, &outLen,
+                                    reinterpret_cast<const unsigned char*>(aad.constData()),
+                                    aad.size())) {
+            EVP_CIPHER_CTX_free(ctx);
+            return plaintext;
+        }
+    }
+
+    // 解密
+    plaintext.resize(ciphertext.size());
+    if (1 != EVP_DecryptUpdate(ctx,
+                                reinterpret_cast<unsigned char*>(plaintext.data()),
+                                &outLen,
+                                reinterpret_cast<const unsigned char*>(ciphertext.constData()),
+                                ciphertext.size())) {
+        EVP_CIPHER_CTX_free(ctx);
+        return QByteArray();
+    }
+
+    plaintext.resize(outLen);
+
+    // 验证GCM标签（密文的最后16字节是认证标签）
+    // 注意：微信支付的ciphertext已经包含了认证标签
+    // 需要在解密后验证
+
+    EVP_CIPHER_CTX_free(ctx);
+    return plaintext;
 }

@@ -15,7 +15,8 @@
 #include <QMutex>
 #include <QTcpSocket>
 #include <QPointer>
-// 在 HttpServer.h 中添加：
+#include "wechatpay.h"
+
 
 
 
@@ -117,7 +118,7 @@ private:
     QJsonObject generateProcessResponse(const QJsonArray &data);
     QJsonObject generateProcessSingleResponse(const QJsonObject &data);
     bool deleteProcessByProcessId(const QString &process_id);
-    
+    //WeChatPay *pay;
     QString parseJsonGenerateNode(const QJsonObject &rootObj, QVector<Machine_Process_Total> &processVector);
     bool parseMachineProcess(const QJsonObject &rootObj, QVector<Machine_Process_Total> &processVector);
     bool processDeleteRequest(const QJsonObject &rootObj);
@@ -161,7 +162,7 @@ private:
     QTimer *orderTimeoutTimer;
     QVector<FrontendTask> frontendTasks;  // 前端任务容器
     // 订单过期时间（秒）
-    static const int ORDER_EXPIRY_SECONDS = 60; // 30分钟
+    static const int ORDER_EXPIRY_SECONDS = 180; // 30分钟
     bool completeOrderPayment(const QString &orderId);
     QList<SQL_Order> getUserPendingOrders(const QString &username);
     bool removePendingOrder(const QString &orderId);
@@ -224,6 +225,12 @@ private:
     bool QueryCRcodePic(FrontendTask task);
     QTcpSocket *getSocketByDescriptor(qintptr descriptor);
     bool isSocketValid(const FrontendTask &task);
+    //QPixmap createQRCode(const QString &text);
+    QPixmap wechatPay(const SQL_Order &order);
+    void wechatpay_closeOrder(QString outTradeNo);
+    void handleGetPayQRCode(QTcpSocket *clientSocket, const QString path);
+    void handlePostWechatPayOK(QTcpSocket *clientSocket, const QByteArray &body, const QUrlQuery &query);
+    QByteArray aes256GcmDecrypt(const QByteArray &ciphertext, const QByteArray &key, const QByteArray &nonce, const QByteArray &aad);
 signals:
     void NewDeviceCall(QString);
     void devCommadSend(QJsonObject);
